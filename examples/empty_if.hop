@@ -1,0 +1,9 @@
+fn main {
+    if {}
+
+    if {} else {}
+
+    if false {}
+
+    if true {} else {}
+}

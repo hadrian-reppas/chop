@@ -1,0 +1,7 @@
+fn count {
+    for 1 to 5 {
+        puti
+        ' ' putc
+    }
+    '\n' putc
+}
