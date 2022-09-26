@@ -14,11 +14,28 @@ impl fmt::Debug for Name {
     }
 }
 
+impl Name {
+    pub fn empty() -> Name {
+        Name {
+            name: "",
+            span: Span::empty(),
+        }
+    }
+
+    pub fn new(name: &'static str) -> Name {
+        Name {
+            name,
+            span: Span::empty(),
+        }
+    }
+}
+
 pub type Unit = Vec<Item>;
 
 pub enum Item {
     Function {
         name: Name,
+        generics: Option<Generics>,
         params: Vec<Type>,
         returns: Vec<Type>,
         body: Vec<Stmt>,
@@ -41,6 +58,19 @@ impl fmt::Debug for Item {
                 ..
             } => write!(f, "Function({name:?}, {params:?}, {returns:?}, {body:?})"),
         }
+    }
+}
+
+pub struct Generics {
+    pub names: Vec<Name>,
+
+    pub lbrack_span: Span,
+    pub rbrack_span: Span,
+}
+
+impl fmt::Debug for Generics {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Generics({:?})", self.names)
     }
 }
 

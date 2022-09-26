@@ -3,6 +3,14 @@ use crate::error::Error;
 use crate::expr;
 use crate::lex::{Span, Token, Tokens};
 
+use lazy_static::lazy_static;
+use std::collections::HashSet;
+
+lazy_static! {
+    static ref RESERVED_TYPES: HashSet<&'static str> =
+        HashSet::from(["byte", "int", "float", "bool"]);
+}
+
 pub fn parse(mut tokens: Tokens) -> Result<Unit, Error> {
     let mut items = Vec::new();
     loop {
@@ -19,19 +27,62 @@ pub fn parse_file(path: &str) -> Result<Unit, Error> {
     parse(tokens)
 }
 
+fn parse_name(tokens: &mut Tokens) -> Result<Name, Error> {
+    if tokens.peek().is_name() {
+        let span = tokens.next()?.span();
+        Ok(Name {
+            name: span.text,
+            span,
+        })
+    } else {
+        Err(Error::Parse(
+            tokens.peek().span(),
+            "expected name token".to_string(),
+        ))
+    }
+}
+
 // TODO: parse pointer types
 fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
     let fn_span = tokens.next()?.span();
-    if !tokens.peek().is_name() {
-        return Err(Error::Parse(
-            tokens.peek().span(),
-            "expected name token".to_string(),
-        ));
-    }
-    let name_span = tokens.next()?.span();
-    let name = Name {
-        name: name_span.text,
-        span: name_span,
+    let name = parse_name(tokens)?;
+
+    let generics = if tokens.peek().is_lbrack() {
+        let lbrack_span = tokens.next()?.span();
+
+        let mut names = Vec::new();
+        while tokens.peek().is_name() {
+            let generic = parse_name(tokens)?;
+            if !is_normal(generic.name) {
+                return Err(Error::Parse(
+                    generic.span,
+                    "generics must have normal names".to_string(),
+                ));
+            } else if RESERVED_TYPES.contains(generic.name) {
+                return Err(Error::Parse(
+                    generic.span,
+                    format!("'{}' is a reserved type", generic.name),
+                ));
+            }
+            names.push(generic);
+        }
+
+        if !tokens.peek().is_rbrack() {
+            return Err(Error::Parse(
+                tokens.peek().span(),
+                "expected ']'".to_string(),
+            ));
+        }
+
+        let rbrack_span = tokens.next()?.span();
+
+        Some(Generics {
+            names,
+            lbrack_span,
+            rbrack_span,
+        })
+    } else {
+        None
     };
 
     let mut params = Vec::new();
@@ -39,21 +90,13 @@ fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
     let mut arrow_span = None;
 
     while tokens.peek().is_name() {
-        let span = tokens.next()?.span();
-        params.push(Name {
-            name: span.text,
-            span,
-        });
+        params.push(parse_name(tokens)?);
     }
 
     let lbrace_span = if tokens.peek().is_arrow() {
         arrow_span = Some(tokens.next()?.span());
         while tokens.peek().is_name() {
-            let span = tokens.next()?.span();
-            returns.push(Name {
-                name: span.text,
-                span,
-            });
+            returns.push(parse_name(tokens)?);
         }
         if tokens.peek().is_lbrace() {
             tokens.next()?.span()
@@ -79,6 +122,7 @@ fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
 
     Ok(Item::Function {
         name,
+        generics,
         params,
         returns,
         body,
@@ -107,7 +151,7 @@ fn combine_pointers(names: Vec<Name>) -> Result<Vec<Type>, Error> {
         } else {
             return Err(Error::Parse(
                 name.span,
-                "types must have normal names".to_string(),
+                "types and generics must have normal names".to_string(),
             ));
         }
         i += 1;
@@ -284,14 +328,19 @@ fn parse_for(tokens: &mut Tokens) -> Result<Stmt, Error> {
 
 fn parse_let(tokens: &mut Tokens) -> Result<Stmt, Error> {
     let let_span = tokens.next()?.span();
-    let mut names = Vec::new();
+    let mut names: Vec<Name> = Vec::new();
 
     while tokens.peek().is_name() {
-        let span = tokens.next()?.span();
-        names.push(Name {
-            name: span.text,
-            span,
-        });
+        let name = parse_name(tokens)?;
+        for prev in &names {
+            if prev.name == name.name {
+                return Err(Error::Parse(
+                    name.span,
+                    "duplicate name in let statement".to_string(),
+                ));
+            }
+        }
+        names.push(name);
     }
 
     if names.is_empty() {

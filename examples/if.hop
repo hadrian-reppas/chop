@@ -1,0 +1,15 @@
+fn main {
+    if true true ~ { 1 ~ }
+
+    false
+    if {1 false} else {true 0 swap}
+
+    true
+    if . { if {} } else {~}
+
+    ~ ~
+}
+
+fn swap [T U] T U -> U T {}
+
+fn b a {}

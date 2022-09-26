@@ -1,4 +1,5 @@
 mod ast;
+mod builtins;
 mod error;
 mod expr;
 mod lex;
@@ -6,11 +7,11 @@ mod parse;
 mod typecheck;
 
 fn main() {
-    match parse::parse_file("examples/pointers.hop") {
+    match parse::parse_file("examples/let.hop") {
         Ok(unit) => {
             println!("{unit:?}");
             match typecheck::typecheck(&unit) {
-                Ok(_) => println!("typechecks"),
+                Ok(_) => println!("typechecks!"),
                 Err(err) => err.println(),
             }
         }

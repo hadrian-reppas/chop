@@ -4,6 +4,8 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use std::{fmt, fs};
 
+// TODO: add byte literal (eg b'a')
+
 #[derive(Clone, Copy)]
 pub struct Span {
     pub text: &'static str,
@@ -29,6 +31,16 @@ impl Span {
         unsafe {
             let slice = std::slice::from_raw_parts(line_start, len);
             std::str::from_utf8_unchecked(slice)
+        }
+    }
+
+    pub fn empty() -> Span {
+        Span {
+            text: "",
+            line: 0,
+            column: 0,
+            code: "",
+            file: "",
         }
     }
 }
@@ -107,6 +119,10 @@ impl Token {
 
     pub fn is_lparen(&self) -> bool {
         matches!(self, Token::LParen(_))
+    }
+
+    pub fn is_lbrack(&self) -> bool {
+        matches!(self, Token::LBrack(_))
     }
 
     pub fn is_rbrack(&self) -> bool {

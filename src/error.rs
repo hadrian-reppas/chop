@@ -14,7 +14,19 @@ pub enum Error {
     Io(String),
     Lex(Span, String),
     Parse(Span, String),
-    Type(Span, String),
+    Type(Span, String, Vec<Note>),
+}
+
+#[derive(Debug)]
+pub struct Note {
+    pub span: Option<Span>,
+    pub msg: String,
+}
+
+impl Note {
+    pub fn new(span: Option<Span>, msg: String) -> Note {
+        Note { span, msg }
+    }
 }
 
 impl Error {
@@ -31,9 +43,17 @@ impl Error {
                 println!("{}parse error:{} {msg}", RED.as_str(), RESET.as_str());
                 print_span(*span);
             }
-            Error::Type(span, msg) => {
+            Error::Type(span, msg, notes) => {
                 println!("{}type error:{} {msg}", RED.as_str(), RESET.as_str());
                 print_span(*span);
+                for Note { span, msg } in notes {
+                    if let Some(span) = span {
+                        println!("\n{}note:{} {msg}", BLUE.as_str(), RESET.as_str());
+                        print_span(*span);
+                    } else {
+                        print!("\n{}note:{} {msg}", BLUE.as_str(), RESET.as_str());
+                    }
+                }
             }
         }
     }

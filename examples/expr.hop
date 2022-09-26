@@ -1,0 +1,7 @@
+fn bool_to_int bool -> int {
+    if { 1 } else { 0 }
+}
+
+fn main {
+    (1.0 + ![true . bool_to_int]) 
+}
