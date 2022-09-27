@@ -8,7 +8,7 @@ use std::collections::HashSet;
 
 lazy_static! {
     static ref RESERVED_TYPES: HashSet<&'static str> =
-        HashSet::from(["byte", "int", "float", "bool"]);
+        HashSet::from(["byte", "int", "float", "bool", "ptr"]);
 }
 
 pub fn parse(mut tokens: Tokens) -> Result<Unit, Error> {
@@ -220,19 +220,15 @@ pub fn parse_group(tokens: &mut Tokens) -> Result<Vec<Op>, Error> {
     }
 }
 
-fn parse_test(tokens: &mut Tokens) -> Result<(Option<Vec<Op>>, Span), Error> {
-    if tokens.peek().is_lbrace() {
-        Ok((None, tokens.next()?.span()))
-    } else {
-        let group = parse_group(tokens)?;
-        if !tokens.peek().is_lbrace() {
-            return Err(Error::Parse(
-                tokens.peek().span(),
-                "expected '{'".to_string(),
-            ));
-        }
-        Ok((Some(group), tokens.next()?.span()))
+fn parse_test(tokens: &mut Tokens) -> Result<(Vec<Op>, Span), Error> {
+    let group = parse_group(tokens)?;
+    if !tokens.peek().is_lbrace() {
+        return Err(Error::Parse(
+            tokens.peek().span(),
+            "expected '{'".to_string(),
+        ));
     }
+    Ok((group, tokens.next()?.span()))
 }
 
 fn parse_if(tokens: &mut Tokens) -> Result<Stmt, Error> {
@@ -279,7 +275,6 @@ fn parse_if(tokens: &mut Tokens) -> Result<Stmt, Error> {
 
 fn parse_while(tokens: &mut Tokens) -> Result<Stmt, Error> {
     let while_span = tokens.next()?.span();
-
     let (test, lbrace_span) = parse_test(tokens)?;
     let (body, rbrace_span) = parse_body(tokens)?;
 
@@ -307,12 +302,6 @@ fn parse_for(tokens: &mut Tokens) -> Result<Stmt, Error> {
     let to_span = tokens.next()?.span();
 
     let (high, lbrace_span) = parse_test(tokens)?;
-    let high = if let Some(high) = high {
-        high
-    } else {
-        return Err(Error::Parse(lbrace_span, "expected a group".to_string()));
-    };
-
     let (body, rbrace_span) = parse_body(tokens)?;
 
     Ok(Stmt::For {

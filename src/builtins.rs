@@ -79,35 +79,49 @@ macro_rules! cmp {
 
 prim! {Byte => BYTE, Int => INT, Float => FLOAT, Bool => BOOL}
 
-// TODO: add casts
-// fn to_int byte -> int
-// fn to_float int -> float
-// ...
-//
-// fn to_byte_ptr [T] *T -> *byte
-// fn to_int_ptr [T] *T -> *int
-// ...
-// (every struct def adds fn to_{struct name}_ptr [T] *T -> *{struct name})
+/* TODO:
 
-// TOOD: add pointer arithmetic
-// fn ptr_to_int [T] *T -> int
-// fn + [T] *T int -> *T
-// fn - [T] *T int -> *T
-// fn == [T] *T *T -> bool
-// fn != [T] *T *T -> bool
-// fn <= [T] *T *T -> bool
-// fn < [T] *T *T -> bool
-// fn >= [T] *T *T -> bool
-// fn > [T] *T *T -> bool
+fn to_byte int -> byte
+fn to_byte float -> byte
+fn to_byte bool -> byte
 
-/*
-struct String {
+fn to_int byte -> int
+fn to_int float -> int
+fn to_int bool -> int
+
+fn to_float byte -> float
+fn to_float int -> float
+fn to_float bool -> float
+
+fn to_byte_ptr [T] *T -> *byte
+fn to_int_ptr [T] *T -> *int
+fn to_float_ptr [T] *T -> *float
+fn to_bool_ptr [T] *T -> *bool
+
+fn ptr_to_int [T] *T -> int
+fn + [T] *T int -> *T
+fn - [T] *T int -> *T
+fn == [T] *T *T -> bool
+fn != [T] *T *T -> bool
+fn <= [T] *T *T -> bool
+fn < [T] *T *T -> bool
+fn >= [T] *T *T -> bool
+fn > [T] *T *T -> bool
+
+fn size_of_ptr -> int
+fn neg byte -> byte
+fn neg int -> int
+fn neg float -> float
+
+//////////////////////////////////////////
+
+struct string {
     *byte bytes
     int len
     int capacity
 }
 
-fn String *byte int int -> string
+fn string *byte int int -> string
 fn .bytes string -> *byte
 fn .len string -> int
 fn .capacity string -> int
@@ -115,6 +129,10 @@ fn ..bytes string -> string *byte
 fn ..len string -> string int
 fn ..capacity string -> string int
 fn to_string_ptr [T] *T -> *string
+fn size_of_string -> int
+fn to_string_ptr [T] *T -> *string
+
+//////////////////////////////////////////
 
 import string
 
@@ -134,10 +152,7 @@ lazy_static! {
         ),
         arith!("/"),
         arith!("%"),
-        bit!(
-            "&",
-            sig!("&", Type::Generic(0) => Type::Generic(0) Type::Pointer(Box::new(Type::Generic(0))))
-        ),
+        bit!("&"),
         bit!("^"),
         bit!("|"),
         eq!("=="),
@@ -160,5 +175,11 @@ lazy_static! {
             vec![sig!(".", Type::Generic(0) => Type::Generic(0) Type::Generic(0))]
         ),
         ("~", vec![sig!("~", Type::Generic(0) => )]),
+        (
+            "@",
+            vec![
+                sig!("@", Type::Generic(0) => Type::Generic(0) Type::Pointer(Box::new(Type::Generic(0))))
+            ]
+        )
     ]);
 }

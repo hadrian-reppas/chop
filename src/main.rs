@@ -7,7 +7,7 @@ mod parse;
 mod typecheck;
 
 fn main() {
-    match parse::parse_file("examples/let.hop") {
+    match parse::parse_file("examples/deref.hop") {
         Ok(unit) => {
             println!("{unit:?}");
             match typecheck::typecheck(&unit) {

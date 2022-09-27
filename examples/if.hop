@@ -4,7 +4,6 @@ fn main {
     false
     if {1 false} else {true 0 swap}
 
-    true
     if . { if {} } else {~}
 
     ~ ~

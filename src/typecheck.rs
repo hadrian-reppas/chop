@@ -338,16 +338,14 @@ impl Context {
     fn check_if(
         &mut self,
         stack: &mut Vec<Type>,
-        test: &Option<Vec<Op>>,
+        test: &[Op],
         body: &[Stmt],
         lbrace_span: Span,
         rbrace_span: Span,
         else_part: &Option<ElsePart>,
     ) -> Result<(), Error> {
-        if let Some(test) = test {
-            for op in test {
-                self.check_op(stack, op)?;
-            }
+        for op in test {
+            self.check_op(stack, op)?;
         }
 
         if stack.last() != Some(&Type::Primitive(Primitive::Bool)) {
@@ -519,15 +517,15 @@ impl Context {
     fn check_while(
         &mut self,
         stack: &mut Vec<Type>,
-        test: &Option<Vec<Op>>,
+        test: &[Op],
         body: &[Stmt],
         lbrace_span: Span,
         rbrace_span: Span,
     ) -> Result<(), Error> {
-        if let Some(test) = test {
-            for op in test {
-                self.check_op(stack, op)?;
-            }
+        let stack_before = stack.clone();
+
+        for op in test {
+            self.check_op(stack, op)?;
         }
 
         if stack.last() != Some(&Type::Primitive(Primitive::Bool)) {
@@ -543,16 +541,21 @@ impl Context {
             self.check_stmt(stack, stmt)?;
         }
 
-        if stack.last() != Some(&Type::Primitive(Primitive::Bool)) {
-            return Err(Error::Type(
+        if stack != &stack_before {
+            Err(Error::Type(
                 rbrace_span,
-                "expected a 'bool' for while statement".to_string(),
-                vec![Note::new(None, format!("stack is {:?}", stack))],
-            ));
+                "stack does not match the stack before the while block".to_string(),
+                vec![
+                    Note::new(
+                        None,
+                        format!("before while block, stack is {stack_before:?}"),
+                    ),
+                    Note::new(None, format!("after while block, stack is {stack:?}")),
+                ],
+            ))
+        } else {
+            Ok(())
         }
-        stack.pop();
-
-        Ok(())
     }
 
     fn check_op(&mut self, stack: &mut Vec<Type>, op: &Op) -> Result<(), Error> {
@@ -726,7 +729,7 @@ fn check_for_conflicts(
                 vec![if existing.is_builtin {
                     Note::new(
                         None,
-                        format!("{} is a builtin function", existing.name.name),
+                        format!("'{}' is a builtin function", existing.name.name),
                     )
                 } else {
                     Note::new(

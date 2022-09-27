@@ -95,7 +95,7 @@ pub type Group = Vec<Op>;
 pub enum Stmt {
     Group(Group, Span),
     If {
-        test: Option<Group>,
+        test: Group,
         body: Vec<Stmt>,
 
         if_span: Span,
@@ -105,7 +105,7 @@ pub enum Stmt {
         else_part: Option<ElsePart>,
     },
     While {
-        test: Option<Group>,
+        test: Group,
         body: Vec<Stmt>,
 
         while_span: Span,

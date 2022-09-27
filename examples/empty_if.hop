@@ -1,7 +1,7 @@
 fn main {
-    if {}
+    if 1 {}
 
-    if {} else {}
+    if 2 {} else {}
 
     if false {}
 
