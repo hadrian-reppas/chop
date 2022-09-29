@@ -1,4 +1,5 @@
 use crate::lex::{Span, Token};
+use std::hash::{Hash, Hasher};
 
 use std::fmt;
 
@@ -14,19 +15,28 @@ impl fmt::Debug for Name {
     }
 }
 
+impl PartialEq for Name {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl Eq for Name {}
+
+impl Hash for Name {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+    }
+}
+
 impl Name {
-    pub fn empty() -> Name {
-        Name {
-            name: "",
-            span: Span::empty(),
-        }
+    pub fn is_normal(&self) -> bool {
+        let c = self.name.chars().next().unwrap();
+        crate::lex::is_normal_start(c)
     }
 
-    pub fn new(name: &'static str) -> Name {
-        Name {
-            name,
-            span: Span::empty(),
-        }
+    pub fn is_ptr(&self) -> bool {
+        self.name.chars().all(|c| c == '*')
     }
 }
 
@@ -92,6 +102,7 @@ impl fmt::Debug for Type {
 pub type Group = Vec<Op>;
 
 #[allow(clippy::large_enum_variant)]
+#[derive(Clone)]
 pub enum Stmt {
     Group(Group, Span),
     If {
@@ -151,6 +162,7 @@ impl fmt::Debug for Stmt {
     }
 }
 
+#[derive(Clone)]
 pub struct ElsePart {
     pub body: Vec<Stmt>,
 
@@ -165,8 +177,9 @@ impl fmt::Debug for ElsePart {
     }
 }
 
+#[derive(Clone)]
 pub enum Op {
-    Int(i128, Span),
+    Int(i64, Span),
     Float(f64, Span),
     Bool(bool, Span),
     Char(char, Span),
@@ -218,8 +231,9 @@ impl Op {
     }
 }
 
+#[derive(Clone)]
 pub enum Expr {
-    Int(i128, Span),
+    Int(i64, Span),
     Float(f64, Span),
     Bool(bool, Span),
     Char(char, Span),

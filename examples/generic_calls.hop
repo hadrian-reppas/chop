@@ -1,0 +1,17 @@
+fn swap [A B] A B -> B A {
+    let a b {
+        b a
+    }
+}
+
+fn main {
+    1 true swap f ~ @ f ~ ~
+
+    "a" 1.0 swap f ~ ~
+
+    'a' 2 swap ~ ~
+}
+
+fn f [T] T -> T {
+    f
+}

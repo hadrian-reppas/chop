@@ -8,7 +8,7 @@ use std::collections::HashSet;
 
 lazy_static! {
     static ref RESERVED_TYPES: HashSet<&'static str> =
-        HashSet::from(["byte", "int", "float", "bool", "ptr"]);
+        HashSet::from(["byte", "int", "float", "bool", "ptr", "_"]);
 }
 
 pub fn parse(mut tokens: Tokens) -> Result<Unit, Error> {
@@ -53,7 +53,7 @@ fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
         let mut names = Vec::new();
         while tokens.peek().is_name() {
             let generic = parse_name(tokens)?;
-            if !is_normal(generic.name) {
+            if !generic.is_normal() {
                 return Err(Error::Parse(
                     generic.span,
                     "generics must have normal names".to_string(),
@@ -61,7 +61,7 @@ fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
             } else if RESERVED_TYPES.contains(generic.name) {
                 return Err(Error::Parse(
                     generic.span,
-                    format!("'{}' is a reserved type", generic.name),
+                    format!("'{}' is a reserved type name", generic.name),
                 ));
             }
             names.push(generic);
@@ -90,13 +90,13 @@ fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
     let mut arrow_span = None;
 
     while tokens.peek().is_name() {
-        params.push(parse_name(tokens)?);
+        params.push(parse_type(tokens)?);
     }
 
     let lbrace_span = if tokens.peek().is_arrow() {
         arrow_span = Some(tokens.next()?.span());
         while tokens.peek().is_name() {
-            returns.push(parse_name(tokens)?);
+            returns.push(parse_type(tokens)?);
         }
         if tokens.peek().is_lbrace() {
             tokens.next()?.span()
@@ -115,9 +115,6 @@ fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
         ));
     };
 
-    let params = combine_pointers(params)?;
-    let returns = combine_pointers(returns)?;
-
     let (body, rbrace_span) = parse_body(tokens)?;
 
     Ok(Item::Function {
@@ -133,39 +130,26 @@ fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
     })
 }
 
-#[allow(clippy::type_complexity)]
-fn combine_pointers(names: Vec<Name>) -> Result<Vec<Type>, Error> {
-    let mut types = Vec::new();
-    let mut i = 0;
-    while i < names.len() {
-        let name = names[i];
-        if is_ptr(name.name) {
-            if i + 1 < names.len() && is_normal(names[i + 1].name) {
-                types.push(Type::Pointer(names[i + 1], name.name.len()));
-                i += 1;
-            } else {
-                return Err(Error::Parse(name.span, "invalid pointer type".to_string()));
-            }
-        } else if is_normal(name.name) {
-            types.push(Type::Normal(name));
+fn parse_type(tokens: &mut Tokens) -> Result<Type, Error> {
+    let first = parse_name(tokens)?;
+    if first.is_normal() {
+        Ok(Type::Normal(first))
+    } else if first.is_ptr() {
+        let second = parse_name(tokens)?;
+        if second.is_normal() {
+            Ok(Type::Pointer(second, first.name.len()))
         } else {
-            return Err(Error::Parse(
-                name.span,
-                "types and generics must have normal names".to_string(),
-            ));
+            Err(Error::Parse(
+                second.span,
+                "type names must be normal".to_string(),
+            ))
         }
-        i += 1;
+    } else {
+        Err(Error::Parse(
+            first.span,
+            "type names must be normal".to_string(),
+        ))
     }
-    Ok(types)
-}
-
-fn is_normal(name: &str) -> bool {
-    let c = name.chars().next().unwrap();
-    crate::lex::is_normal_start(c)
-}
-
-fn is_ptr(name: &str) -> bool {
-    name.chars().all(|c| c == '*')
 }
 
 fn parse_body(tokens: &mut Tokens) -> Result<(Vec<Stmt>, Span), Error> {
@@ -322,10 +306,10 @@ fn parse_let(tokens: &mut Tokens) -> Result<Stmt, Error> {
     while tokens.peek().is_name() {
         let name = parse_name(tokens)?;
         for prev in &names {
-            if prev.name == name.name {
+            if prev.name != "_" && prev.name == name.name {
                 return Err(Error::Parse(
                     name.span,
-                    "duplicate name in let statement".to_string(),
+                    format!("duplicate name '{}' in let statement", name.name),
                 ));
             }
         }

@@ -1,13 +1,14 @@
 use crate::ast::Item;
 use crate::ast::{self, *};
 use crate::builtins::BUILTINS;
+use crate::codegen;
 use crate::error::{Error, Note};
 use crate::lex::Span;
 
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::fmt;
 
-#[derive(Clone)]
+#[derive(Clone, Hash, PartialEq, Eq)]
 pub enum Type {
     Primitive(Primitive),
     Pointer(Box<Type>),
@@ -25,18 +26,6 @@ impl fmt::Debug for Type {
             Type::Pointer(ty) => write!(f, "*{ty:?}"),
             Type::Generic(n) => write!(f, "T{}", n),
             Type::Custom(name) => write!(f, "{:?}", name),
-        }
-    }
-}
-
-impl PartialEq for Type {
-    fn eq(&self, other: &Type) -> bool {
-        match (self, other) {
-            (Type::Primitive(s), Type::Primitive(o)) => s == o,
-            (Type::Pointer(s), Type::Pointer(o)) => s == o,
-            (Type::Generic(s), Type::Generic(o)) => s == o,
-            (Type::Custom(s), Type::Custom(o)) => s.name == o.name,
-            _ => false,
         }
     }
 }
@@ -104,11 +93,61 @@ impl Type {
         }
     }
 
+    pub fn bind_(&self, other: codegen::Type) -> Result<Option<(usize, codegen::Type)>, ()> {
+        match (self, other) {
+            (Type::Generic(index), other) => Ok(Some((*index, other))),
+            (Type::Custom(self_name), codegen::Type::Custom(other_name, depth)) => {
+                if self_name.name == other_name && depth == 0 {
+                    Ok(None)
+                } else {
+                    Err(())
+                }
+            }
+            (Type::Primitive(Primitive::Int), codegen::Type::Int(0)) => Ok(None),
+            (Type::Primitive(Primitive::Bool), codegen::Type::Bool(0)) => Ok(None),
+            (Type::Primitive(Primitive::Float), codegen::Type::Float(0)) => Ok(None),
+            (Type::Primitive(Primitive::Byte), codegen::Type::Byte(0)) => Ok(None),
+            (Type::Pointer(self_ty), codegen::Type::Bool(0)) => Err(()),
+            (Type::Pointer(self_ty), codegen::Type::Byte(0)) => Err(()),
+            (Type::Pointer(self_ty), codegen::Type::Int(0)) => Err(()),
+            (Type::Pointer(self_ty), codegen::Type::Float(0)) => Err(()),
+            (Type::Pointer(self_ty), codegen::Type::Custom(_, 0)) => Err(()),
+            (Type::Pointer(self_ty), codegen::Type::Bool(depth)) => {
+                self_ty.bind_(codegen::Type::Bool(depth - 1))
+            }
+            (Type::Pointer(self_ty), codegen::Type::Byte(depth)) => {
+                self_ty.bind_(codegen::Type::Byte(depth - 1))
+            }
+            (Type::Pointer(self_ty), codegen::Type::Int(depth)) => {
+                self_ty.bind_(codegen::Type::Int(depth - 1))
+            }
+            (Type::Pointer(self_ty), codegen::Type::Float(depth)) => {
+                self_ty.bind_(codegen::Type::Float(depth - 1))
+            }
+            (Type::Pointer(self_ty), codegen::Type::Custom(name, depth)) => {
+                self_ty.bind_(codegen::Type::Custom(name, depth - 1))
+            }
+            _ => Err(()),
+        }
+    }
+
     fn substitute(&self, bindings: &[Type]) -> Type {
         match self {
             Type::Generic(index) => bindings[*index].clone(),
             Type::Pointer(ty) => Type::Pointer(Box::new(ty.substitute(bindings))),
             other => other.clone(),
+        }
+    }
+
+    pub fn substitute_(&self, bindings: &[codegen::Type]) -> codegen::Type {
+        match self {
+            Type::Generic(index) => bindings[*index],
+            Type::Pointer(ty) => ty.substitute_(bindings).inc(),
+            Type::Custom(name) => codegen::Type::Custom(name.name, 0),
+            Type::Primitive(Primitive::Bool) => codegen::Type::Bool(0),
+            Type::Primitive(Primitive::Byte) => codegen::Type::Byte(0),
+            Type::Primitive(Primitive::Int) => codegen::Type::Int(0),
+            Type::Primitive(Primitive::Float) => codegen::Type::Float(0),
         }
     }
 
@@ -121,7 +160,7 @@ impl Type {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub enum Primitive {
     Int,   // i32
     Float, // f32
@@ -132,7 +171,7 @@ pub enum Primitive {
 #[derive(Clone)]
 pub struct Signature {
     pub name: Name,
-    pub is_builtin: bool,
+    pub kind: Kind,
     pub params: Vec<Type>,
     pub returns: Vec<Type>,
 }
@@ -144,12 +183,51 @@ impl fmt::Debug for Signature {
 }
 
 impl Signature {
-    pub fn new(name: Name, is_builtin: bool, params: Vec<Type>, returns: Vec<Type>) -> Signature {
+    pub fn new(name: Name, kind: Kind, params: Vec<Type>, returns: Vec<Type>) -> Signature {
         Signature {
             name,
-            is_builtin,
+            kind,
             params,
             returns,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub enum Kind {
+    Builtin,
+    Auto,
+    Custom(Vec<Stmt>),
+}
+
+//                 name          id
+pub type FnInfo = (&'static str, usize);
+//                   name          id     bindings
+pub type CallInfo = (&'static str, usize, Vec<Type>);
+
+struct CallGraph {
+    active: FnInfo,
+    graph: HashMap<FnInfo, HashSet<CallInfo>>,
+}
+
+impl CallGraph {
+    fn new() -> CallGraph {
+        CallGraph {
+            active: ("", 0),
+            graph: HashMap::new(),
+        }
+    }
+
+    fn set_active(&mut self, name: &'static str, id: usize) {
+        self.active = (name, id);
+    }
+
+    fn insert(&mut self, name: &'static str, id: usize, bindings: Vec<Type>) {
+        if let Some(set) = self.graph.get_mut(&self.active) {
+            set.insert((name, id, bindings));
+        } else {
+            let set = HashSet::from([(name, id, bindings)]);
+            self.graph.insert(self.active, set);
         }
     }
 }
@@ -158,6 +236,7 @@ impl Signature {
 struct Context {
     signatures: HashMap<&'static str, Vec<Signature>>,
     let_binds: Vec<HashMap<&'static str, Type>>,
+    call_graph: CallGraph,
 }
 
 impl Context {
@@ -165,6 +244,7 @@ impl Context {
         Context {
             signatures: BUILTINS.clone(),
             let_binds: Vec::new(),
+            call_graph: CallGraph::new(),
         }
     }
 
@@ -173,7 +253,56 @@ impl Context {
             let signature = get_signature(item)?;
             self.insert_signature(signature)?;
         }
-        Ok(())
+        if let Some(mains) = self.signatures.get("main") {
+            if mains.len() == 1 {
+                let Signature {
+                    params,
+                    returns,
+                    name,
+                    ..
+                } = mains[0].clone();
+
+                if !params.is_empty()
+                    && params
+                        != [
+                            Type::Primitive(Primitive::Int),
+                            Type::Pointer(Box::new(Type::Pointer(Box::new(Type::Primitive(
+                                Primitive::Byte,
+                            ))))),
+                        ]
+                {
+                    Err(Error::Type(
+                        name.span,
+                        "'main' must have parameters [] or [int, **byte]".to_string(),
+                        vec![Note::new(
+                            None,
+                            format!("'main' has signature {params:?} -> {returns:?}"),
+                        )],
+                    ))
+                } else if !returns.is_empty() && returns != [Type::Primitive(Primitive::Int)] {
+                    Err(Error::Type(
+                        name.span,
+                        "'main' must return [] or [int]".to_string(),
+                        vec![Note::new(
+                            None,
+                            format!("'main' has signature {params:?} -> {returns:?}"),
+                        )],
+                    ))
+                } else {
+                    Ok(())
+                }
+            } else {
+                Err(Error::Main(
+                    "multiple functions named 'main'".to_string(),
+                    mains
+                        .iter()
+                        .map(|s| Note::new(Some(s.name.span), "'main' defined here".to_string()))
+                        .collect(),
+                ))
+            }
+        } else {
+            Err(Error::Main("no function named 'main'".to_string(), vec![]))
+        }
     }
 
     fn insert_signature(&mut self, signature: Signature) -> Result<(), Error> {
@@ -197,7 +326,7 @@ impl Context {
         Ok(())
     }
 
-    fn update_stack(&self, stack: &mut Vec<Type>, name: Name) -> Result<(), Error> {
+    fn update_stack(&mut self, stack: &mut Vec<Type>, name: Name) -> Result<(), Error> {
         if let Some(ty) = self.get_let_bind_type(name) {
             stack.push(ty);
             return Ok(());
@@ -223,13 +352,14 @@ impl Context {
     }
 
     fn get_signature_and_bindings(
-        &self,
+        &mut self,
         stack: &[Type],
         name: Name,
     ) -> Result<(Signature, Vec<Type>), Error> {
         if let Some(signatures) = self.signatures.get(name.name) {
-            for signature in signatures {
+            for (id, signature) in signatures.iter().enumerate() {
                 if let Some(bindings) = self.get_bindings(stack, signature) {
+                    self.call_graph.insert(name.name, id, bindings.clone());
                     return Ok((signature.clone(), bindings));
                 }
             }
@@ -281,9 +411,20 @@ impl Context {
     fn check_item(&mut self, item: &Item) -> Result<(), Error> {
         match item {
             Item::Function {
-                body, rbrace_span, ..
+                name,
+                body,
+                rbrace_span,
+                ..
             } => {
                 let signature = get_signature(item)?;
+                let id = self
+                    .signatures
+                    .get(name.name)
+                    .unwrap()
+                    .iter()
+                    .position(|s| s.params == signature.params)
+                    .unwrap();
+                self.call_graph.set_active(name.name, id);
                 let mut stack = init_stack(&signature);
                 for stmt in body {
                     self.check_stmt(&mut stack, stmt)?;
@@ -335,6 +476,13 @@ impl Context {
         }
     }
 
+    // TODO: optional test
+    //       if let Some(test) = test {
+    //           for op in test {
+    //               self.check_op(stack, op)?;
+    //           }
+    //       }
+    //       continue on as before
     fn check_if(
         &mut self,
         stack: &mut Vec<Type>,
@@ -423,7 +571,10 @@ impl Context {
 
         let mut binds = HashMap::new();
         for name in names.iter().rev() {
-            binds.insert(name.name, stack.pop().unwrap());
+            let ty = stack.pop().unwrap();
+            if name.name != "_" {
+                binds.insert(name.name, ty);
+            }
         }
         self.let_binds.push(binds);
 
@@ -514,6 +665,13 @@ impl Context {
         }
     }
 
+    // TODO: optional test
+    //       let stack_before = stack.clone()
+    //       assert stack.pop() is bool
+    //       check body
+    //       assert stack == stack_before
+    //       stack.pop()
+    //       continue on...
     fn check_while(
         &mut self,
         stack: &mut Vec<Type>,
@@ -723,26 +881,28 @@ fn check_for_conflicts(
 ) -> Result<(), Error> {
     for existing in existing_signatures {
         if conflict(&existing.params, &new_signature.params) {
+            let note = match existing.kind {
+                Kind::Builtin => Note::new(
+                    None,
+                    format!("'{}' is a builtin function", existing.name.name),
+                ),
+                Kind::Auto => todo!(),
+                Kind::Custom(_) => Note::new(
+                    Some(existing.name.span),
+                    "previous definition is here".to_string(),
+                ),
+            };
             return Err(Error::Type(
                 new_signature.name.span,
                 "signature conflicts with a previous definition".to_string(),
-                vec![if existing.is_builtin {
-                    Note::new(
-                        None,
-                        format!("'{}' is a builtin function", existing.name.name),
-                    )
-                } else {
-                    Note::new(
-                        Some(existing.name.span),
-                        "previous definition is here".to_string(),
-                    )
-                }],
+                vec![note],
             ));
         }
     }
     Ok(())
 }
 
+// fn get_signatures(item: &Item) -> Result<Vec<Signature>, Error>
 fn get_signature(item: &Item) -> Result<Signature, Error> {
     match item {
         Item::Function {
@@ -750,6 +910,7 @@ fn get_signature(item: &Item) -> Result<Signature, Error> {
             generics,
             params,
             returns,
+            body,
             ..
         } => {
             let params: Vec<_> = params
@@ -785,7 +946,7 @@ fn get_signature(item: &Item) -> Result<Signature, Error> {
 
             Ok(Signature {
                 name: *name,
-                is_builtin: false,
+                kind: Kind::Custom(body.clone()),
                 params,
                 returns,
             })
@@ -801,11 +962,19 @@ fn conflict(params_a: &[Type], params_b: &[Type]) -> bool {
         .all(|(a, b)| a.compatible(b))
 }
 
-pub fn typecheck(unit: &[Item]) -> Result<(), Error> {
+pub struct TypeInfo {
+    pub signatures: HashMap<&'static str, Vec<Signature>>,
+    pub graph: HashMap<FnInfo, HashSet<CallInfo>>,
+}
+
+pub fn typecheck(unit: &[Item]) -> Result<TypeInfo, Error> {
     let mut context = Context::new();
 
     context.init_signatures(unit)?;
     context.check_unit(unit)?;
 
-    Ok(())
+    Ok(TypeInfo {
+        signatures: context.signatures,
+        graph: context.call_graph.graph,
+    })
 }

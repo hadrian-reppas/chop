@@ -47,7 +47,7 @@ impl Span {
 
 #[derive(Clone, Debug)]
 pub enum Token {
-    Int(i128, Span),
+    Int(i64, Span),
     Float(f64, Span),
     Bool(bool, Span),
     Char(char, Span),
@@ -355,12 +355,8 @@ impl TokenIter {
                     .parse::<f64>()
                     .map(|f| Token::Float(f, span))
                     .map_err(|_| Error::Lex(span, "float literal is too big".to_string()))
-            } else if let Ok(i) = span.text.parse::<i128>() {
-                if i < i64::MIN as i128 || i > u64::MAX as i128 {
-                    Err(Error::Lex(span, "int literal is too big".to_string()))
-                } else {
-                    Ok(Token::Int(i, span))
-                }
+            } else if let Ok(i) = span.text.parse::<i64>() {
+                Ok(Token::Int(i, span))
             } else {
                 Err(Error::Lex(span, "int literal is too big".to_string()))
             },

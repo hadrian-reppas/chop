@@ -1,6 +1,6 @@
 use crate::ast::Name;
 use crate::lex::Span;
-use crate::typecheck::{Primitive, Signature, Type};
+use crate::typecheck::{Kind, Primitive, Signature, Type};
 
 use lazy_static::lazy_static;
 use std::collections::HashMap;
@@ -12,7 +12,7 @@ macro_rules! sig {
                 name: $op,
                 span: Span::empty()
             },
-            true,
+            Kind::Builtin,
             vec![$($params),*], vec![$($returns),*]
         )
     };
@@ -98,7 +98,7 @@ fn to_int_ptr [T] *T -> *int
 fn to_float_ptr [T] *T -> *float
 fn to_bool_ptr [T] *T -> *bool
 
-fn ptr_to_int [T] *T -> int
+fn to_int [T] *T -> int
 fn + [T] *T int -> *T
 fn - [T] *T int -> *T
 fn == [T] *T *T -> bool
@@ -180,6 +180,7 @@ lazy_static! {
             vec![
                 sig!("@", Type::Generic(0) => Type::Generic(0) Type::Pointer(Box::new(Type::Generic(0))))
             ]
-        )
+        ),
+        ("_", vec![sig!("_", => )])
     ]);
 }

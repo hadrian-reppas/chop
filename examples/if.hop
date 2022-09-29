@@ -2,13 +2,15 @@ fn main {
     if true true ~ { 1 ~ }
 
     false
-    if {1 false} else {true 0 swap}
+    if _ {1 false} else {true 0 swap}
 
-    if . { if {} } else {~}
+    if . { if _ {} } else {~}
 
-    ~ ~
+    ~
 }
 
-fn swap [T U] T U -> U T {}
-
-fn b a {}
+fn swap [T U] T U -> U T {
+    let a b {
+        b a
+    }
+}

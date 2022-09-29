@@ -15,6 +15,7 @@ pub enum Error {
     Lex(Span, String),
     Parse(Span, String),
     Type(Span, String, Vec<Note>),
+    Main(String, Vec<Note>),
 }
 
 #[derive(Debug)]
@@ -46,6 +47,17 @@ impl Error {
             Error::Type(span, msg, notes) => {
                 println!("{}type error:{} {msg}", RED.as_str(), RESET.as_str());
                 print_span(*span);
+                for Note { span, msg } in notes {
+                    if let Some(span) = span {
+                        println!("\n{}note:{} {msg}", BLUE.as_str(), RESET.as_str());
+                        print_span(*span);
+                    } else {
+                        print!("\n{}note:{} {msg}", BLUE.as_str(), RESET.as_str());
+                    }
+                }
+            }
+            Error::Main(msg, notes) => {
+                print!("{}entry error:{} {msg}", RED.as_str(), RESET.as_str());
                 for Note { span, msg } in notes {
                     if let Some(span) = span {
                         println!("\n{}note:{} {msg}", BLUE.as_str(), RESET.as_str());

@@ -7,7 +7,7 @@ use crate::parse::parse_group;
 use std::iter::Peekable;
 
 enum Tok {
-    Int(i128, Span),
+    Int(i64, Span),
     Float(f64, Span),
     Bool(bool, Span),
     Char(char, Span),
