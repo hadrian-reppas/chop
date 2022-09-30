@@ -73,47 +73,20 @@ macro_rules! cmp {
             sig!($op, BYTE BYTE => BOOL),
             sig!($op, INT INT => BOOL),
             sig!($op, FLOAT FLOAT => BOOL),
+            sig!($op, genp!() genp!()  => BOOL),
         ]
     )};
 }
 
 prim! {Byte => BYTE, Int => INT, Float => FLOAT, Bool => BOOL}
 
-/* TODO:
+macro_rules! genp {
+    () => {
+        GType::Pointer(Box::new(GType::Generic(0)))
+    };
+}
 
-fn to_byte int -> byte
-fn to_byte float -> byte
-fn to_byte bool -> byte
-
-fn to_int byte -> int
-fn to_int float -> int
-fn to_int bool -> int
-
-fn to_float byte -> float
-fn to_float int -> float
-fn to_float bool -> float
-
-fn to_byte_ptr [T] *T -> *byte
-fn to_int_ptr [T] *T -> *int
-fn to_float_ptr [T] *T -> *float
-fn to_bool_ptr [T] *T -> *bool
-
-fn to_int [T] *T -> int
-fn + [T] *T int -> *T
-fn - [T] *T int -> *T
-fn == [T] *T *T -> bool
-fn != [T] *T *T -> bool
-fn <= [T] *T *T -> bool
-fn < [T] *T *T -> bool
-fn >= [T] *T *T -> bool
-fn > [T] *T *T -> bool
-
-fn size_of_ptr -> int
-fn neg byte -> byte
-fn neg int -> int
-fn neg float -> float
-
-//////////////////////////////////////////
+/*
 
 struct string {
     *byte bytes
@@ -129,8 +102,7 @@ fn ..bytes string -> string *byte
 fn ..len string -> string int
 fn ..capacity string -> string int
 fn to_string_ptr [T] *T -> *string
-fn size_of_string -> int
-fn to_string_ptr [T] *T -> *string
+fn size_of string -> int
 
 //////////////////////////////////////////
 
@@ -144,12 +116,17 @@ fn hello_world {
 */
 lazy_static! {
     pub static ref BUILTINS: HashMap<&'static str, Vec<GSignature>> = HashMap::from([
-        arith!("+"),
-        arith!("-"),
         arith!(
-            "*",
-            sig!("*", GType::Pointer(Box::new(GType::Generic(0))) => GType::Generic(0))
+            "+",
+            sig!("+", genp!() INT => genp!()),
+            sig!("+", INT genp!() => genp!())
         ),
+        arith!(
+            "-",
+            sig!("-", genp!() INT => genp!()),
+            sig!("-", INT genp!() => genp!())
+        ),
+        arith!("*", sig!("*", genp!() => GType::Generic(0))),
         arith!("/"),
         arith!("%"),
         bit!("&"),
@@ -167,7 +144,7 @@ lazy_static! {
                 sig!("!", BOOL => BOOL),
                 sig!("!", BYTE => BYTE),
                 sig!("!", INT => INT),
-                sig!("!", FLOAT => FLOAT)
+                sig!("!", FLOAT => FLOAT),
             ]
         ),
         (
@@ -177,10 +154,69 @@ lazy_static! {
         ("~", vec![sig!("~", GType::Generic(0) => )]),
         (
             "@",
+            vec![sig!("@", GType::Generic(0) => GType::Generic(0) genp!())]
+        ),
+        ("_", vec![sig!("_", => )]),
+        (
+            "to_byte",
+            vec![sig!("to_byte", INT => BYTE), sig!("to_byte", FLOAT => BYTE)]
+        ),
+        (
+            "to_int",
             vec![
-                sig!("@", GType::Generic(0) => GType::Generic(0) GType::Pointer(Box::new(GType::Generic(0))))
+                sig!("to_int", FLOAT => INT),
+                sig!("to_int", BYTE => INT),
+                sig!("to_int", genp!() => INT),
             ]
         ),
-        ("_", vec![sig!("_", => )])
+        (
+            "to_float",
+            vec![
+                sig!("to_float", INT => FLOAT),
+                sig!("to_float", BYTE => FLOAT),
+            ]
+        ),
+        (
+            "to_byte_ptr",
+            vec![sig!(
+                "to_byte_ptr",
+                genp!() => GType::Pointer(Box::new(BYTE))
+            )]
+        ),
+        (
+            "to_int_ptr",
+            vec![sig!(
+                "to_int_ptr",
+                genp!() => GType::Pointer(Box::new(INT))
+            )]
+        ),
+        (
+            "to_float_ptr",
+            vec![sig!(
+                "to_float_ptr",
+                genp!() => GType::Pointer(Box::new(FLOAT))
+            )]
+        ),
+        (
+            "to_bool_ptr",
+            vec![sig!(
+                "to_bool_ptr",
+                genp!() => GType::Pointer(Box::new(BOOL))
+            )]
+        ),
+        (
+            "size_of",
+            vec![
+                sig!("size_of", INT => INT),
+                sig!("size_of", FLOAT => INT),
+                sig!("size_of", BYTE => INT),
+                sig!("size_of", BOOL => INT),
+                sig!("size_of", genp!() => INT),
+            ]
+        ),
+        (
+            "neg",
+            vec![sig!("neg", INT => INT), sig!("neg", FLOAT => FLOAT)]
+        )
     ]);
 }
