@@ -80,9 +80,21 @@ macro_rules! cmp {
 
 prim! {Byte => BYTE, Int => INT, Float => FLOAT, Bool => BOOL}
 
+macro_rules! ptr {
+    ($ty:expr) => {
+        GType::Pointer(Box::new($ty))
+    };
+}
+
+macro_rules! gen {
+    ($id:expr) => {
+        GType::Generic($id)
+    };
+}
+
 macro_rules! genp {
     () => {
-        GType::Pointer(Box::new(GType::Generic(0)))
+        ptr!(gen!(0))
     };
 }
 
@@ -126,7 +138,7 @@ lazy_static! {
             sig!("-", genp!() INT => genp!()),
             sig!("-", INT genp!() => genp!())
         ),
-        arith!("*", sig!("*", genp!() => GType::Generic(0))),
+        arith!("*", sig!("*", genp!() => gen!(0))),
         arith!("/"),
         arith!("%"),
         bit!("&"),
@@ -147,15 +159,9 @@ lazy_static! {
                 sig!("!", FLOAT => FLOAT),
             ]
         ),
-        (
-            ".",
-            vec![sig!(".", GType::Generic(0) => GType::Generic(0) GType::Generic(0))]
-        ),
-        ("~", vec![sig!("~", GType::Generic(0) => )]),
-        (
-            "@",
-            vec![sig!("@", GType::Generic(0) => GType::Generic(0) genp!())]
-        ),
+        (".", vec![sig!(".", gen!(0) => gen!(0) gen!(0))]),
+        ("~", vec![sig!("~", gen!(0) => )]),
+        ("@", vec![sig!("@", gen!(0) => gen!(0) genp!())]),
         ("_", vec![sig!("_", => )]),
         (
             "to_byte",
@@ -180,28 +186,28 @@ lazy_static! {
             "to_byte_ptr",
             vec![sig!(
                 "to_byte_ptr",
-                genp!() => GType::Pointer(Box::new(BYTE))
+                genp!() => ptr!(BYTE)
             )]
         ),
         (
             "to_int_ptr",
             vec![sig!(
                 "to_int_ptr",
-                genp!() => GType::Pointer(Box::new(INT))
+                genp!() => ptr!(INT)
             )]
         ),
         (
             "to_float_ptr",
             vec![sig!(
                 "to_float_ptr",
-                genp!() => GType::Pointer(Box::new(FLOAT))
+                genp!() => ptr!(FLOAT)
             )]
         ),
         (
             "to_bool_ptr",
             vec![sig!(
                 "to_bool_ptr",
-                genp!() => GType::Pointer(Box::new(BOOL))
+                genp!() => ptr!(BOOL)
             )]
         ),
         (
@@ -217,6 +223,28 @@ lazy_static! {
         (
             "neg",
             vec![sig!("neg", INT => INT), sig!("neg", FLOAT => FLOAT)]
-        )
+        ),
+        (
+            "put",
+            vec![
+                sig!("put", INT =>),
+                sig!("put", FLOAT =>),
+                sig!("put", BYTE =>),
+                sig!("put", BOOL =>),
+            ]
+        ),
+        (
+            "putln",
+            vec![
+                sig!("putln", INT =>),
+                sig!("putln", FLOAT =>),
+                sig!("putln", BYTE =>),
+                sig!("putln", BOOL =>),
+            ]
+        ),
+        ("puts", vec![sig!("puts", ptr!(BYTE) =>)]),
+        ("putlns", vec![sig!("putlns", ptr!(BYTE) =>)]),
+        ("putc", vec![sig!("putc", INT =>)]),
+        ("putlnc", vec![sig!("putlnc", INT =>)]),
     ]);
 }
