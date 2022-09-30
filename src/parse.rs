@@ -130,14 +130,14 @@ fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
     })
 }
 
-fn parse_type(tokens: &mut Tokens) -> Result<Type, Error> {
+fn parse_type(tokens: &mut Tokens) -> Result<PType, Error> {
     let first = parse_name(tokens)?;
     if first.is_normal() {
-        Ok(Type::Normal(first))
+        Ok(PType::Normal(first))
     } else if first.is_ptr() {
         let second = parse_name(tokens)?;
         if second.is_normal() {
-            Ok(Type::Pointer(second, first.name.len()))
+            Ok(PType::Pointer(second, first.name.len()))
         } else {
             Err(Error::Parse(
                 second.span,

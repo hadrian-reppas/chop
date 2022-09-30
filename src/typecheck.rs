@@ -1,7 +1,7 @@
 use crate::ast::Item;
-use crate::ast::{self, *};
+use crate::ast::*;
 use crate::builtins::BUILTINS;
-use crate::codegen;
+use crate::codegen::Type;
 use crate::error::{Error, Note};
 use crate::lex::Span;
 
@@ -9,152 +9,144 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::fmt;
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-pub enum Type {
+pub enum GType {
     Primitive(Primitive),
-    Pointer(Box<Type>),
+    Pointer(Box<GType>),
     Generic(usize),
     Custom(Name),
 }
 
-impl fmt::Debug for Type {
+impl fmt::Debug for GType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Type::Primitive(Primitive::Int) => write!(f, "int"),
-            Type::Primitive(Primitive::Float) => write!(f, "float"),
-            Type::Primitive(Primitive::Byte) => write!(f, "byte"),
-            Type::Primitive(Primitive::Bool) => write!(f, "bool"),
-            Type::Pointer(ty) => write!(f, "*{ty:?}"),
-            Type::Generic(n) => write!(f, "T{}", n),
-            Type::Custom(name) => write!(f, "{:?}", name),
+            GType::Primitive(Primitive::Int) => write!(f, "int"),
+            GType::Primitive(Primitive::Float) => write!(f, "float"),
+            GType::Primitive(Primitive::Byte) => write!(f, "byte"),
+            GType::Primitive(Primitive::Bool) => write!(f, "bool"),
+            GType::Pointer(ty) => write!(f, "*{ty:?}"),
+            GType::Generic(n) => write!(f, "T{}", n),
+            GType::Custom(name) => write!(f, "{:?}", name),
         }
     }
 }
 
-impl Type {
-    fn new(ty: ast::Type, generics: &Option<Generics>) -> Type {
+impl GType {
+    fn new(ty: PType, generics: &Option<Generics>) -> GType {
         match ty {
-            ast::Type::Normal(name) => match name.name {
-                "byte" => Type::Primitive(Primitive::Byte),
-                "int" => Type::Primitive(Primitive::Int),
-                "float" => Type::Primitive(Primitive::Float),
-                "bool" => Type::Primitive(Primitive::Bool),
+            PType::Normal(name) => match name.name {
+                "byte" => GType::Primitive(Primitive::Byte),
+                "int" => GType::Primitive(Primitive::Int),
+                "float" => GType::Primitive(Primitive::Float),
+                "bool" => GType::Primitive(Primitive::Bool),
                 _ => {
                     if let Some(generics) = generics {
                         if let Some(i) = generics.names.iter().position(|gen| gen.name == name.name)
                         {
-                            Type::Generic(i)
+                            GType::Generic(i)
                         } else {
-                            Type::Custom(name)
+                            GType::Custom(name)
                         }
                     } else {
-                        Type::Custom(name)
+                        GType::Custom(name)
                     }
                 }
             },
-            ast::Type::Pointer(name, depth) => {
-                let mut ty = Type::new(ast::Type::Normal(name), generics);
+            PType::Pointer(name, depth) => {
+                let mut ty = GType::new(PType::Normal(name), generics);
                 for _ in 0..depth {
-                    ty = Type::Pointer(Box::new(ty));
+                    ty = GType::Pointer(Box::new(ty));
                 }
                 ty
             }
         }
     }
 
-    fn compatible(&self, other: &Type) -> bool {
+    fn compatible(&self, other: &GType) -> bool {
         match (self, other) {
-            (Type::Generic(_), _) | (_, Type::Generic(_)) => true,
-            (Type::Primitive(s), Type::Primitive(o)) => s == o,
-            (Type::Custom(s), Type::Custom(o)) => s.name == o.name,
-            (Type::Pointer(s), Type::Pointer(o)) => s.compatible(o),
+            (GType::Generic(_), _) | (_, GType::Generic(_)) => true,
+            (GType::Primitive(s), GType::Primitive(o)) => s == o,
+            (GType::Custom(s), GType::Custom(o)) => s.name == o.name,
+            (GType::Pointer(s), GType::Pointer(o)) => s.compatible(o),
             _ => false,
         }
     }
 
-    fn bind(&self, other: &Type) -> Result<Option<(usize, Type)>, ()> {
+    fn bind(&self, other: &GType) -> Result<Option<(usize, GType)>, ()> {
         match (self, other) {
-            (Type::Generic(index), other) => Ok(Some((*index, other.clone()))),
-            (Type::Custom(self_name), Type::Custom(other_name)) => {
+            (GType::Generic(index), other) => Ok(Some((*index, other.clone()))),
+            (GType::Custom(self_name), GType::Custom(other_name)) => {
                 if self_name.name == other_name.name {
                     Ok(None)
                 } else {
                     Err(())
                 }
             }
-            (Type::Primitive(self_prim), Type::Primitive(other_prim)) => {
+            (GType::Primitive(self_prim), GType::Primitive(other_prim)) => {
                 if self_prim == other_prim {
                     Ok(None)
                 } else {
                     Err(())
                 }
             }
-            (Type::Pointer(self_ty), Type::Pointer(other_ty)) => self_ty.bind(other_ty),
+            (GType::Pointer(self_ty), GType::Pointer(other_ty)) => self_ty.bind(other_ty),
             _ => Err(()),
         }
     }
 
-    pub fn bind_(&self, other: codegen::Type) -> Result<Option<(usize, codegen::Type)>, ()> {
+    pub fn bind_(&self, other: Type) -> Result<Option<(usize, Type)>, ()> {
         match (self, other) {
-            (Type::Generic(index), other) => Ok(Some((*index, other))),
-            (Type::Custom(self_name), codegen::Type::Custom(other_name, depth)) => {
+            (GType::Generic(index), other) => Ok(Some((*index, other))),
+            (GType::Custom(self_name), Type::Custom(other_name, depth)) => {
                 if self_name.name == other_name && depth == 0 {
                     Ok(None)
                 } else {
                     Err(())
                 }
             }
-            (Type::Primitive(Primitive::Int), codegen::Type::Int(0)) => Ok(None),
-            (Type::Primitive(Primitive::Bool), codegen::Type::Bool(0)) => Ok(None),
-            (Type::Primitive(Primitive::Float), codegen::Type::Float(0)) => Ok(None),
-            (Type::Primitive(Primitive::Byte), codegen::Type::Byte(0)) => Ok(None),
-            (Type::Pointer(self_ty), codegen::Type::Bool(0)) => Err(()),
-            (Type::Pointer(self_ty), codegen::Type::Byte(0)) => Err(()),
-            (Type::Pointer(self_ty), codegen::Type::Int(0)) => Err(()),
-            (Type::Pointer(self_ty), codegen::Type::Float(0)) => Err(()),
-            (Type::Pointer(self_ty), codegen::Type::Custom(_, 0)) => Err(()),
-            (Type::Pointer(self_ty), codegen::Type::Bool(depth)) => {
-                self_ty.bind_(codegen::Type::Bool(depth - 1))
-            }
-            (Type::Pointer(self_ty), codegen::Type::Byte(depth)) => {
-                self_ty.bind_(codegen::Type::Byte(depth - 1))
-            }
-            (Type::Pointer(self_ty), codegen::Type::Int(depth)) => {
-                self_ty.bind_(codegen::Type::Int(depth - 1))
-            }
-            (Type::Pointer(self_ty), codegen::Type::Float(depth)) => {
-                self_ty.bind_(codegen::Type::Float(depth - 1))
-            }
-            (Type::Pointer(self_ty), codegen::Type::Custom(name, depth)) => {
-                self_ty.bind_(codegen::Type::Custom(name, depth - 1))
+            (GType::Primitive(Primitive::Int), Type::Int(0)) => Ok(None),
+            (GType::Primitive(Primitive::Bool), Type::Bool(0)) => Ok(None),
+            (GType::Primitive(Primitive::Float), Type::Float(0)) => Ok(None),
+            (GType::Primitive(Primitive::Byte), Type::Byte(0)) => Ok(None),
+            (GType::Pointer(_), Type::Bool(0)) => Err(()),
+            (GType::Pointer(_), Type::Byte(0)) => Err(()),
+            (GType::Pointer(_), Type::Int(0)) => Err(()),
+            (GType::Pointer(_), Type::Float(0)) => Err(()),
+            (GType::Pointer(_), Type::Custom(_, 0)) => Err(()),
+            (GType::Pointer(self_ty), Type::Bool(depth)) => self_ty.bind_(Type::Bool(depth - 1)),
+            (GType::Pointer(self_ty), Type::Byte(depth)) => self_ty.bind_(Type::Byte(depth - 1)),
+            (GType::Pointer(self_ty), Type::Int(depth)) => self_ty.bind_(Type::Int(depth - 1)),
+            (GType::Pointer(self_ty), Type::Float(depth)) => self_ty.bind_(Type::Float(depth - 1)),
+            (GType::Pointer(self_ty), Type::Custom(name, depth)) => {
+                self_ty.bind_(Type::Custom(name, depth - 1))
             }
             _ => Err(()),
         }
     }
 
-    fn substitute(&self, bindings: &[Type]) -> Type {
+    fn substitute(&self, bindings: &[GType]) -> GType {
         match self {
-            Type::Generic(index) => bindings[*index].clone(),
-            Type::Pointer(ty) => Type::Pointer(Box::new(ty.substitute(bindings))),
+            GType::Generic(index) => bindings[*index].clone(),
+            GType::Pointer(ty) => GType::Pointer(Box::new(ty.substitute(bindings))),
             other => other.clone(),
         }
     }
 
-    pub fn substitute_(&self, bindings: &[codegen::Type]) -> codegen::Type {
+    pub fn substitute_(&self, bindings: &[Type]) -> Type {
         match self {
-            Type::Generic(index) => bindings[*index],
-            Type::Pointer(ty) => ty.substitute_(bindings).inc(),
-            Type::Custom(name) => codegen::Type::Custom(name.name, 0),
-            Type::Primitive(Primitive::Bool) => codegen::Type::Bool(0),
-            Type::Primitive(Primitive::Byte) => codegen::Type::Byte(0),
-            Type::Primitive(Primitive::Int) => codegen::Type::Int(0),
-            Type::Primitive(Primitive::Float) => codegen::Type::Float(0),
+            GType::Generic(index) => bindings[*index],
+            GType::Pointer(ty) => ty.substitute_(bindings).inc(),
+            GType::Custom(name) => Type::Custom(name.name, 0),
+            GType::Primitive(Primitive::Bool) => Type::Bool(0),
+            GType::Primitive(Primitive::Byte) => Type::Byte(0),
+            GType::Primitive(Primitive::Int) => Type::Int(0),
+            GType::Primitive(Primitive::Float) => Type::Float(0),
         }
     }
 
     fn generic_index(&self) -> Option<usize> {
         match self {
-            Type::Generic(index) => Some(*index),
-            Type::Pointer(ty) => ty.generic_index(),
+            GType::Generic(index) => Some(*index),
+            GType::Pointer(ty) => ty.generic_index(),
             _ => None,
         }
     }
@@ -169,22 +161,22 @@ pub enum Primitive {
 }
 
 #[derive(Clone)]
-pub struct Signature {
+pub struct GSignature {
     pub name: Name,
     pub kind: Kind,
-    pub params: Vec<Type>,
-    pub returns: Vec<Type>,
+    pub params: Vec<GType>,
+    pub returns: Vec<GType>,
 }
 
-impl fmt::Debug for Signature {
+impl fmt::Debug for GSignature {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?} -> {:?}", self.params, self.returns)
     }
 }
 
-impl Signature {
-    pub fn new(name: Name, kind: Kind, params: Vec<Type>, returns: Vec<Type>) -> Signature {
-        Signature {
+impl GSignature {
+    pub fn new(name: Name, kind: Kind, params: Vec<GType>, returns: Vec<GType>) -> GSignature {
+        GSignature {
             name,
             kind,
             params,
@@ -203,7 +195,7 @@ pub enum Kind {
 //                 name          id
 pub type FnInfo = (&'static str, usize);
 //                   name          id     bindings
-pub type CallInfo = (&'static str, usize, Vec<Type>);
+pub type CallInfo = (&'static str, usize, Vec<GType>);
 
 struct CallGraph {
     active: FnInfo,
@@ -222,7 +214,7 @@ impl CallGraph {
         self.active = (name, id);
     }
 
-    fn insert(&mut self, name: &'static str, id: usize, bindings: Vec<Type>) {
+    fn insert(&mut self, name: &'static str, id: usize, bindings: Vec<GType>) {
         if let Some(set) = self.graph.get_mut(&self.active) {
             set.insert((name, id, bindings));
         } else {
@@ -234,8 +226,8 @@ impl CallGraph {
 
 // TODO: combine signatures and let_binds into one Vec<HashMap>
 struct Context {
-    signatures: HashMap<&'static str, Vec<Signature>>,
-    let_binds: Vec<HashMap<&'static str, Type>>,
+    signatures: HashMap<&'static str, Vec<GSignature>>,
+    let_binds: Vec<HashMap<&'static str, GType>>,
     call_graph: CallGraph,
 }
 
@@ -255,7 +247,7 @@ impl Context {
         }
         if let Some(mains) = self.signatures.get("main") {
             if mains.len() == 1 {
-                let Signature {
+                let GSignature {
                     params,
                     returns,
                     name,
@@ -265,8 +257,8 @@ impl Context {
                 if !params.is_empty()
                     && params
                         != [
-                            Type::Primitive(Primitive::Int),
-                            Type::Pointer(Box::new(Type::Pointer(Box::new(Type::Primitive(
+                            GType::Primitive(Primitive::Int),
+                            GType::Pointer(Box::new(GType::Pointer(Box::new(GType::Primitive(
                                 Primitive::Byte,
                             ))))),
                         ]
@@ -279,7 +271,7 @@ impl Context {
                             format!("'main' has signature {params:?} -> {returns:?}"),
                         )],
                     ))
-                } else if !returns.is_empty() && returns != [Type::Primitive(Primitive::Int)] {
+                } else if !returns.is_empty() && returns != [GType::Primitive(Primitive::Int)] {
                     Err(Error::Type(
                         name.span,
                         "'main' must return [] or [int]".to_string(),
@@ -305,7 +297,7 @@ impl Context {
         }
     }
 
-    fn insert_signature(&mut self, signature: Signature) -> Result<(), Error> {
+    fn insert_signature(&mut self, signature: GSignature) -> Result<(), Error> {
         match self.signatures.entry(signature.name.name) {
             Entry::Occupied(mut o) => {
                 check_for_conflicts(o.get(), &signature)?;
@@ -326,7 +318,7 @@ impl Context {
         Ok(())
     }
 
-    fn update_stack(&mut self, stack: &mut Vec<Type>, name: Name) -> Result<(), Error> {
+    fn update_stack(&mut self, stack: &mut Vec<GType>, name: Name) -> Result<(), Error> {
         if let Some(ty) = self.get_let_bind_type(name) {
             stack.push(ty);
             return Ok(());
@@ -342,7 +334,7 @@ impl Context {
         Ok(())
     }
 
-    fn get_let_bind_type(&self, name: Name) -> Option<Type> {
+    fn get_let_bind_type(&self, name: Name) -> Option<GType> {
         for let_bind in self.let_binds.iter().rev() {
             if let Some(ty) = let_bind.get(name.name) {
                 return Some(ty.clone());
@@ -353,9 +345,9 @@ impl Context {
 
     fn get_signature_and_bindings(
         &mut self,
-        stack: &[Type],
+        stack: &[GType],
         name: Name,
-    ) -> Result<(Signature, Vec<Type>), Error> {
+    ) -> Result<(GSignature, Vec<GType>), Error> {
         if let Some(signatures) = self.signatures.get(name.name) {
             for (id, signature) in signatures.iter().enumerate() {
                 if let Some(bindings) = self.get_bindings(stack, signature) {
@@ -384,7 +376,7 @@ impl Context {
         }
     }
 
-    fn get_bindings(&self, stack: &[Type], signature: &Signature) -> Option<Vec<Type>> {
+    fn get_bindings(&self, stack: &[GType], signature: &GSignature) -> Option<Vec<GType>> {
         if signature.params.len() > stack.len() {
             None
         } else {
@@ -435,7 +427,7 @@ impl Context {
         }
     }
 
-    fn check_stmt(&mut self, stack: &mut Vec<Type>, stmt: &Stmt) -> Result<(), Error> {
+    fn check_stmt(&mut self, stack: &mut Vec<GType>, stmt: &Stmt) -> Result<(), Error> {
         match stmt {
             Stmt::Group(ops, _) => {
                 for op in ops {
@@ -485,7 +477,7 @@ impl Context {
     //       continue on as before
     fn check_if(
         &mut self,
-        stack: &mut Vec<Type>,
+        stack: &mut Vec<GType>,
         test: &[Op],
         body: &[Stmt],
         lbrace_span: Span,
@@ -496,7 +488,7 @@ impl Context {
             self.check_op(stack, op)?;
         }
 
-        if stack.last() != Some(&Type::Primitive(Primitive::Bool)) {
+        if stack.last() != Some(&GType::Primitive(Primitive::Bool)) {
             return Err(Error::Type(
                 lbrace_span,
                 "expected a 'bool' for if statement".to_string(),
@@ -550,7 +542,7 @@ impl Context {
 
     fn check_let(
         &mut self,
-        stack: &mut Vec<Type>,
+        stack: &mut Vec<GType>,
         names: &[Name],
         body: &[Stmt],
         let_span: Span,
@@ -590,7 +582,7 @@ impl Context {
     #[allow(clippy::too_many_arguments)]
     fn check_for(
         &mut self,
-        stack: &mut Vec<Type>,
+        stack: &mut Vec<GType>,
         low: &[Op],
         high: &[Op],
         body: &[Stmt],
@@ -604,8 +596,8 @@ impl Context {
         }
 
         let iter_type = match stack.pop() {
-            Some(Type::Primitive(Primitive::Int)) => Type::Primitive(Primitive::Int),
-            Some(Type::Primitive(Primitive::Byte)) => Type::Primitive(Primitive::Byte),
+            Some(GType::Primitive(Primitive::Int)) => GType::Primitive(Primitive::Int),
+            Some(GType::Primitive(Primitive::Byte)) => GType::Primitive(Primitive::Byte),
             Some(ty) => {
                 stack_before.push(ty);
                 return Err(Error::Type(
@@ -674,7 +666,7 @@ impl Context {
     //       continue on...
     fn check_while(
         &mut self,
-        stack: &mut Vec<Type>,
+        stack: &mut Vec<GType>,
         test: &[Op],
         body: &[Stmt],
         lbrace_span: Span,
@@ -686,7 +678,7 @@ impl Context {
             self.check_op(stack, op)?;
         }
 
-        if stack.last() != Some(&Type::Primitive(Primitive::Bool)) {
+        if stack.last() != Some(&GType::Primitive(Primitive::Bool)) {
             return Err(Error::Type(
                 lbrace_span,
                 "expected a 'bool' for while statement".to_string(),
@@ -716,26 +708,26 @@ impl Context {
         }
     }
 
-    fn check_op(&mut self, stack: &mut Vec<Type>, op: &Op) -> Result<(), Error> {
+    fn check_op(&mut self, stack: &mut Vec<GType>, op: &Op) -> Result<(), Error> {
         match op {
             Op::Int(_, _) => {
-                stack.push(Type::Primitive(Primitive::Int));
+                stack.push(GType::Primitive(Primitive::Int));
                 Ok(())
             }
             Op::Float(_, _) => {
-                stack.push(Type::Primitive(Primitive::Float));
+                stack.push(GType::Primitive(Primitive::Float));
                 Ok(())
             }
             Op::Bool(_, _) => {
-                stack.push(Type::Primitive(Primitive::Bool));
+                stack.push(GType::Primitive(Primitive::Bool));
                 Ok(())
             }
             Op::Char(_, _) => {
-                stack.push(Type::Primitive(Primitive::Int));
+                stack.push(GType::Primitive(Primitive::Int));
                 Ok(())
             }
             Op::String(_, _) => {
-                stack.push(Type::Pointer(Box::new(Type::Primitive(Primitive::Byte))));
+                stack.push(GType::Pointer(Box::new(GType::Primitive(Primitive::Byte))));
                 Ok(())
             }
             Op::Name(name) => self.update_stack(stack, *name),
@@ -748,7 +740,7 @@ impl Context {
 
     // TODO: use self.signatures instead of BUILTINS so that you can overload
     // operators even in expressions
-    fn type_of(&mut self, expr: &Expr) -> Result<Type, Error> {
+    fn type_of(&mut self, expr: &Expr) -> Result<GType, Error> {
         macro_rules! binop {
             ($op:expr, $left:expr, $right:expr, $span:expr) => {{
                 let (left, right) = (self.type_of($left)?, self.type_of($right)?);
@@ -759,7 +751,7 @@ impl Context {
                     }
                 }
 
-                let [left, right]: [Type; 2] = params.try_into().unwrap();
+                let [left, right]: [GType; 2] = params.try_into().unwrap();
                 Err(Error::Type(
                     *$span,
                     format!(
@@ -772,10 +764,10 @@ impl Context {
         }
 
         match expr {
-            Expr::Int(_, _) => Ok(Type::Primitive(Primitive::Int)),
-            Expr::Float(_, _) => Ok(Type::Primitive(Primitive::Float)),
-            Expr::Bool(_, _) => Ok(Type::Primitive(Primitive::Bool)),
-            Expr::Char(_, _) => Ok(Type::Primitive(Primitive::Int)),
+            Expr::Int(_, _) => Ok(GType::Primitive(Primitive::Int)),
+            Expr::Float(_, _) => Ok(GType::Primitive(Primitive::Float)),
+            Expr::Bool(_, _) => Ok(GType::Primitive(Primitive::Bool)),
+            Expr::Char(_, _) => Ok(GType::Primitive(Primitive::Int)),
             Expr::Name(name) => {
                 if let Some(ty) = self.get_let_bind_type(*name) {
                     Ok(ty)
@@ -804,9 +796,9 @@ impl Context {
             Expr::Not(expr, span) => {
                 let ty = self.type_of(expr)?;
                 match ty {
-                    Type::Primitive(Primitive::Bool) => Ok(Type::Primitive(Primitive::Bool)),
-                    Type::Primitive(Primitive::Byte) => Ok(Type::Primitive(Primitive::Byte)),
-                    Type::Primitive(Primitive::Int) => Ok(Type::Primitive(Primitive::Int)),
+                    GType::Primitive(Primitive::Bool) => Ok(GType::Primitive(Primitive::Bool)),
+                    GType::Primitive(Primitive::Byte) => Ok(GType::Primitive(Primitive::Byte)),
+                    GType::Primitive(Primitive::Int) => Ok(GType::Primitive(Primitive::Int)),
                     _ => Err(Error::Type(
                         *span,
                         format!("operator '!' is not defined for '{ty:?}'"),
@@ -817,9 +809,9 @@ impl Context {
             Expr::Negate(expr, span) => {
                 let ty = self.type_of(expr)?;
                 match ty {
-                    Type::Primitive(Primitive::Byte) => Ok(Type::Primitive(Primitive::Byte)),
-                    Type::Primitive(Primitive::Int) => Ok(Type::Primitive(Primitive::Int)),
-                    Type::Primitive(Primitive::Float) => Ok(Type::Primitive(Primitive::Float)),
+                    GType::Primitive(Primitive::Byte) => Ok(GType::Primitive(Primitive::Byte)),
+                    GType::Primitive(Primitive::Int) => Ok(GType::Primitive(Primitive::Int)),
+                    GType::Primitive(Primitive::Float) => Ok(GType::Primitive(Primitive::Float)),
                     _ => Err(Error::Type(
                         *span,
                         format!("operator '-' is not defined for '{ty:?}'"),
@@ -856,11 +848,11 @@ impl Context {
     */
 }
 
-fn init_stack(signature: &Signature) -> Vec<Type> {
+fn init_stack(signature: &GSignature) -> Vec<GType> {
     signature.params.clone()
 }
 
-fn check_stack(stack: &mut Vec<Type>, signature: &Signature, span: Span) -> Result<(), Error> {
+fn check_stack(stack: &mut Vec<GType>, signature: &GSignature, span: Span) -> Result<(), Error> {
     if stack == &signature.returns {
         Ok(())
     } else {
@@ -876,8 +868,8 @@ fn check_stack(stack: &mut Vec<Type>, signature: &Signature, span: Span) -> Resu
 }
 
 fn check_for_conflicts(
-    existing_signatures: &[Signature],
-    new_signature: &Signature,
+    existing_signatures: &[GSignature],
+    new_signature: &GSignature,
 ) -> Result<(), Error> {
     for existing in existing_signatures {
         if conflict(&existing.params, &new_signature.params) {
@@ -903,7 +895,7 @@ fn check_for_conflicts(
 }
 
 // fn get_signatures(item: &Item) -> Result<Vec<Signature>, Error>
-fn get_signature(item: &Item) -> Result<Signature, Error> {
+fn get_signature(item: &Item) -> Result<GSignature, Error> {
     match item {
         Item::Function {
             name,
@@ -916,12 +908,12 @@ fn get_signature(item: &Item) -> Result<Signature, Error> {
             let params: Vec<_> = params
                 .iter()
                 .copied()
-                .map(|t| Type::new(t, generics))
+                .map(|t| GType::new(t, generics))
                 .collect();
             let returns = returns
                 .iter()
                 .copied()
-                .map(|t| Type::new(t, generics))
+                .map(|t| GType::new(t, generics))
                 .collect();
 
             if let Some(generics) = generics {
@@ -944,7 +936,7 @@ fn get_signature(item: &Item) -> Result<Signature, Error> {
                 }
             }
 
-            Ok(Signature {
+            Ok(GSignature {
                 name: *name,
                 kind: Kind::Custom(body.clone()),
                 params,
@@ -954,7 +946,7 @@ fn get_signature(item: &Item) -> Result<Signature, Error> {
     }
 }
 
-fn conflict(params_a: &[Type], params_b: &[Type]) -> bool {
+fn conflict(params_a: &[GType], params_b: &[GType]) -> bool {
     params_a
         .iter()
         .rev()
@@ -963,7 +955,7 @@ fn conflict(params_a: &[Type], params_b: &[Type]) -> bool {
 }
 
 pub struct TypeInfo {
-    pub signatures: HashMap<&'static str, Vec<Signature>>,
+    pub signatures: HashMap<&'static str, Vec<GSignature>>,
     pub graph: HashMap<FnInfo, HashSet<CallInfo>>,
 }
 

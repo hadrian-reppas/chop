@@ -46,8 +46,8 @@ pub enum Item {
     Function {
         name: Name,
         generics: Option<Generics>,
-        params: Vec<Type>,
-        returns: Vec<Type>,
+        params: Vec<PType>,
+        returns: Vec<PType>,
         body: Vec<Stmt>,
 
         fn_span: Span,
@@ -85,16 +85,16 @@ impl fmt::Debug for Generics {
 }
 
 #[derive(Clone, Copy)]
-pub enum Type {
+pub enum PType {
     Normal(Name),
     Pointer(Name, usize),
 }
 
-impl fmt::Debug for Type {
+impl fmt::Debug for PType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Type::Normal(name) => write!(f, "Type({name:?})"),
-            Type::Pointer(name, depth) => write!(f, "Type({}{name:?})", "*".repeat(*depth)),
+            PType::Normal(name) => write!(f, "PType({name:?})"),
+            PType::Pointer(name, depth) => write!(f, "PType({}{name:?})", "*".repeat(*depth)),
         }
     }
 }

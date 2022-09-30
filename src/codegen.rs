@@ -1,91 +1,89 @@
-use crate::ast::{ElsePart, Expr, Item, Op, Stmt};
-use crate::error::Error;
-use crate::typecheck::{self, CallInfo};
-use crate::typecheck::{Kind, TypeInfo};
+use crate::ast::{ElsePart, Expr, Item, Name, Op, Stmt};
+use crate::typecheck::{CallInfo, GSignature, GType, Kind, Primitive, TypeInfo};
 
-use std::collections::{btree_map, hash_map, BTreeMap, HashMap, HashSet};
+use std::collections::{hash_map, HashMap, HashSet};
 use std::fmt;
-use std::io::{self, Write};
 
-// TODO: this might not have to be a BTreeMap
-//                       name                  id     concrete signatures
-type Concrete = HashMap<&'static str, BTreeMap<usize, Vec<Signature>>>;
+//                       name                 id     concrete signatures
+type Concrete = HashMap<&'static str, HashMap<usize, Vec<Signature>>>;
 type Done = HashSet<(&'static str, usize, Vec<Type>)>;
-type CallGraph = HashMap<(&'static str, usize), HashSet<CallInfo>>;
 
-pub fn generate(out: &mut dyn Write, unit: &[Item], info: &TypeInfo) -> Result<(), Error> {
-    generate_unit(out, unit, info).map_err(|err| Error::Io(err.to_string()))
+pub fn generate(unit: &[Item], info: &TypeInfo) -> String {
+    let mut context = Context::new(info);
+    context.make_unit(unit);
+    context.code
 }
 
-fn generate_unit(out: &mut dyn Write, unit: &[Item], info: &TypeInfo) -> io::Result<()> {
-    let mut concrete: Concrete = HashMap::new();
-    let mut done: Done = HashSet::new();
-    fill("main", 0, Vec::new(), info, &mut concrete, &mut done);
+const PRELUDE: &str = "
+#include <stdio.h>
+#include <stdint.h>
+";
 
-    for (name, signatures) in &info.signatures {
-        for (id, typecheck::Signature { kind, .. }) in signatures.iter().enumerate() {
-            if let Some(signatures) = concrete.get(name) {
-                if let Some(signatures) = signatures.get(&id) {
-                    for signature in signatures {
-                        generate_function(out, name, signature, kind, info)?;
+struct Context<'info> {
+    code: String,
+    info: &'info TypeInfo,
+    stack: Vec<(usize, Type)>,
+    concrete: Concrete,
+    done: Done,
+    counter: usize,
+    depth: usize,
+}
+
+impl<'info> Context<'info> {
+    fn new(info: &'info TypeInfo) -> Context {
+        Context {
+            code: PRELUDE.to_string(),
+            info,
+            stack: Vec::new(),
+            concrete: HashMap::new(),
+            done: HashSet::new(),
+            counter: 0,
+            depth: 1,
+        }
+    }
+
+    fn make_unit(&mut self, unit: &[Item]) {
+        self.fill_graph("main", 0, Vec::new());
+
+        let mut functions = Vec::new();
+        for (name, signatures) in &self.info.signatures {
+            for (gid, GSignature { kind, .. }) in signatures.iter().enumerate() {
+                if let Some(signatures) = self.concrete.get(name) {
+                    if let Some(signatures) = signatures.get(&gid) {
+                        for (cid, signature) in signatures.iter().enumerate() {
+                            functions.push((*name, gid, cid, signature.clone(), kind.clone()));
+                        }
                     }
                 }
             }
         }
-    }
 
-    Ok(())
-}
-
-fn generate_function(
-    out: &mut dyn Write,
-    name: &str,
-    signature: &Signature,
-    kind: &Kind,
-    info: &TypeInfo,
-) -> io::Result<()> {
-    match kind {
-        Kind::Builtin => generate_builtin(out, name, signature),
-        Kind::Auto => generate_auto(out, name, signature, info),
-        Kind::Custom(body) => generate_custom(out, name, signature, body, info),
-    }
-}
-
-struct Context {
-    stack: Vec<(usize, Type)>,
-    counter: usize,
-}
-
-impl Context {
-    fn new(signature: &Signature) -> Context {
-        Context {
-            stack: signature.params.iter().cloned().enumerate().collect(),
-            counter: signature.params.len(),
+        for (name, gid, cid, signature, _) in &functions {
+            self.make_declaration(name, *gid, *cid, signature);
         }
-    }
 
-    fn clean_up(&self, out: &mut dyn Write) -> io::Result<()> {
-        for (i, (reg, ty)) in self.stack.iter().enumerate() {
-            write!(out, "  store ")?;
-            generate_type(out, *ty)?;
-            write!(out, " %x{reg}, ")?;
-            generate_type(out, *ty)?;
-            writeln!(out, "* %o{i}")?;
+        for (name, gid, cid, signature, kind) in functions {
+            self.make_function(name, gid, cid, &signature, &kind);
         }
-        Ok(())
+
+        let main_signature = self.concrete.get("main").unwrap().get(&0).unwrap()[0].clone();
+        self.make_main(&main_signature);
     }
 
-    fn push_ref(&mut self, out: &mut dyn Write) -> io::Result<()> {
-        let (reg, ty) = *self.stack.last().unwrap();
-        write!(out, "  %x{} = alloca ", self.counter)?;
-        generate_type(out, ty)?;
-        write!(out, "\n  store ")?;
-        generate_type(out, ty)?;
-        write!(out, " %x{}, ", reg)?;
-        generate_type(out, ty)?;
-        self.stack.push((self.counter, ty.inc()));
-        self.counter += 1;
-        writeln!(out, "* %x{}", self.counter - 1)
+    fn make_main(&mut self, main_signature: &Signature) {
+        self.add("int main(int argc, char** argv) {\n");
+        self.add("  int64_t code = 0;\n");
+        self.add("  hopf_6d_61_69_6e_0_0(");
+        if !main_signature.params.is_empty() {
+            self.add("argc, argv");
+        }
+        if !main_signature.returns.is_empty() {
+            if !main_signature.params.is_empty() {
+                self.add(", ");
+            }
+            self.add("&code");
+        }
+        self.add(");\n  return code;\n}\n");
     }
 
     fn push(&mut self, ty: Type) -> usize {
@@ -94,365 +92,351 @@ impl Context {
         self.counter - 1
     }
 
-    fn pop(&mut self) -> (usize, Type) {
-        self.stack.pop().unwrap()
-    }
-
-    fn reg(&mut self) -> usize {
-        self.counter += 1;
-        self.counter - 1
-    }
-
-    fn alloc(&mut self, out: &mut dyn Write, ty: Type) -> io::Result<usize> {
-        write!(out, "  %x{} = alloca ", self.counter)?;
-        generate_type(out, ty)?;
-        writeln!(out)?;
-        self.counter += 1;
-        Ok(self.counter - 1)
-    }
-}
-
-fn generate_custom(
-    out: &mut dyn Write,
-    name: &str,
-    signature: &Signature,
-    body: &[Stmt],
-    info: &TypeInfo,
-) -> io::Result<()> {
-    if name == "main" && !signature.returns.is_empty() {
-        write!(out, "define i64 @")?;
-    } else {
-        write!(out, "define void @")?;
-    }
-    mangled_name(out, name, &signature.params)?;
-    params(out, signature)?;
-    writeln!(out, " {{")?;
-
-    let mut context = Context::new(signature);
-
-    for stmt in body {
-        generate_stmt(out, stmt, &mut context, info)?;
-    }
-
-    context.clean_up(out)?;
-
-    if name == "main" && !signature.returns.is_empty() {
-        let (reg, ty) = context.pop();
-        write!(out, "  ret ")?;
-        generate_type(out, ty)?;
-        writeln!(out, " %x{}\n}}", reg)
-    } else {
-        writeln!(out, "  ret void\n}}")
-    }
-}
-
-fn generate_stmt(
-    out: &mut dyn Write,
-    stmt: &Stmt,
-    context: &mut Context,
-    info: &TypeInfo,
-) -> io::Result<()> {
-    match stmt {
-        Stmt::Group(ops, _) => {
-            for op in ops {
-                generate_op(out, op, context, info)?;
-            }
-            Ok(())
-        }
-        Stmt::If {
-            test,
-            body,
-            else_part,
-            ..
-        } => generate_if(out, test, body, else_part, context, info),
-        Stmt::While {
-            test,
-            body,
-            while_span,
-            lbrace_span,
-            rbrace_span,
-        } => todo!(),
-        Stmt::For {
-            low,
-            high,
-            body,
-            for_span,
-            to_span,
-            lbrace_span,
-            rbrace_span,
-        } => todo!(),
-        Stmt::Let {
-            names,
-            body,
-            let_span,
-            lbrace_span,
-            rbrace_span,
-        } => todo!(),
-    }
-}
-
-fn generate_if(
-    out: &mut dyn Write,
-    test: &[Op],
-    body: &[Stmt],
-    else_part: &Option<ElsePart>,
-    context: &mut Context,
-    info: &TypeInfo,
-) -> io::Result<()> {
-    todo!()
-}
-
-fn generate_op(
-    out: &mut dyn Write,
-    op: &Op,
-    context: &mut Context,
-    info: &TypeInfo,
-) -> io::Result<()> {
-    match op {
-        Op::Int(i, _) => {
-            let r = context.reg();
-            let reg = context.push(Type::Int(0));
-            writeln!(out, "  %x{r} = alloca i64")?;
-            writeln!(out, "  store i64 {i}, i64* %x{r}")?;
-            writeln!(out, "  %x{reg} = load i64, i64* %x{r}")
-        }
-        Op::Float(f, _) => todo!(),
-        Op::Bool(b, _) => todo!(),
-        Op::Char(c, _) => todo!(),
-        Op::String(_, _) => todo!(),
-        Op::Name(name) => generate_call(out, name.name, context, info),
-        Op::Expr(expr, _) => generate_expr(out, expr, context, info),
-    }
-}
-
-fn generate_call(
-    out: &mut dyn Write,
-    name: &str,
-    context: &mut Context,
-    info: &TypeInfo,
-) -> io::Result<()> {
-    for signature in info.signatures.get(name).unwrap() {
-        if let Some((params, returns)) = get_sig(context, signature) {
-            let ret_regs: Vec<_> = returns
+    fn get_signature(&self, signature: &GSignature) -> Option<Signature> {
+        let bindings = dbg!(self.get_bindings(signature)?);
+        Some(Signature {
+            params: signature
+                .params
                 .iter()
-                .map(|ty| context.alloc(out, *ty))
-                .collect::<Result<_, _>>()?;
-            let mut args = Vec::new();
-            for _ in 0..params.len() {
-                args.push(context.pop());
-            }
-            args.reverse();
-            write!(out, "  call void @")?;
-            mangled_name(out, name, &params)?;
-            write!(out, "(")?;
-            for (i, (reg, ty)) in args.iter().enumerate() {
-                if i > 0 {
-                    write!(out, ", ")?;
-                }
-                generate_type(out, *ty)?;
-                write!(out, " %x{}", reg)?;
-            }
-            for (i, (reg, ty)) in ret_regs.iter().zip(returns.iter()).enumerate() {
-                if i > 0 || !args.is_empty() {
-                    write!(out, ", ")?;
-                }
-                generate_type(out, *ty)?;
-                write!(out, "* %x{}", reg)?;
-            }
-            writeln!(out, ")")?;
-            for (ret, ptr) in returns.iter().zip(ret_regs) {
-                let reg = context.push(*ret);
-                write!(out, "  %x{reg} = load ")?;
-                generate_type(out, *ret)?;
-                write!(out, ", ")?;
-                generate_type(out, *ret)?;
-                writeln!(out, "* %x{ptr}")?
-            }
-            return Ok(());
-        }
+                .map(|param| param.substitute_(&bindings))
+                .collect(),
+            returns: signature
+                .returns
+                .iter()
+                .map(|param| param.substitute_(&bindings))
+                .collect(),
+        })
     }
-    unreachable!()
-}
 
-fn get_sig(context: &Context, signature: &typecheck::Signature) -> Option<(Vec<Type>, Vec<Type>)> {
-    let bindings = get_bindings(context, signature)?;
-    Some((
-        signature
-            .params
-            .iter()
-            .map(|param| param.substitute_(&bindings))
-            .collect(),
-        signature
-            .returns
-            .iter()
-            .map(|param| param.substitute_(&bindings))
-            .collect(),
-    ))
-}
-
-fn get_bindings(context: &Context, signature: &typecheck::Signature) -> Option<Vec<Type>> {
-    let mut bindings = vec![None; signature.params.len()];
-    for ((_, arg), param) in context
-        .stack
-        .iter()
-        .rev()
-        .zip(signature.params.iter().rev())
-    {
-        match param.bind_(*arg) {
-            Ok(Some((index, ty))) => {
-                if let Some(bound) = &bindings[index] {
-                    if bound != &ty {
-                        return None;
+    fn get_bindings(&self, signature: &GSignature) -> Option<Vec<Type>> {
+        let mut bindings = vec![None; signature.params.len()];
+        for ((_, arg), param) in self.stack.iter().rev().zip(signature.params.iter().rev()) {
+            match param.bind_(*arg) {
+                Ok(Some((index, ty))) => {
+                    if let Some(bound) = &bindings[index] {
+                        if bound != &ty {
+                            return None;
+                        }
+                    } else {
+                        bindings[index] = Some(ty);
                     }
-                } else {
-                    bindings[index] = Some(ty);
+                }
+                Ok(None) => {}
+                Err(_) => return None,
+            }
+        }
+        Some(dbg!(bindings).into_iter().flatten().collect())
+    }
+
+    fn add(&mut self, code: &str) {
+        self.code.push_str(code);
+    }
+
+    fn tabs(&mut self) {
+        for _ in 0..self.depth {
+            self.code.push_str("  ");
+        }
+    }
+
+    fn escape(&mut self, name: &str) {
+        for c in name.chars() {
+            self.add(&format!("_{:x}", c as i32));
+        }
+    }
+
+    fn make_declaration(&mut self, name: &str, gid: usize, cid: usize, signature: &Signature) {
+        self.add("void hopf");
+        self.escape(name);
+        self.add(&format!("_{gid}_{cid}("));
+        for (i, param) in signature.params.iter().enumerate() {
+            if i > 0 {
+                self.add(", ");
+            }
+            self.make_type(param);
+        }
+        for (i, ret) in signature.returns.iter().enumerate() {
+            if i > 0 || !signature.params.is_empty() {
+                self.add(", ");
+            }
+            self.make_type(&ret.inc());
+        }
+        self.add(");\n");
+    }
+
+    fn make_type(&mut self, ty: &Type) {
+        match ty {
+            Type::Custom(name, depth) => {
+                self.add("hopt");
+                self.escape(name);
+                self.add(&"*".repeat(*depth));
+            }
+            Type::Byte(depth) => {
+                self.add("char");
+                self.add(&"*".repeat(*depth));
+            }
+            Type::Int(depth) => {
+                self.add("int64_t");
+                self.add(&"*".repeat(*depth));
+            }
+            Type::Float(depth) => {
+                self.add("double");
+                self.add(&"*".repeat(*depth));
+            }
+            Type::Bool(depth) => {
+                self.add("char");
+                self.add(&"*".repeat(*depth));
+            }
+        }
+    }
+
+    fn make_function(
+        &mut self,
+        name: &str,
+        gid: usize,
+        cid: usize,
+        signature: &Signature,
+        kind: &Kind,
+    ) {
+        match kind {
+            Kind::Builtin => self.make_builtin(name, gid, cid, signature),
+            Kind::Auto => self.make_auto(name, gid, cid, signature),
+            Kind::Custom(body) => self.make_custom(name, gid, cid, signature, body),
+        }
+    }
+
+    fn being_fn(&mut self, name: &str, gid: usize, cid: usize, signature: &Signature) {
+        self.counter = signature.params.len();
+        self.stack = signature.params.iter().cloned().enumerate().collect();
+
+        self.add("void hopf");
+        self.escape(name);
+        self.add(&format!("_{gid}_{cid}("));
+        for (i, param) in signature.params.iter().enumerate() {
+            if i > 0 {
+                self.add(", ");
+            }
+            self.make_type(param);
+            self.add(&format!(" hopv_{i}"))
+        }
+        for (i, ret) in signature.returns.iter().enumerate() {
+            if i > 0 || !signature.params.is_empty() {
+                self.add(", ");
+            }
+            self.make_type(&ret.inc());
+            self.add(&format!(" hopr_{i}"))
+        }
+        self.add(") {\n");
+    }
+
+    fn end_fn(&mut self) {
+        for (i, (ret, _)) in self.stack.clone().iter().enumerate() {
+            self.tabs();
+            self.add(&format!("*hopr_{} = hopv_{};\n", i, ret));
+        }
+        self.add("}\n");
+    }
+
+    fn make_custom(
+        &mut self,
+        name: &str,
+        gid: usize,
+        cid: usize,
+        signature: &Signature,
+        body: &[Stmt],
+    ) {
+        self.being_fn(name, gid, cid, signature);
+        for stmt in body {
+            self.make_stmt(stmt);
+        }
+        self.end_fn();
+    }
+
+    fn make_auto(&mut self, name: &str, gid: usize, cid: usize, signature: &Signature) {
+        todo!()
+    }
+
+    fn make_builtin(&mut self, name: &str, gid: usize, cid: usize, signature: &Signature) {
+        self.being_fn(name, gid, cid, signature);
+        match name {
+            "~" => self.add("}\n"),
+            "==" => self.add("  *hopr_0 = hopv_0 == hopv_1;\n}\n"),
+            _ => todo!(),
+        }
+    }
+
+    fn make_stmt(&mut self, stmt: &Stmt) {
+        match stmt {
+            Stmt::Group(ops, _) => {
+                for op in ops {
+                    self.make_op(op);
                 }
             }
-            Ok(None) => {}
-            Err(_) => return None,
+            Stmt::If {
+                test,
+                body,
+                else_part,
+                ..
+            } => self.make_if(test, body, else_part),
+            Stmt::While { test, body, .. } => self.make_while(test, body),
+            Stmt::For {
+                low, high, body, ..
+            } => self.make_for(low, high, body),
+            Stmt::Let { names, body, .. } => self.make_let(names, body),
         }
     }
-    Some(bindings.into_iter().flatten().collect())
-}
 
-fn generate_expr(
-    out: &mut dyn Write,
-    expr: &Expr,
-    context: &mut Context,
-    info: &TypeInfo,
-) -> io::Result<()> {
-    todo!()
-}
-
-fn generate_builtin(out: &mut dyn Write, name: &str, signature: &Signature) -> io::Result<()> {
-    Ok(()) // todo!()
-}
-
-fn generate_auto(
-    out: &mut dyn Write,
-    name: &str,
-    signature: &Signature,
-    info: &TypeInfo,
-) -> io::Result<()> {
-    todo!()
-}
-
-fn mangled_name(out: &mut dyn Write, name: &str, params: &[Type]) -> io::Result<()> {
-    if name == "main" {
-        write!(out, "main")?;
-    } else {
-        escape(out, name)?;
-        for param in params {
-            write!(out, ".")?;
-            mangled_type(out, *param)?;
-        }
-    }
-    Ok(())
-}
-
-fn escape(out: &mut dyn Write, name: &str) -> io::Result<()> {
-    for c in name.chars() {
-        if c.is_ascii_alphabetic() && c != 'd' {
-            write!(out, "{}", c)?;
-        } else {
-            write!(out, "${:x}$", c as u32)?;
-        }
-    }
-    Ok(())
-}
-
-fn mangled_type(out: &mut dyn Write, ty: Type) -> io::Result<()> {
-    match ty {
-        Type::Custom(name, depth) => {
-            write!(out, "{}", ".".repeat(depth))?;
-            escape(out, name)
-        }
-        Type::Byte(depth) => {
-            write!(out, "{}byte", ".".repeat(depth))
-        }
-        Type::Int(depth) => {
-            write!(out, "{}int", ".".repeat(depth))
-        }
-        Type::Float(depth) => {
-            write!(out, "{}float", ".".repeat(depth))
-        }
-        Type::Bool(depth) => {
-            write!(out, "{}bool", ".".repeat(depth))
-        }
-    }
-}
-
-fn params(out: &mut dyn Write, signature: &Signature) -> io::Result<()> {
-    write!(out, "(")?;
-    for (i, param) in signature.params.iter().enumerate() {
-        if i > 0 {
-            write!(out, ", ")?;
-        }
-        generate_type(out, *param)?;
-        write!(out, " %x{}", i)?;
-    }
-    for (i, ret) in signature.returns.iter().enumerate() {
-        if i > 0 || !signature.params.is_empty() {
-            write!(out, ", ")?;
-        }
-        generate_type(out, *ret)?;
-        write!(out, "* %o{}", i)?;
-    }
-    write!(out, ")")
-}
-
-fn generate_type(out: &mut dyn Write, ty: Type) -> io::Result<()> {
-    match ty {
-        Type::Custom(name, depth) => {
-            write!(out, "%")?;
-            escape(out, name)?;
-            write!(out, "{}", "*".repeat(depth))
-        }
-        Type::Byte(depth) => write!(out, "i8{}", "*".repeat(depth)),
-        Type::Int(depth) => write!(out, "i64{}", "*".repeat(depth)),
-        Type::Float(depth) => write!(out, "double{}", "*".repeat(depth)),
-        Type::Bool(depth) => write!(out, "i8{}", "*".repeat(depth)),
-    }
-}
-
-fn fill(
-    name: &'static str,
-    id: usize,
-    binds: Vec<Type>,
-    info: &TypeInfo,
-    concrete: &mut Concrete,
-    done: &mut Done,
-) {
-    let tup = dbg!((name, id, binds));
-    if done.contains(&tup) {
-        return;
-    }
-    let (_, _, binds) = tup;
-    done.insert((name, id, binds.clone()));
-
-    let signature = Signature::convert(&info.signatures.get(name).unwrap()[id], &binds);
-
-    match concrete.entry(name) {
-        hash_map::Entry::Vacant(v) => {
-            v.insert(BTreeMap::from([(id, vec![signature])]));
-        }
-        hash_map::Entry::Occupied(mut o) => match o.get_mut().entry(id) {
-            btree_map::Entry::Vacant(v) => {
-                v.insert(vec![signature]);
+    fn make_op(&mut self, op: &Op) {
+        match op {
+            Op::Int(i, _) => {
+                let var = self.push(Type::Int(0));
+                self.tabs();
+                self.add(&format!("int64_t hopv_{var} = {i};\n"));
             }
-            btree_map::Entry::Occupied(mut o) => o.get_mut().push(signature),
-        },
+            Op::Float(f, _) => {
+                let var = self.push(Type::Float(0));
+                self.tabs();
+                self.add(&format!("double hopv_{var} = {f};\n"));
+            }
+            Op::Bool(b, _) => {
+                let var = self.push(Type::Bool(0));
+                self.tabs();
+                self.add(&format!("char hopv_{var} = {};\n", *b as u8));
+            }
+            Op::Char(c, _) => {
+                let var = self.push(Type::Int(0));
+                self.tabs();
+                self.add(&format!("int64_t hopv_{var} = {};\n", *c as u64));
+            }
+            Op::String(s, _) => {
+                let var = self.push(Type::Byte(1));
+                self.tabs();
+                self.add(&format!("char* hopv_{var} = {s:?};\n"));
+            }
+            Op::Name(name) => self.make_name(name.name),
+            Op::Expr(expr, _) => self.make_expr(expr),
+        }
     }
 
-    for (call_name, call_id, call_binds) in info.graph.get(&(name, id)).into_iter().flatten() {
-        let converted_binds: Vec<_> = call_binds
-            .iter()
-            .map(|ty| Type::convert(ty, &binds))
-            .collect();
-        fill(call_name, *call_id, converted_binds, info, concrete, done);
+    fn make_name(&mut self, name: &str) {
+        if name == "@" {
+            let (last, ty) = *self.stack.last().unwrap();
+            let var = self.push(ty.inc());
+            self.tabs();
+            self.make_type(&ty);
+            self.add(&format!("* hopv_{var} = &hopv_{last}"));
+        } else {
+            for (gid, signature) in self.info.signatures.get(name).unwrap().iter().enumerate() {
+                if let Some(signature) = self.get_signature(signature) {
+                    for (cid, csig) in self
+                        .concrete
+                        .get(name)
+                        .unwrap()
+                        .clone()
+                        .get(&gid)
+                        .unwrap()
+                        .iter()
+                        .enumerate()
+                    {
+                        if csig == &signature {
+                            self.make_call(name, gid, cid, &signature);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn make_call(&mut self, name: &str, gid: usize, cid: usize, signature: &Signature) {
+        let mut ret_vars = Vec::new();
+        for ret in &signature.returns {
+            self.tabs();
+            self.make_type(ret);
+            self.add(&format!(" hopv_{};\n", self.counter));
+            ret_vars.push(self.counter);
+            self.counter += 1;
+        }
+        self.tabs();
+        self.add("hopf");
+        self.escape(name);
+        self.add(&format!("_{gid}_{cid}("));
+        let mut args = Vec::new();
+        for _ in 0..signature.params.len() {
+            args.push(self.stack.pop().unwrap());
+        }
+        for (i, (var, _)) in args.iter().rev().enumerate() {
+            if i > 0 {
+                self.add(", ");
+            }
+            self.add(&format!("hopv_{var}"));
+        }
+        for (i, ret) in ret_vars.iter().enumerate() {
+            if i > 0 || !args.is_empty() {
+                self.add(", ");
+            }
+            self.add(&format!("&hopv_{ret}"));
+        }
+        self.add(");\n");
+        for (ret, ty) in ret_vars.into_iter().zip(&signature.returns) {
+            self.stack.push((ret, *ty));
+        }
+    }
+
+    fn make_expr(&mut self, expr: &Expr) {
+        todo!()
+    }
+
+    fn make_if(&mut self, test: &[Op], body: &[Stmt], else_part: &Option<ElsePart>) {
+        // todo!()
+    }
+
+    fn make_while(&mut self, test: &[Op], body: &[Stmt]) {
+        todo!()
+    }
+
+    fn make_for(&mut self, low: &[Op], high: &[Op], body: &[Stmt]) {
+        todo!()
+    }
+
+    fn make_let(&mut self, names: &[Name], body: &[Stmt]) {
+        todo!()
+    }
+
+    fn fill_graph(&mut self, name: &'static str, id: usize, binds: Vec<Type>) {
+        let tup = dbg!((name, id, binds));
+        if self.done.contains(&tup) {
+            return;
+        }
+        let (_, _, binds) = tup;
+        self.done.insert((name, id, binds.clone()));
+
+        let signature = Signature::convert(&self.info.signatures.get(name).unwrap()[id], &binds);
+
+        match self.concrete.entry(name) {
+            hash_map::Entry::Vacant(v) => {
+                v.insert(HashMap::from([(id, vec![signature])]));
+            }
+            hash_map::Entry::Occupied(mut o) => match o.get_mut().entry(id) {
+                hash_map::Entry::Vacant(v) => {
+                    v.insert(vec![signature]);
+                }
+                hash_map::Entry::Occupied(mut o) => o.get_mut().push(signature),
+            },
+        }
+
+        for (call_name, call_id, call_binds) in
+            self.info.graph.get(&(name, id)).into_iter().flatten()
+        {
+            let converted_binds: Vec<_> = call_binds
+                .iter()
+                .map(|ty| Type::convert(ty, &binds))
+                .collect();
+            self.fill_graph(call_name, *call_id, converted_binds);
+        }
     }
 }
 
+#[derive(Clone, PartialEq, Eq)]
 pub struct Signature {
     params: Vec<Type>,
     returns: Vec<Type>,
@@ -465,7 +449,7 @@ impl fmt::Debug for Signature {
 }
 
 impl Signature {
-    fn convert(signature: &typecheck::Signature, binds: &[Type]) -> Signature {
+    fn convert(signature: &GSignature, binds: &[Type]) -> Signature {
         Signature {
             params: signature
                 .params
@@ -501,17 +485,17 @@ impl Type {
         }
     }
 
-    fn convert(ty: &typecheck::Type, binds: &[Type]) -> Type {
+    fn convert(ty: &GType, binds: &[Type]) -> Type {
         match ty {
-            typecheck::Type::Primitive(prim) => match prim {
-                typecheck::Primitive::Int => Type::Int(0),
-                typecheck::Primitive::Float => Type::Float(0),
-                typecheck::Primitive::Byte => Type::Byte(0),
-                typecheck::Primitive::Bool => Type::Bool(0),
+            GType::Primitive(prim) => match prim {
+                Primitive::Int => Type::Int(0),
+                Primitive::Float => Type::Float(0),
+                Primitive::Byte => Type::Byte(0),
+                Primitive::Bool => Type::Bool(0),
             },
-            typecheck::Type::Pointer(ty) => Type::convert(&*ty, binds).inc(),
-            typecheck::Type::Custom(name) => Type::Custom(name.name, 0),
-            typecheck::Type::Generic(index) => binds[*index],
+            GType::Pointer(ty) => Type::convert(&*ty, binds).inc(),
+            GType::Custom(name) => Type::Custom(name.name, 0),
+            GType::Generic(index) => binds[*index],
         }
     }
 }

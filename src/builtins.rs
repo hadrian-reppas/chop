@@ -1,13 +1,13 @@
 use crate::ast::Name;
 use crate::lex::Span;
-use crate::typecheck::{Kind, Primitive, Signature, Type};
+use crate::typecheck::{GSignature, GType, Kind, Primitive};
 
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 
 macro_rules! sig {
     ($op:expr, $($params:expr)* => $($returns:expr)*) => {
-        Signature::new(
+        GSignature::new(
             Name {
                 name: $op,
                 span: Span::empty()
@@ -20,7 +20,7 @@ macro_rules! sig {
 
 macro_rules! prim {
     ($($var:ident => $name:ident),*) => {
-        $(const $name: Type = Type::Primitive(Primitive::$var);)*
+        $(const $name: GType = GType::Primitive(Primitive::$var);)*
     };
 }
 
@@ -143,12 +143,12 @@ fn hello_world {
 }
 */
 lazy_static! {
-    pub static ref BUILTINS: HashMap<&'static str, Vec<Signature>> = HashMap::from([
+    pub static ref BUILTINS: HashMap<&'static str, Vec<GSignature>> = HashMap::from([
         arith!("+"),
         arith!("-"),
         arith!(
             "*",
-            sig!("*", Type::Pointer(Box::new(Type::Generic(0))) => Type::Generic(0))
+            sig!("*", GType::Pointer(Box::new(GType::Generic(0))) => GType::Generic(0))
         ),
         arith!("/"),
         arith!("%"),
@@ -172,13 +172,13 @@ lazy_static! {
         ),
         (
             ".",
-            vec![sig!(".", Type::Generic(0) => Type::Generic(0) Type::Generic(0))]
+            vec![sig!(".", GType::Generic(0) => GType::Generic(0) GType::Generic(0))]
         ),
-        ("~", vec![sig!("~", Type::Generic(0) => )]),
+        ("~", vec![sig!("~", GType::Generic(0) => )]),
         (
             "@",
             vec![
-                sig!("@", Type::Generic(0) => Type::Generic(0) Type::Pointer(Box::new(Type::Generic(0))))
+                sig!("@", GType::Generic(0) => GType::Generic(0) GType::Pointer(Box::new(GType::Generic(0))))
             ]
         ),
         ("_", vec![sig!("_", => )])
