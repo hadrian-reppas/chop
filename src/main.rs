@@ -20,7 +20,7 @@ fn compile(file_name: &str) {
         Ok(unit) => match typecheck::typecheck(&unit) {
             Ok(info) => {
                 let mut file = File::create("out.c").unwrap();
-                let code = codegen::generate(&unit, &info);
+                let code = codegen::generate(&info);
                 write!(file, "{}", code).unwrap();
                 Command::new("clang")
                     .args(["out.c", "-o", "out"])

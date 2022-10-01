@@ -73,7 +73,7 @@ macro_rules! cmp {
             sig!($op, BYTE BYTE => BOOL),
             sig!($op, INT INT => BOOL),
             sig!($op, FLOAT FLOAT => BOOL),
-            sig!($op, genp!() genp!()  => BOOL),
+            sig!($op, genp!(0) genp!(1)  => BOOL),
         ]
     )};
 }
@@ -93,8 +93,8 @@ macro_rules! gen {
 }
 
 macro_rules! genp {
-    () => {
-        ptr!(gen!(0))
+    ($id:expr) => {
+        ptr!(gen!($id))
     };
 }
 
@@ -128,100 +128,95 @@ fn hello_world {
 */
 lazy_static! {
     pub static ref BUILTINS: HashMap<&'static str, Vec<GSignature>> = HashMap::from([
-        arith!( // TODO
+        arith!(
             "+",
-            sig!("+", genp!() INT => genp!()),
-            sig!("+", INT genp!() => genp!())
+            sig!("+", genp!(0) INT => genp!(0)),
+            sig!("+", INT genp!(0) => genp!(0))
         ),
-        arith!( // TODO
-            "-",
-            sig!("-", genp!() INT => genp!()),
-            sig!("-", INT genp!() => genp!())
-        ),
-        arith!("*", sig!("*", genp!() => gen!(0))), // TODO
-        arith!("/"), // TODO
-        arith!("%"), // TODO
-        bit!("&"), // TODO
-        bit!("^"), // TODO
-        bit!("|"), // TODO
-        eq!("=="), // TODO
-        eq!("!="), // TODO
-        cmp!("<"), // TODO
-        cmp!("<="), // TODO
-        cmp!(">"), // TODO
-        cmp!(">="), // TODO
+        arith!("-", sig!("-", genp!(0) INT => genp!(0))),
+        arith!("*", sig!("*", genp!(0) => gen!(0))),
+        arith!("/"),
+        arith!("%"),
+        bit!("&"),
+        bit!("^"),
+        bit!("|"),
+        eq!("=="),
+        eq!("!="),
+        cmp!("<"),
+        cmp!("<="),
+        cmp!(">"),
+        cmp!(">="),
         (
-            "!", // TODO
+            "!",
             vec![
                 sig!("!", BOOL => BOOL),
                 sig!("!", BYTE => BYTE),
                 sig!("!", INT => INT),
-                sig!("!", FLOAT => FLOAT),
             ]
         ),
-        (".", vec![sig!(".", gen!(0) => gen!(0) gen!(0))]),  // TODO
+        (".", vec![sig!(".", gen!(0) => gen!(0) gen!(0))]),
         ("~", vec![sig!("~", gen!(0) => )]),
-        ("@", vec![sig!("@", gen!(0) => gen!(0) genp!())]),
+        ("@", vec![sig!("@", gen!(0) => gen!(0) genp!(0))]),
         ("_", vec![sig!("_", => )]),
         (
-            "to_byte", // TODO
+            "to_byte",
             vec![sig!("to_byte", INT => BYTE), sig!("to_byte", FLOAT => BYTE)]
         ),
         (
-            "to_int", // TODO
+            "to_int",
             vec![
                 sig!("to_int", FLOAT => INT),
                 sig!("to_int", BYTE => INT),
-                sig!("to_int", genp!() => INT),
+                sig!("to_int", genp!(0) => INT),
             ]
         ),
         (
-            "to_float", // TODO
+            "to_float",
             vec![
                 sig!("to_float", INT => FLOAT),
                 sig!("to_float", BYTE => FLOAT),
             ]
         ),
         (
-            "to_byte_ptr", // TODO
+            "to_byte_ptr",
             vec![sig!(
                 "to_byte_ptr",
-                genp!() => ptr!(BYTE)
+                genp!(0) => ptr!(BYTE)
             )]
         ),
         (
-            "to_int_ptr", // TODO
+            "to_int_ptr",
             vec![sig!(
                 "to_int_ptr",
-                genp!() => ptr!(INT)
+                genp!(0) => ptr!(INT)
             )]
         ),
         (
-            "to_float_ptr", // TODO
+            "to_float_ptr",
             vec![sig!(
                 "to_float_ptr",
-                genp!() => ptr!(FLOAT)
+                genp!(0) => ptr!(FLOAT)
             )]
         ),
         (
-            "to_bool_ptr", // TODO
+            "to_bool_ptr",
             vec![sig!(
                 "to_bool_ptr",
-                genp!() => ptr!(BOOL)
+                genp!(0) => ptr!(BOOL)
             )]
         ),
         (
-            "size_of", // TODO
+            "size_of",
             vec![
                 sig!("size_of", INT => INT),
                 sig!("size_of", FLOAT => INT),
                 sig!("size_of", BYTE => INT),
                 sig!("size_of", BOOL => INT),
-                sig!("size_of", genp!() => INT),
+                sig!("size_of", genp!(0) => INT),
             ]
         ),
         (
-            "neg", // TODO
+            "neg",
             vec![sig!("neg", INT => INT), sig!("neg", FLOAT => FLOAT)]
         ),
         (

@@ -1,5 +1,5 @@
-use crate::ast::{ElsePart, Expr, Item, Name, Op, Stmt};
-use crate::typecheck::{CallInfo, GSignature, GType, Kind, Primitive, TypeInfo};
+use crate::ast::{ElsePart, Expr, Name, Op, Stmt};
+use crate::typecheck::{GSignature, GType, Kind, Primitive, TypeInfo};
 
 use std::collections::{hash_map, HashMap, HashSet};
 use std::fmt;
@@ -8,9 +8,9 @@ use std::fmt;
 type Concrete = HashMap<&'static str, HashMap<usize, Vec<Signature>>>;
 type Done = HashSet<(&'static str, usize, Vec<Type>)>;
 
-pub fn generate(unit: &[Item], info: &TypeInfo) -> String {
+pub fn generate(info: &TypeInfo) -> String {
     let mut context = Context::new(info);
-    context.make_unit(unit);
+    context.make();
     context.code
 }
 
@@ -47,7 +47,7 @@ impl<'info> Context<'info> {
         }
     }
 
-    fn make_unit(&mut self, unit: &[Item]) {
+    fn make(&mut self) {
         self.fill_graph("main", 0, Vec::new());
 
         let mut functions = Vec::new();
@@ -269,10 +269,61 @@ impl<'info> Context<'info> {
     fn make_builtin(&mut self, name: &str, gid: usize, cid: usize, signature: &Signature) {
         self.being_fn(name, gid, cid, signature);
         match name {
+            "+" => self.add("  *hopr_0 = hopv_0 + hopv_1;\n}\n"),
+            "-" => self.add("  *hopr_0 = hopv_0 - hopv_1;\n}\n"),
+            "*" => {
+                if signature.params.len() == 1 {
+                    self.add("  *hopr_0 = hopv_0 * hopv_1;\n}\n");
+                } else {
+                    self.add("  *hopr_0 = *hopv_0;\n}\n");
+                }
+            }
+            "/" => self.add("  *hopr_0 = hopv_0 / hopv_1;\n}\n"),
+            "%" => self.add("  *hopr_0 = hopv_0 % hopv_1;\n}\n"),
+            "&" => {
+                if signature.params[0] == Type::Bool(0) {
+                    self.add("  *hopr_0 = hopv_0 && hopv_1;\n}\n");
+                } else {
+                    self.add("  *hopr_0 = hopv_0 & hopv_1;\n}\n");
+                }
+            }
+            "|" => {
+                if signature.params[0] == Type::Bool(0) {
+                    self.add("  *hopr_0 = hopv_0 || hopv_1;\n}\n");
+                } else {
+                    self.add("  *hopr_0 = hopv_0 | hopv_1;\n}\n");
+                }
+            }
+            "^" => self.add("  *hopr_0 = hopv_0 ^ hopv_1;\n}\n"),
+            "!" => {
+                if signature.params[0] == Type::Bool(0) {
+                    self.add("  *hopr_0 = !hopv_0;\n}\n");
+                } else {
+                    self.add("  *hopr_0 = ~hopv_0;\n}\n");
+                }
+            }
+            "neg" => self.add("  *hopr_0 = -hopv_0;\n}\n"),
+            "size_of" => {
+                self.add("  *hopr_0 = sizeof(");
+                self.make_type(&signature.params[0]);
+                self.add(")\n}\n");
+            }
             "~" => self.add("}\n"),
             "==" => self.add("  *hopr_0 = hopv_0 == hopv_1;\n}\n"),
             "!=" => self.add("  *hopr_0 = hopv_0 != hopv_1;\n}\n"),
+            "<" => self.add("  *hopr_0 = hopv_0 < hopv_1;\n}\n"),
+            "<=" => self.add("  *hopr_0 = hopv_0 <= hopv_1;\n}\n"),
+            ">" => self.add("  *hopr_0 = hopv_0 > hopv_1;\n}\n"),
+            ">=" => self.add("  *hopr_0 = hopv_0 >= hopv_1;\n}\n"),
             "_" => self.add("}\n"),
+            "." => self.add("  *hopr_0 = hopv_0;\n}\n"),
+            "to_byte" => self.add("  *hopr_0 = (uint8_t) hopv_0;\n}\n"),
+            "to_int" => self.add("  *hopr_0 = (int64_t) hopv_0;\n}\n"),
+            "to_float" => self.add("  *hopr_0 = (double) hopv_0;\n}\n"),
+            "to_bool_ptr" => self.add("  *hopr_0 = (uint8_t*) hopv_0;\n}\n"),
+            "to_byte_ptr" => self.add("  *hopr_0 = (uint8_t*) hopv_0;\n}\n"),
+            "to_int_ptr" => self.add("  *hopr_0 = (int64_t*) hopv_0;\n}\n"),
+            "to_float_ptr" => self.add("  *hopr_0 = (double*) hopv_0;\n}\n"),
             "put" => match &signature.params[0] {
                 Type::Byte(0) => self.add("  printf(\"%\" PRIu8, hopv_0);\n}\n"),
                 Type::Int(0) => self.add("  printf(\"%\" PRId64, hopv_0);\n}\n"),
