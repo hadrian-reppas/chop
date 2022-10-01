@@ -704,6 +704,10 @@ impl Context {
                 ],
             ))
         } else {
+            for op in test {
+                self.check_op(stack, op)?;
+            }
+            stack.pop();
             Ok(())
         }
     }

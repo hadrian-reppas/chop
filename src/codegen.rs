@@ -17,6 +17,9 @@ pub fn generate(unit: &[Item], info: &TypeInfo) -> String {
 const PRELUDE: &str = "
 #include <stdio.h>
 #include <stdint.h>
+#include <inttypes.h>
+#include <wchar.h>
+#include <locale.h>
 ";
 
 struct Context<'info> {
@@ -27,6 +30,7 @@ struct Context<'info> {
     done: Done,
     counter: usize,
     depth: usize,
+    let_binds: Vec<HashMap<&'static str, (usize, Type)>>,
 }
 
 impl<'info> Context<'info> {
@@ -39,6 +43,7 @@ impl<'info> Context<'info> {
             done: HashSet::new(),
             counter: 0,
             depth: 1,
+            let_binds: Vec::new(),
         }
     }
 
@@ -72,10 +77,11 @@ impl<'info> Context<'info> {
 
     fn make_main(&mut self, main_signature: &Signature) {
         self.add("int main(int argc, char** argv) {\n");
+        self.add("  setlocale(LC_ALL, \"\");\n");
         self.add("  int64_t code = 0;\n");
         self.add("  hopf_6d_61_69_6e_0_0(");
         if !main_signature.params.is_empty() {
-            self.add("argc, argv");
+            self.add("argc, (uint8_t**) argv");
         }
         if !main_signature.returns.is_empty() {
             if !main_signature.params.is_empty() {
@@ -92,8 +98,13 @@ impl<'info> Context<'info> {
         self.counter - 1
     }
 
+    fn var(&mut self) -> usize {
+        self.counter += 1;
+        self.counter - 1
+    }
+
     fn get_signature(&self, signature: &GSignature) -> Option<Signature> {
-        let bindings = dbg!(self.get_bindings(signature)?);
+        let bindings = self.get_bindings(signature)?;
         Some(Signature {
             params: signature
                 .params
@@ -125,7 +136,7 @@ impl<'info> Context<'info> {
                 Err(_) => return None,
             }
         }
-        Some(dbg!(bindings).into_iter().flatten().collect())
+        Some(bindings.into_iter().flatten().collect())
     }
 
     fn add(&mut self, code: &str) {
@@ -171,7 +182,7 @@ impl<'info> Context<'info> {
                 self.add(&"*".repeat(*depth));
             }
             Type::Byte(depth) => {
-                self.add("char");
+                self.add("uint8_t");
                 self.add(&"*".repeat(*depth));
             }
             Type::Int(depth) => {
@@ -183,7 +194,7 @@ impl<'info> Context<'info> {
                 self.add(&"*".repeat(*depth));
             }
             Type::Bool(depth) => {
-                self.add("char");
+                self.add("uint8_t");
                 self.add(&"*".repeat(*depth));
             }
         }
@@ -260,6 +271,30 @@ impl<'info> Context<'info> {
         match name {
             "~" => self.add("}\n"),
             "==" => self.add("  *hopr_0 = hopv_0 == hopv_1;\n}\n"),
+            "!=" => self.add("  *hopr_0 = hopv_0 != hopv_1;\n}\n"),
+            "_" => self.add("}\n"),
+            "put" => match &signature.params[0] {
+                Type::Byte(0) => self.add("  printf(\"%\" PRIu8, hopv_0);\n}\n"),
+                Type::Int(0) => self.add("  printf(\"%\" PRId64, hopv_0);\n}\n"),
+                Type::Float(0) => self.add("  printf(\"%d\", hopv_0);\n}\n"),
+                Type::Bool(0) => {
+                    self.add("  if (hopv_0) {printf(\"true\");} else {printf(\"false\");}\n}\n")
+                }
+                _ => unreachable!(),
+            },
+            "putln" => match &signature.params[0] {
+                Type::Byte(0) => self.add("  printf(\"%\" PRIu8 \"\\n\", hopv_0);\n}\n"),
+                Type::Int(0) => self.add("  printf(\"%\" PRId64 \"\\n\", hopv_0);\n}\n"),
+                Type::Float(0) => self.add("  printf(\"%d\\n\", hopv_0);\n}\n"),
+                Type::Bool(0) => self
+                    .add("  if (hopv_0) {printf(\"true\\n\");} else {printf(\"false\\n\");}\n}\n"),
+                _ => unreachable!(),
+            },
+            "ln" => self.add("  printf(\"\\n\");\n}"),
+            "puts" => self.add("  printf(\"%s\", (char*) hopv_0);\n}\n"),
+            "putlns" => self.add("  printf(\"%s\\n\", (char*) hopv_0);\n}\n"),
+            "putc" => self.add("  printf(\"%lc\", (wint_t) hopv_0);\n}\n"),
+            "putlnc" => self.add("  printf(\"%lc\\n\", (wint_t) hopv_0);\n}\n"),
             _ => todo!(),
         }
     }
@@ -295,12 +330,12 @@ impl<'info> Context<'info> {
             Op::Float(f, _) => {
                 let var = self.push(Type::Float(0));
                 self.tabs();
-                self.add(&format!("double hopv_{var} = {f};\n"));
+                self.add(&format!("double hopv_{var} = {f:?};\n"));
             }
             Op::Bool(b, _) => {
                 let var = self.push(Type::Bool(0));
                 self.tabs();
-                self.add(&format!("char hopv_{var} = {};\n", *b as u8));
+                self.add(&format!("uint8_t hopv_{var} = {};\n", *b as u8));
             }
             Op::Char(c, _) => {
                 let var = self.push(Type::Int(0));
@@ -310,7 +345,7 @@ impl<'info> Context<'info> {
             Op::String(s, _) => {
                 let var = self.push(Type::Byte(1));
                 self.tabs();
-                self.add(&format!("char* hopv_{var} = {s:?};\n"));
+                self.add(&format!("uint8_t* hopv_{var} = (uint8_t*) {s:?};\n"));
             }
             Op::Name(name) => self.make_name(name.name),
             Op::Expr(expr, _) => self.make_expr(expr),
@@ -318,6 +353,13 @@ impl<'info> Context<'info> {
     }
 
     fn make_name(&mut self, name: &str) {
+        for binds in self.let_binds.iter().rev() {
+            if let Some((var, ty)) = binds.get(name) {
+                self.stack.push((*var, *ty));
+                return;
+            }
+        }
+
         if name == "@" {
             let (last, ty) = *self.stack.last().unwrap();
             let var = self.push(ty.inc());
@@ -383,27 +425,164 @@ impl<'info> Context<'info> {
     }
 
     fn make_expr(&mut self, expr: &Expr) {
-        todo!()
+        let mut ops = Vec::new();
+        flatten_expr(expr, &mut ops);
+        for op in ops {
+            self.make_op(&op);
+        }
     }
 
     fn make_if(&mut self, test: &[Op], body: &[Stmt], else_part: &Option<ElsePart>) {
-        // todo!()
+        if let Some(ElsePart {
+            body: else_body, ..
+        }) = else_part
+        {
+            self.make_if_else(test, body, else_body);
+        } else {
+            for op in test {
+                self.make_op(op);
+            }
+            self.tabs();
+            let (var, _) = self.stack.pop().unwrap();
+            self.add(&format!("if (hopv_{var}) {{\n"));
+            self.depth += 1;
+            for stmt in body {
+                self.make_stmt(stmt);
+            }
+            self.depth -= 1;
+            self.tabs();
+            self.add("}\n");
+        }
+    }
+
+    fn make_if_else(&mut self, test: &[Op], body: &[Stmt], else_body: &[Stmt]) {
+        let code_before = self.code.clone();
+        let stack_before = self.stack.clone();
+
+        for op in test {
+            self.make_op(op);
+        }
+        self.stack.pop();
+        for stmt in body {
+            self.make_stmt(stmt);
+        }
+
+        self.code = code_before;
+
+        let mut alloc = Vec::new();
+        for (_, ty) in &self.stack.clone() {
+            alloc.push((self.var(), *ty));
+        }
+        for (var, ty) in &alloc {
+            self.tabs();
+            self.make_type(ty);
+            self.add(&format!(" hopv_{var};\n"));
+        }
+
+        self.stack = stack_before;
+
+        for op in test {
+            self.make_op(op);
+        }
+        self.tabs();
+        let (var, _) = self.stack.pop().unwrap();
+        self.add(&format!("if (hopv_{var}) {{\n"));
+        self.depth += 1;
+        for stmt in body {
+            self.make_stmt(stmt);
+        }
+        for (var, _) in alloc.iter().rev() {
+            self.tabs();
+            let s = self.stack.pop().unwrap().0;
+            self.add(&format!("hopv_{var} = hopv_{s};\n",));
+        }
+        self.depth -= 1;
+        self.tabs();
+        self.add("} else {\n");
+        self.depth += 1;
+        for stmt in else_body {
+            self.make_stmt(stmt);
+        }
+        for (var, _) in alloc.iter().rev() {
+            self.tabs();
+            let s = self.stack.pop().unwrap().0;
+            self.add(&format!("hopv_{var} = hopv_{s};\n",));
+        }
+        self.depth -= 1;
+        self.tabs();
+        self.add("}\n");
+        for (var, ty) in alloc {
+            self.stack.push((var, ty));
+        }
     }
 
     fn make_while(&mut self, test: &[Op], body: &[Stmt]) {
-        todo!()
+        for op in test {
+            self.make_op(op);
+        }
+        let test_var = self.var();
+        let (test_bool, _) = self.stack.pop().unwrap();
+        self.tabs();
+        self.make_type(&Type::Bool(0));
+        self.add(&format!(" hopv_{test_var} = hopv_{test_bool};\n"));
+        self.tabs();
+        self.add(&format!("while (hopv_{test_var}) {{\n"));
+        self.depth += 1;
+        for stmt in body {
+            self.make_stmt(stmt);
+        }
+        for op in test {
+            self.make_op(op);
+        }
+        let (test_bool, _) = self.stack.pop().unwrap();
+        self.tabs();
+        self.make_type(&Type::Bool(0));
+        self.add(&format!(" hopv_{test_var} = hopv_{test_bool};\n"));
+        self.depth -= 1;
+        self.tabs();
+        self.add("}\n");
     }
 
     fn make_for(&mut self, low: &[Op], high: &[Op], body: &[Stmt]) {
-        todo!()
+        for op in low {
+            self.make_op(op);
+        }
+        let (low, ty) = self.stack.pop().unwrap();
+        for op in high {
+            self.make_op(op);
+        }
+        let (high, _) = self.stack.pop().unwrap();
+        self.tabs();
+        self.add("for (");
+        self.make_type(&ty);
+        let for_var = self.var();
+        self.add(&format!(
+            " hopv_{for_var} = hopv_{low}; hopv_{for_var} < hopv_{high}; hopv_{for_var}++) {{\n"
+        ));
+        self.stack.push((for_var, ty));
+        self.depth += 1;
+        for stmt in body {
+            self.make_stmt(stmt);
+        }
+        self.depth -= 1;
+        self.tabs();
+        self.add("}\n");
     }
 
     fn make_let(&mut self, names: &[Name], body: &[Stmt]) {
-        todo!()
+        let mut binds = HashMap::new();
+        for name in names.iter().rev() {
+            binds.insert(name.name, self.stack.pop().unwrap());
+        }
+        self.let_binds.push(binds);
+        for stmt in body {
+            self.make_stmt(stmt);
+        }
+        self.let_binds.pop();
     }
 
     fn fill_graph(&mut self, name: &'static str, id: usize, binds: Vec<Type>) {
-        let tup = dbg!((name, id, binds));
+        let tup = (name, id, binds);
         if self.done.contains(&tup) {
             return;
         }
@@ -433,6 +612,95 @@ impl<'info> Context<'info> {
                 .collect();
             self.fill_graph(call_name, *call_id, converted_binds);
         }
+    }
+}
+
+fn flatten_expr(expr: &Expr, ops: &mut Vec<Op>) {
+    match expr {
+        Expr::Int(i, span) => ops.push(Op::Int(*i, *span)),
+        Expr::Float(f, span) => ops.push(Op::Float(*f, *span)),
+        Expr::Bool(b, span) => ops.push(Op::Bool(*b, *span)),
+        Expr::Char(c, span) => ops.push(Op::Char(*c, *span)),
+        Expr::Name(name) => ops.push(Op::Name(*name)),
+        Expr::Add(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new("+")));
+        }
+        Expr::And(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new("&")));
+        }
+        Expr::Divide(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new("/")));
+        }
+        Expr::Equal(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new("==")));
+        }
+        Expr::GreaterEqual(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new(">=")));
+        }
+        Expr::GreaterThan(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new(">")));
+        }
+        Expr::LessEqual(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new("<=")));
+        }
+        Expr::LessThan(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new("<")));
+        }
+        Expr::Modulo(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new("%")));
+        }
+        Expr::Multiply(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new("*")));
+        }
+        Expr::NotEqual(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new("!=")));
+        }
+        Expr::Or(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new("|")));
+        }
+        Expr::Subtract(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new("-")));
+        }
+        Expr::Xor(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new("!")));
+        }
+        Expr::Not(expr, _) => {
+            flatten_expr(expr, ops);
+            ops.push(Op::Name(Name::new("!")));
+        }
+        Expr::Negate(expr, _) => {
+            flatten_expr(expr, ops);
+            ops.push(Op::Name(Name::new("neg")));
+        }
+        Expr::Group(group, _) => ops.extend(group.iter().cloned()),
     }
 }
 
