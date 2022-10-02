@@ -16,6 +16,7 @@ pub fn parse(mut tokens: Tokens) -> Result<Unit, Error> {
     loop {
         match tokens.peek() {
             Token::Fn(_) => items.push(parse_fn(&mut tokens)?),
+            Token::Struct(_) => items.push(parse_struct(&mut tokens)?),
             Token::Eof(_) => return Ok(items),
             token => return Err(Error::Parse(token.span(), "unexpected token".to_string())),
         }
@@ -42,7 +43,6 @@ fn parse_name(tokens: &mut Tokens) -> Result<Name, Error> {
     }
 }
 
-// TODO: parse pointer types
 fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
     let fn_span = tokens.next()?.span();
     let name = parse_name(tokens)?;
@@ -125,6 +125,46 @@ fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
         body,
         fn_span,
         arrow_span,
+        lbrace_span,
+        rbrace_span,
+    })
+}
+
+fn parse_struct(tokens: &mut Tokens) -> Result<Item, Error> {
+    let struct_span = tokens.next()?.span();
+    let name = parse_name(tokens)?;
+    if !name.is_normal() {
+        return Err(Error::Parse(
+            name.span,
+            "structs must have normal names".to_string(),
+        ));
+    } else if name.name.starts_with("to_") && name.name.ends_with("_ptr") {
+        return Err(Error::Parse(
+            name.span,
+            "struct names cannot start with 'to_' and end with '_ptr'".to_string(),
+        ));
+    }
+    if !tokens.peek().is_lbrace() {
+        return Err(Error::Parse(
+            tokens.peek().span(),
+            "expected '{'".to_string(),
+        ));
+    }
+    let lbrace_span = tokens.next()?.span();
+
+    let mut fields = Vec::new();
+    while !tokens.peek().is_rbrace() {
+        let ty = parse_type(tokens)?;
+        let name = parse_name(tokens)?;
+        fields.push(Field { name, ty })
+    }
+
+    let rbrace_span = tokens.next()?.span();
+
+    Ok(Item::Struct {
+        name,
+        fields,
+        struct_span,
         lbrace_span,
         rbrace_span,
     })

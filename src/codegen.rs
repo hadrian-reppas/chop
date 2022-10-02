@@ -1,5 +1,5 @@
 use crate::ast::{ElsePart, Expr, Name, Op, Stmt};
-use crate::typecheck::{GSignature, GType, Kind, Primitive, TypeInfo};
+use crate::typecheck::{flatten_expr, GSignature, GType, Kind, Primitive, TypeInfo};
 
 use std::collections::{hash_map, HashMap, HashSet};
 use std::fmt;
@@ -50,6 +50,20 @@ impl<'info> Context<'info> {
 
     fn make(&mut self) {
         self.fill_graph("main", 0, Vec::new());
+
+        for (name, fields) in &self.info.struct_fields {
+            self.add("struct hopt");
+            self.escape(name);
+            self.add(" {\n");
+            for (ty, field) in fields {
+                self.add("    ");
+                self.make_type(&Type::convert(ty, &[]));
+                self.add(" hf");
+                self.escape(field);
+                self.add(";\n")
+            }
+            self.add("};\n");
+        }
 
         let mut functions = Vec::new();
         for (name, signatures) in &self.info.signatures {
@@ -178,7 +192,7 @@ impl<'info> Context<'info> {
     fn make_type(&mut self, ty: &Type) {
         match ty {
             Type::Custom(name, depth) => {
-                self.add("hopt");
+                self.add("struct hopt");
                 self.escape(name);
                 self.add(&"*".repeat(*depth));
             }
@@ -211,7 +225,7 @@ impl<'info> Context<'info> {
     ) {
         match kind {
             Kind::Builtin => self.make_builtin(name, gid, cid, signature),
-            Kind::Auto => self.make_auto(name, gid, cid, signature),
+            Kind::Auto(_) => self.make_auto(name, gid, cid, signature),
             Kind::Custom(body) => self.make_custom(name, gid, cid, signature, body),
         }
     }
@@ -264,7 +278,39 @@ impl<'info> Context<'info> {
     }
 
     fn make_auto(&mut self, name: &str, gid: usize, cid: usize, signature: &Signature) {
-        todo!()
+        self.being_fn(name, gid, cid, signature);
+        if name == "size_of" {
+            self.add("    *hr0 = sizeof(");
+            self.make_type(&signature.params[0]);
+            self.add(");\n}\n");
+        } else if let Some(field) = name.strip_prefix("..") {
+            self.add("    *hr0 = hv0;\n");
+            self.add("    *hr1 = hv0.hf");
+            self.escape(field);
+            self.add(";\n}\n");
+        } else if let Some(field) = name.strip_prefix('.') {
+            self.add("    *hr0 = hv0.hf");
+            self.escape(field);
+            self.add(";\n}\n");
+        } else if name.starts_with("to_") && name.ends_with("_ptr") {
+            self.add("    *hr0 = (");
+            self.make_type(&signature.returns[0]);
+            self.add(") hv0;\n}\n")
+        } else {
+            for (i, (_, field)) in self
+                .info
+                .struct_fields
+                .get(name)
+                .unwrap()
+                .iter()
+                .enumerate()
+            {
+                self.add("    hr0->hf");
+                self.escape(field);
+                self.add(&format!(" = hv{i};\n"));
+            }
+            self.add("}\n");
+        }
     }
 
     fn make_builtin(&mut self, name: &str, gid: usize, cid: usize, signature: &Signature) {
@@ -307,7 +353,7 @@ impl<'info> Context<'info> {
             "size_of" => {
                 self.add("    *hr0 = sizeof(");
                 self.make_type(&signature.params[0]);
-                self.add(")\n}\n");
+                self.add(");\n}\n");
             }
             "~" => self.add("}\n"),
             "==" => self.add("    *hr0 = hv0 == hv1;\n}\n"),
@@ -317,7 +363,7 @@ impl<'info> Context<'info> {
             ">" => self.add("    *hr0 = hv0 > hv1;\n}\n"),
             ">=" => self.add("    *hr0 = hv0 >= hv1;\n}\n"),
             "_" => self.add("}\n"),
-            "." => self.add("    *hr0 = hv0;\n}\n"),
+            "." => self.add("    *hr0 = hv0;\n    *hr1 = hv0;\n}\n"),
             "to_byte" => self.add("    *hr0 = (uint8_t) hv0;\n}\n"),
             "to_int" => self.add("    *hr0 = (int64_t) hv0;\n}\n"),
             "to_float" => self.add("    *hr0 = (double) hv0;\n}\n"),
@@ -328,7 +374,7 @@ impl<'info> Context<'info> {
             "put" => match &signature.params[0] {
                 Type::Byte(0) => self.add("    printf(\"%\" PRIu8, hv0);\n}\n"),
                 Type::Int(0) => self.add("    printf(\"%\" PRId64, hv0);\n}\n"),
-                Type::Float(0) => self.add("    printf(\"%d\", hv0);\n}\n"),
+                Type::Float(0) => self.add("    printf(\"%.15g\", hv0);\n}\n"),
                 Type::Bool(0) => {
                     self.add("    if (hv0) {printf(\"true\");} else {printf(\"false\");}\n}\n")
                 }
@@ -337,7 +383,7 @@ impl<'info> Context<'info> {
             "putln" => match &signature.params[0] {
                 Type::Byte(0) => self.add("    printf(\"%\" PRIu8 \"\\n\", hv0);\n}\n"),
                 Type::Int(0) => self.add("    printf(\"%\" PRId64 \"\\n\", hv0);\n}\n"),
-                Type::Float(0) => self.add("    printf(\"%d\\n\", hv0);\n}\n"),
+                Type::Float(0) => self.add("    printf(\"%.15g\\n\", hv0);\n}\n"),
                 Type::Bool(0) => self
                     .add("    if (hv0) {printf(\"true\\n\");} else {printf(\"false\\n\");}\n}\n"),
                 _ => self.add("    printf(\"%p\n\" , hv0);\n}\n"),
@@ -401,7 +447,7 @@ impl<'info> Context<'info> {
             Op::String(s, _) => {
                 let var = self.push(Type::Byte(1));
                 self.tabs();
-                self.add(&format!("uint8_t* hv{var} = (uint8_t*) {s:?};\n"));
+                self.add(&format!("uint8_t* hv{var} = (uint8_t*) {};\n", escape(s)));
             }
             Op::Name(name) => self.make_name(name),
             Op::Expr(expr, _) => self.make_expr(expr),
@@ -630,8 +676,7 @@ impl<'info> Context<'info> {
         }
         let (test_bool, _) = self.stack.pop().unwrap();
         self.tabs();
-        self.make_type(&Type::Bool(0));
-        self.add(&format!(" hv{test_var} = hv{test_bool};\n"));
+        self.add(&format!("hv{test_var} = hv{test_bool};\n"));
         self.depth -= 1;
         self.tabs();
         self.add("}\n");
@@ -709,93 +754,19 @@ impl<'info> Context<'info> {
     }
 }
 
-fn flatten_expr(expr: &Expr, ops: &mut Vec<Op>) {
-    match expr {
-        Expr::Int(i, span) => ops.push(Op::Int(*i, *span)),
-        Expr::Float(f, span) => ops.push(Op::Float(*f, *span)),
-        Expr::Bool(b, span) => ops.push(Op::Bool(*b, *span)),
-        Expr::Char(c, span) => ops.push(Op::Char(*c, *span)),
-        Expr::Name(name) => ops.push(Op::Name(*name)),
-        Expr::Add(left, right, _) => {
-            flatten_expr(left, ops);
-            flatten_expr(right, ops);
-            ops.push(Op::Name(Name::new("+")));
+fn escape(s: &str) -> String {
+    let mut out = "\"".to_string();
+    for c in s.chars() {
+        if (c as u32) < 256 {
+            out.push_str(&format!("\\x{:01$x}", c as u32, 2));
+        } else if (c as u32) < 65536 {
+            out.push_str(&format!("\\u{:01$x}", c as u32, 4));
+        } else {
+            out.push_str(&format!("\\U{:01$x}", c as u32, 8));
         }
-        Expr::And(left, right, _) => {
-            flatten_expr(left, ops);
-            flatten_expr(right, ops);
-            ops.push(Op::Name(Name::new("&")));
-        }
-        Expr::Divide(left, right, _) => {
-            flatten_expr(left, ops);
-            flatten_expr(right, ops);
-            ops.push(Op::Name(Name::new("/")));
-        }
-        Expr::Equal(left, right, _) => {
-            flatten_expr(left, ops);
-            flatten_expr(right, ops);
-            ops.push(Op::Name(Name::new("==")));
-        }
-        Expr::GreaterEqual(left, right, _) => {
-            flatten_expr(left, ops);
-            flatten_expr(right, ops);
-            ops.push(Op::Name(Name::new(">=")));
-        }
-        Expr::GreaterThan(left, right, _) => {
-            flatten_expr(left, ops);
-            flatten_expr(right, ops);
-            ops.push(Op::Name(Name::new(">")));
-        }
-        Expr::LessEqual(left, right, _) => {
-            flatten_expr(left, ops);
-            flatten_expr(right, ops);
-            ops.push(Op::Name(Name::new("<=")));
-        }
-        Expr::LessThan(left, right, _) => {
-            flatten_expr(left, ops);
-            flatten_expr(right, ops);
-            ops.push(Op::Name(Name::new("<")));
-        }
-        Expr::Modulo(left, right, _) => {
-            flatten_expr(left, ops);
-            flatten_expr(right, ops);
-            ops.push(Op::Name(Name::new("%")));
-        }
-        Expr::Multiply(left, right, _) => {
-            flatten_expr(left, ops);
-            flatten_expr(right, ops);
-            ops.push(Op::Name(Name::new("*")));
-        }
-        Expr::NotEqual(left, right, _) => {
-            flatten_expr(left, ops);
-            flatten_expr(right, ops);
-            ops.push(Op::Name(Name::new("!=")));
-        }
-        Expr::Or(left, right, _) => {
-            flatten_expr(left, ops);
-            flatten_expr(right, ops);
-            ops.push(Op::Name(Name::new("|")));
-        }
-        Expr::Subtract(left, right, _) => {
-            flatten_expr(left, ops);
-            flatten_expr(right, ops);
-            ops.push(Op::Name(Name::new("-")));
-        }
-        Expr::Xor(left, right, _) => {
-            flatten_expr(left, ops);
-            flatten_expr(right, ops);
-            ops.push(Op::Name(Name::new("!")));
-        }
-        Expr::Not(expr, _) => {
-            flatten_expr(expr, ops);
-            ops.push(Op::Name(Name::new("!")));
-        }
-        Expr::Negate(expr, _) => {
-            flatten_expr(expr, ops);
-            ops.push(Op::Name(Name::new("neg")));
-        }
-        Expr::Group(group, _) => ops.extend(group.iter().cloned()),
     }
+    out.push('"');
+    out
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -855,7 +826,7 @@ impl Type {
                 Primitive::Byte => Type::Byte(0),
                 Primitive::Bool => Type::Bool(0),
             },
-            GType::Pointer(ty) => Type::convert(&*ty, binds).inc(),
+            GType::Pointer(ty) => Type::convert(ty, binds).inc(),
             GType::Custom(name) => Type::Custom(name.name, 0),
             GType::Generic(index) => binds[*index],
         }

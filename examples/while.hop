@@ -1,5 +1,6 @@
 fn main {
     while true {}
 
-    while 1 false { ~ }
+    true
+    while _ { true }
 }

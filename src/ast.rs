@@ -62,6 +62,14 @@ pub enum Item {
         lbrace_span: Span,
         rbrace_span: Span,
     },
+    Struct {
+        name: Name,
+        fields: Vec<Field>,
+
+        struct_span: Span,
+        lbrace_span: Span,
+        rbrace_span: Span,
+    },
 }
 
 impl fmt::Debug for Item {
@@ -74,7 +82,19 @@ impl fmt::Debug for Item {
                 body,
                 ..
             } => write!(f, "Function({name:?}, {params:?}, {returns:?}, {body:?})"),
+            Item::Struct { name, fields, .. } => write!(f, "Struct({name:?}, {fields:?})"),
         }
+    }
+}
+
+pub struct Field {
+    pub name: Name,
+    pub ty: PType,
+}
+
+impl fmt::Debug for Field {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}: {:?}", self.name.name, self.ty)
     }
 }
 

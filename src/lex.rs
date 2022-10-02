@@ -70,9 +70,9 @@ pub enum Token {
     For(Span),
     To(Span),
     Let(Span),
+    Struct(Span),
 
     // import
-    // struct
     // const
     // global
     Eof(Span),
@@ -101,6 +101,7 @@ impl Token {
             Token::For(span) => *span,
             Token::To(span) => *span,
             Token::Let(span) => *span,
+            Token::Struct(span) => *span,
             Token::Eof(span) => *span,
         }
     }
@@ -214,8 +215,8 @@ struct TokenIter {
 impl TokenIter {
     fn from_file(path: &str) -> Result<TokenIter, Error> {
         if let Ok(code) = fs::read_to_string(path) {
-            let code = Box::leak(Box::new(code));
-            let file = Box::leak(Box::new(path.to_string()));
+            let code = leak(code);
+            let file = leak(path.to_string());
             Ok(TokenIter {
                 suffix: code,
                 line: 0,
@@ -315,7 +316,6 @@ impl TokenIter {
 
         let mut len = 0;
 
-        // TODO: lex .field and ..field
         if self.suffix.starts_with(is_normal_start) {
             while self.suffix[len..].starts_with(is_normal_continue) {
                 len += self.suffix.chars().next().unwrap().len_utf8();
@@ -323,6 +323,11 @@ impl TokenIter {
         } else {
             while is_symbol_continue(&self.suffix[len..]) {
                 len += self.suffix.chars().next().unwrap().len_utf8();
+            }
+            if is_dots(&self.suffix[..len]) && self.suffix[len..].starts_with(is_normal_start) {
+                while self.suffix[len..].starts_with(is_normal_continue) {
+                    len += self.suffix.chars().next().unwrap().len_utf8();
+                }
             }
         }
 
@@ -335,6 +340,7 @@ impl TokenIter {
             "for" => Token::For(span),
             "to" => Token::To(span),
             "let" => Token::Let(span),
+            "struct" => Token::Struct(span),
             "true" => Token::Bool(true, span),
             "false" => Token::Bool(false, span),
             _ => Token::Name(span),
@@ -476,6 +482,14 @@ impl TokenIter {
             ))
         }
     }
+}
+
+pub fn leak(s: String) -> &'static str {
+    Box::leak(Box::new(s))
+}
+
+fn is_dots(s: &str) -> bool {
+    s.chars().all(|c| c == '.')
 }
 
 pub fn is_normal_start(c: char) -> bool {

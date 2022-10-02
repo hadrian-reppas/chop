@@ -3,7 +3,7 @@ use crate::ast::*;
 use crate::builtins::BUILTINS;
 use crate::codegen::Type;
 use crate::error::{Error, Note};
-use crate::lex::Span;
+use crate::lex::{leak, Span};
 
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::fmt;
@@ -188,7 +188,7 @@ impl GSignature {
 #[derive(Clone)]
 pub enum Kind {
     Builtin,
-    Auto,
+    Auto(Span),
     Custom(Vec<Stmt>),
 }
 
@@ -224,11 +224,11 @@ impl CallGraph {
     }
 }
 
-// TODO: combine signatures and let_binds into one Vec<HashMap>
 struct Context {
     signatures: HashMap<&'static str, Vec<GSignature>>,
     let_binds: Vec<HashMap<&'static str, GType>>,
     call_graph: CallGraph,
+    struct_fields: HashMap<&'static str, Vec<(GType, &'static str)>>,
 }
 
 impl Context {
@@ -237,13 +237,15 @@ impl Context {
             signatures: BUILTINS.clone(),
             let_binds: Vec::new(),
             call_graph: CallGraph::new(),
+            struct_fields: HashMap::new(),
         }
     }
 
     fn init_signatures(&mut self, unit: &[Item]) -> Result<(), Error> {
         for item in unit {
-            let signature = get_signature(item)?;
-            self.insert_signature(signature)?;
+            for signature in get_signatures(item)? {
+                self.insert_signature(signature)?;
+            }
         }
         if let Some(mains) = self.signatures.get("main") {
             if mains.len() == 1 {
@@ -408,7 +410,7 @@ impl Context {
                 rbrace_span,
                 ..
             } => {
-                let signature = get_signature(item)?;
+                let [signature]: [GSignature; 1] = get_signatures(item)?.try_into().unwrap();
                 let id = self
                     .signatures
                     .get(name.name)
@@ -422,6 +424,16 @@ impl Context {
                     self.check_stmt(&mut stack, stmt)?;
                 }
                 check_stack(&mut stack, &signature, *rbrace_span)?;
+                Ok(())
+            }
+            Item::Struct { name, fields, .. } => {
+                self.struct_fields.insert(
+                    name.name,
+                    fields
+                        .iter()
+                        .map(|Field { ty, name }| (GType::new(*ty, &None), name.name))
+                        .collect(),
+                );
                 Ok(())
             }
         }
@@ -468,13 +480,6 @@ impl Context {
         }
     }
 
-    // TODO: optional test
-    //       if let Some(test) = test {
-    //           for op in test {
-    //               self.check_op(stack, op)?;
-    //           }
-    //       }
-    //       continue on as before
     fn check_if(
         &mut self,
         stack: &mut Vec<GType>,
@@ -657,13 +662,6 @@ impl Context {
         }
     }
 
-    // TODO: optional test
-    //       let stack_before = stack.clone()
-    //       assert stack.pop() is bool
-    //       check body
-    //       assert stack == stack_before
-    //       stack.pop()
-    //       continue on...
     fn check_while(
         &mut self,
         stack: &mut Vec<GType>,
@@ -736,7 +734,12 @@ impl Context {
             }
             Op::Name(name) => self.update_stack(stack, *name),
             Op::Expr(expr, _) => {
-                stack.push(self.type_of(expr)?);
+                self.type_of(expr)?;
+                let mut ops = Vec::new();
+                flatten_expr(expr, &mut ops);
+                for op in ops {
+                    self.check_op(stack, &op)?;
+                }
                 Ok(())
             }
         }
@@ -844,12 +847,95 @@ impl Context {
             }
         }
     }
+}
 
-    /*
-    fn define_structs(&mut self, unit: &Vec<Item>) -> Result<(), Error> {
-        todo!()
+pub fn flatten_expr(expr: &Expr, ops: &mut Vec<Op>) {
+    match expr {
+        Expr::Int(i, span) => ops.push(Op::Int(*i, *span)),
+        Expr::Float(f, span) => ops.push(Op::Float(*f, *span)),
+        Expr::Bool(b, span) => ops.push(Op::Bool(*b, *span)),
+        Expr::Char(c, span) => ops.push(Op::Char(*c, *span)),
+        Expr::Name(name) => ops.push(Op::Name(*name)),
+        Expr::Add(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new("+")));
+        }
+        Expr::And(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new("&")));
+        }
+        Expr::Divide(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new("/")));
+        }
+        Expr::Equal(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new("==")));
+        }
+        Expr::GreaterEqual(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new(">=")));
+        }
+        Expr::GreaterThan(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new(">")));
+        }
+        Expr::LessEqual(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new("<=")));
+        }
+        Expr::LessThan(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new("<")));
+        }
+        Expr::Modulo(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new("%")));
+        }
+        Expr::Multiply(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new("*")));
+        }
+        Expr::NotEqual(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new("!=")));
+        }
+        Expr::Or(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new("|")));
+        }
+        Expr::Subtract(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new("-")));
+        }
+        Expr::Xor(left, right, _) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name(Name::new("!")));
+        }
+        Expr::Not(expr, _) => {
+            flatten_expr(expr, ops);
+            ops.push(Op::Name(Name::new("!")));
+        }
+        Expr::Negate(expr, _) => {
+            flatten_expr(expr, ops);
+            ops.push(Op::Name(Name::new("neg")));
+        }
+        Expr::Group(group, _) => ops.extend(group.iter().cloned()),
     }
-    */
 }
 
 fn init_stack(signature: &GSignature) -> Vec<GType> {
@@ -882,7 +968,7 @@ fn check_for_conflicts(
                     None,
                     format!("'{}' is a builtin function", existing.name.name),
                 ),
-                Kind::Auto => todo!(),
+                Kind::Auto(span) => Note::new(Some(span), "autogenerated here".to_string()),
                 Kind::Custom(_) => Note::new(
                     Some(existing.name.span),
                     "previous definition is here".to_string(),
@@ -898,8 +984,7 @@ fn check_for_conflicts(
     Ok(())
 }
 
-// fn get_signatures(item: &Item) -> Result<Vec<Signature>, Error>
-fn get_signature(item: &Item) -> Result<GSignature, Error> {
+fn get_signatures(item: &Item) -> Result<Vec<GSignature>, Error> {
     match item {
         Item::Function {
             name,
@@ -940,12 +1025,51 @@ fn get_signature(item: &Item) -> Result<GSignature, Error> {
                 }
             }
 
-            Ok(GSignature {
+            Ok(vec![GSignature {
                 name: *name,
                 kind: Kind::Custom(body.clone()),
                 params,
                 returns,
-            })
+            }])
+        }
+        Item::Struct { name, fields, .. } => {
+            let span = name.span;
+            let mut signatures = vec![
+                GSignature::new(
+                    *name,
+                    Kind::Auto(span),
+                    fields.iter().map(|f| GType::new(f.ty, &None)).collect(),
+                    vec![GType::Custom(*name)],
+                ),
+                GSignature::new(
+                    Name::new(leak(format!("to_{}_ptr", name.name))),
+                    Kind::Auto(span),
+                    vec![GType::Pointer(Box::new(GType::Generic(0)))],
+                    vec![GType::Pointer(Box::new(GType::Custom(*name)))],
+                ),
+                GSignature::new(
+                    Name::new("size_of"),
+                    Kind::Auto(span),
+                    vec![GType::Custom(*name)],
+                    vec![GType::Primitive(Primitive::Int)],
+                ),
+            ];
+            for Field { name: fname, ty } in fields {
+                let dotdot = leak(format!("..{}", fname.name));
+                signatures.push(GSignature::new(
+                    Name::new(&dotdot[1..]),
+                    Kind::Auto(span),
+                    vec![GType::Custom(*name)],
+                    vec![GType::new(*ty, &None)],
+                ));
+                signatures.push(GSignature::new(
+                    Name::new(dotdot),
+                    Kind::Auto(span),
+                    vec![GType::Custom(*name)],
+                    vec![GType::Custom(*name), GType::new(*ty, &None)],
+                ));
+            }
+            Ok(signatures)
         }
     }
 }
@@ -961,6 +1085,7 @@ fn conflict(params_a: &[GType], params_b: &[GType]) -> bool {
 pub struct TypeInfo {
     pub signatures: HashMap<&'static str, Vec<GSignature>>,
     pub graph: HashMap<FnInfo, HashSet<CallInfo>>,
+    pub struct_fields: HashMap<&'static str, Vec<(GType, &'static str)>>,
 }
 
 pub fn typecheck(unit: &[Item]) -> Result<TypeInfo, Error> {
@@ -972,5 +1097,6 @@ pub fn typecheck(unit: &[Item]) -> Result<TypeInfo, Error> {
     Ok(TypeInfo {
         signatures: context.signatures,
         graph: context.call_graph.graph,
+        struct_fields: context.struct_fields,
     })
 }

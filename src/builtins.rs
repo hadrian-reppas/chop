@@ -247,5 +247,20 @@ lazy_static! {
         ("panic", vec![sig!("panic", =>)]),
         ("assert", vec![sig!("assert", BOOL =>)]),
         ("store", vec![sig!("store", genp!(0) gen!(0) =>)]),
+        // TODO: exit int ->
+        // TODO: alloc int int -> *byte
+        // TODO: free [T] *T ->
+        // TODO: malloc int -> *byte
+        // TODO: copy [T] *T *T int ->
+        // TODO: pow float float -> float
+        // TODO: random -> float
+        // TODO: randint int int -> int
+        // TODO: strcmp *byte *byte -> int
+        // TODO: streq *byte *byte -> bool
+        // TODO: strcpy *byte *byte ->
+        // TODO: strlen *byte -> int
+
+        // TODO: files
+        // TODO: stdin
     ]);
 }
