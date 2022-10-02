@@ -226,6 +226,7 @@ lazy_static! {
                 sig!("put", FLOAT =>),
                 sig!("put", BYTE =>),
                 sig!("put", BOOL =>),
+                sig!("put", genp!(0) =>),
             ]
         ),
         (
@@ -235,6 +236,7 @@ lazy_static! {
                 sig!("putln", FLOAT =>),
                 sig!("putln", BYTE =>),
                 sig!("putln", BOOL =>),
+                sig!("putln", genp!(0) =>),
             ]
         ),
         ("puts", vec![sig!("puts", ptr!(BYTE) =>)]),
@@ -242,5 +244,8 @@ lazy_static! {
         ("putc", vec![sig!("putc", INT =>)]),
         ("putlnc", vec![sig!("putlnc", INT =>)]),
         ("ln", vec![sig!("ln", =>)]),
+        ("panic", vec![sig!("panic", =>)]),
+        ("assert", vec![sig!("assert", BOOL =>)]),
+        ("store", vec![sig!("store", genp!(0) gen!(0) =>)]),
     ]);
 }

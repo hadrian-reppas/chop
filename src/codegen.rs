@@ -16,6 +16,7 @@ pub fn generate(info: &TypeInfo) -> String {
 
 const PRELUDE: &str = "
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdint.h>
 #include <inttypes.h>
 #include <wchar.h>
@@ -77,9 +78,9 @@ impl<'info> Context<'info> {
 
     fn make_main(&mut self, main_signature: &Signature) {
         self.add("int main(int argc, char** argv) {\n");
-        self.add("  setlocale(LC_ALL, \"\");\n");
-        self.add("  int64_t code = 0;\n");
-        self.add("  hopf_6d_61_69_6e_0_0(");
+        self.add("    setlocale(LC_ALL, \"\");\n");
+        self.add("    int64_t code = 0;\n");
+        self.add("    hf_6d_61_69_6e_0_0(");
         if !main_signature.params.is_empty() {
             self.add("argc, (uint8_t**) argv");
         }
@@ -89,7 +90,7 @@ impl<'info> Context<'info> {
             }
             self.add("&code");
         }
-        self.add(");\n  return code;\n}\n");
+        self.add(");\n    return code;\n}\n");
     }
 
     fn push(&mut self, ty: Type) -> usize {
@@ -145,7 +146,7 @@ impl<'info> Context<'info> {
 
     fn tabs(&mut self) {
         for _ in 0..self.depth {
-            self.code.push_str("  ");
+            self.code.push_str("    ");
         }
     }
 
@@ -156,7 +157,7 @@ impl<'info> Context<'info> {
     }
 
     fn make_declaration(&mut self, name: &str, gid: usize, cid: usize, signature: &Signature) {
-        self.add("void hopf");
+        self.add("void hf");
         self.escape(name);
         self.add(&format!("_{gid}_{cid}("));
         for (i, param) in signature.params.iter().enumerate() {
@@ -219,7 +220,7 @@ impl<'info> Context<'info> {
         self.counter = signature.params.len();
         self.stack = signature.params.iter().cloned().enumerate().collect();
 
-        self.add("void hopf");
+        self.add("void hf");
         self.escape(name);
         self.add(&format!("_{gid}_{cid}("));
         for (i, param) in signature.params.iter().enumerate() {
@@ -227,14 +228,14 @@ impl<'info> Context<'info> {
                 self.add(", ");
             }
             self.make_type(param);
-            self.add(&format!(" hopv_{i}"))
+            self.add(&format!(" hv{i}"))
         }
         for (i, ret) in signature.returns.iter().enumerate() {
             if i > 0 || !signature.params.is_empty() {
                 self.add(", ");
             }
             self.make_type(&ret.inc());
-            self.add(&format!(" hopr_{i}"))
+            self.add(&format!(" hr{i}"))
         }
         self.add(") {\n");
     }
@@ -242,7 +243,7 @@ impl<'info> Context<'info> {
     fn end_fn(&mut self) {
         for (i, (ret, _)) in self.stack.clone().iter().enumerate() {
             self.tabs();
-            self.add(&format!("*hopr_{} = hopv_{};\n", i, ret));
+            self.add(&format!("*hr{} = hv{};\n", i, ret));
         }
         self.add("}\n");
     }
@@ -269,84 +270,88 @@ impl<'info> Context<'info> {
     fn make_builtin(&mut self, name: &str, gid: usize, cid: usize, signature: &Signature) {
         self.being_fn(name, gid, cid, signature);
         match name {
-            "+" => self.add("  *hopr_0 = hopv_0 + hopv_1;\n}\n"),
-            "-" => self.add("  *hopr_0 = hopv_0 - hopv_1;\n}\n"),
+            "+" => self.add("    *hr0 = hv0 + hv1;\n}\n"),
+            "-" => self.add("    *hr0 = hv0 - hv1;\n}\n"),
             "*" => {
                 if signature.params.len() == 1 {
-                    self.add("  *hopr_0 = hopv_0 * hopv_1;\n}\n");
+                    self.add("    *hr0 = *hv0;\n}\n");
                 } else {
-                    self.add("  *hopr_0 = *hopv_0;\n}\n");
+                    self.add("    *hr0 = hv0 * hv1;\n}\n");
                 }
             }
-            "/" => self.add("  *hopr_0 = hopv_0 / hopv_1;\n}\n"),
-            "%" => self.add("  *hopr_0 = hopv_0 % hopv_1;\n}\n"),
+            "/" => self.add("    *hr0 = hv0 / hv1;\n}\n"),
+            "%" => self.add("    *hr0 = hv0 % hv1;\n}\n"),
             "&" => {
                 if signature.params[0] == Type::Bool(0) {
-                    self.add("  *hopr_0 = hopv_0 && hopv_1;\n}\n");
+                    self.add("    *hr0 = hv0 && hv1;\n}\n");
                 } else {
-                    self.add("  *hopr_0 = hopv_0 & hopv_1;\n}\n");
+                    self.add("    *hr0 = hv0 & hv1;\n}\n");
                 }
             }
             "|" => {
                 if signature.params[0] == Type::Bool(0) {
-                    self.add("  *hopr_0 = hopv_0 || hopv_1;\n}\n");
+                    self.add("    *hr0 = hv0 || hv1;\n}\n");
                 } else {
-                    self.add("  *hopr_0 = hopv_0 | hopv_1;\n}\n");
+                    self.add("    *hr0 = hv0 | hv1;\n}\n");
                 }
             }
-            "^" => self.add("  *hopr_0 = hopv_0 ^ hopv_1;\n}\n"),
+            "^" => self.add("    *hr0 = hv0 ^ hv1;\n}\n"),
             "!" => {
                 if signature.params[0] == Type::Bool(0) {
-                    self.add("  *hopr_0 = !hopv_0;\n}\n");
+                    self.add("    *hr0 = !hv0;\n}\n");
                 } else {
-                    self.add("  *hopr_0 = ~hopv_0;\n}\n");
+                    self.add("    *hr0 = ~hv0;\n}\n");
                 }
             }
-            "neg" => self.add("  *hopr_0 = -hopv_0;\n}\n"),
+            "neg" => self.add("    *hr0 = -hv0;\n}\n"),
             "size_of" => {
-                self.add("  *hopr_0 = sizeof(");
+                self.add("    *hr0 = sizeof(");
                 self.make_type(&signature.params[0]);
                 self.add(")\n}\n");
             }
             "~" => self.add("}\n"),
-            "==" => self.add("  *hopr_0 = hopv_0 == hopv_1;\n}\n"),
-            "!=" => self.add("  *hopr_0 = hopv_0 != hopv_1;\n}\n"),
-            "<" => self.add("  *hopr_0 = hopv_0 < hopv_1;\n}\n"),
-            "<=" => self.add("  *hopr_0 = hopv_0 <= hopv_1;\n}\n"),
-            ">" => self.add("  *hopr_0 = hopv_0 > hopv_1;\n}\n"),
-            ">=" => self.add("  *hopr_0 = hopv_0 >= hopv_1;\n}\n"),
+            "==" => self.add("    *hr0 = hv0 == hv1;\n}\n"),
+            "!=" => self.add("    *hr0 = hv0 != hv1;\n}\n"),
+            "<" => self.add("    *hr0 = hv0 < hv1;\n}\n"),
+            "<=" => self.add("    *hr0 = hv0 <= hv1;\n}\n"),
+            ">" => self.add("    *hr0 = hv0 > hv1;\n}\n"),
+            ">=" => self.add("    *hr0 = hv0 >= hv1;\n}\n"),
             "_" => self.add("}\n"),
-            "." => self.add("  *hopr_0 = hopv_0;\n}\n"),
-            "to_byte" => self.add("  *hopr_0 = (uint8_t) hopv_0;\n}\n"),
-            "to_int" => self.add("  *hopr_0 = (int64_t) hopv_0;\n}\n"),
-            "to_float" => self.add("  *hopr_0 = (double) hopv_0;\n}\n"),
-            "to_bool_ptr" => self.add("  *hopr_0 = (uint8_t*) hopv_0;\n}\n"),
-            "to_byte_ptr" => self.add("  *hopr_0 = (uint8_t*) hopv_0;\n}\n"),
-            "to_int_ptr" => self.add("  *hopr_0 = (int64_t*) hopv_0;\n}\n"),
-            "to_float_ptr" => self.add("  *hopr_0 = (double*) hopv_0;\n}\n"),
+            "." => self.add("    *hr0 = hv0;\n}\n"),
+            "to_byte" => self.add("    *hr0 = (uint8_t) hv0;\n}\n"),
+            "to_int" => self.add("    *hr0 = (int64_t) hv0;\n}\n"),
+            "to_float" => self.add("    *hr0 = (double) hv0;\n}\n"),
+            "to_bool_ptr" => self.add("    *hr0 = (uint8_t*) hv0;\n}\n"),
+            "to_byte_ptr" => self.add("    *hr0 = (uint8_t*) hv0;\n}\n"),
+            "to_int_ptr" => self.add("    *hr0 = (int64_t*) hv0;\n}\n"),
+            "to_float_ptr" => self.add("    *hr0 = (double*) hv0;\n}\n"),
             "put" => match &signature.params[0] {
-                Type::Byte(0) => self.add("  printf(\"%\" PRIu8, hopv_0);\n}\n"),
-                Type::Int(0) => self.add("  printf(\"%\" PRId64, hopv_0);\n}\n"),
-                Type::Float(0) => self.add("  printf(\"%d\", hopv_0);\n}\n"),
+                Type::Byte(0) => self.add("    printf(\"%\" PRIu8, hv0);\n}\n"),
+                Type::Int(0) => self.add("    printf(\"%\" PRId64, hv0);\n}\n"),
+                Type::Float(0) => self.add("    printf(\"%d\", hv0);\n}\n"),
                 Type::Bool(0) => {
-                    self.add("  if (hopv_0) {printf(\"true\");} else {printf(\"false\");}\n}\n")
+                    self.add("    if (hv0) {printf(\"true\");} else {printf(\"false\");}\n}\n")
                 }
-                _ => unreachable!(),
+                _ => self.add("    printf(\"%p\" , hv0);\n}\n"),
             },
             "putln" => match &signature.params[0] {
-                Type::Byte(0) => self.add("  printf(\"%\" PRIu8 \"\\n\", hopv_0);\n}\n"),
-                Type::Int(0) => self.add("  printf(\"%\" PRId64 \"\\n\", hopv_0);\n}\n"),
-                Type::Float(0) => self.add("  printf(\"%d\\n\", hopv_0);\n}\n"),
+                Type::Byte(0) => self.add("    printf(\"%\" PRIu8 \"\\n\", hv0);\n}\n"),
+                Type::Int(0) => self.add("    printf(\"%\" PRId64 \"\\n\", hv0);\n}\n"),
+                Type::Float(0) => self.add("    printf(\"%d\\n\", hv0);\n}\n"),
                 Type::Bool(0) => self
-                    .add("  if (hopv_0) {printf(\"true\\n\");} else {printf(\"false\\n\");}\n}\n"),
-                _ => unreachable!(),
+                    .add("    if (hv0) {printf(\"true\\n\");} else {printf(\"false\\n\");}\n}\n"),
+                _ => self.add("    printf(\"%p\n\" , hv0);\n}\n"),
             },
-            "ln" => self.add("  printf(\"\\n\");\n}"),
-            "puts" => self.add("  printf(\"%s\", (char*) hopv_0);\n}\n"),
-            "putlns" => self.add("  printf(\"%s\\n\", (char*) hopv_0);\n}\n"),
-            "putc" => self.add("  printf(\"%lc\", (wint_t) hopv_0);\n}\n"),
-            "putlnc" => self.add("  printf(\"%lc\\n\", (wint_t) hopv_0);\n}\n"),
-            _ => todo!(),
+            "ln" => self.add("    printf(\"\\n\");\n}"),
+            "puts" => self.add("    printf(\"%s\", (char*) hv0);\n}\n"),
+            "putlns" => self.add("    printf(\"%s\\n\", (char*) hv0);\n}\n"),
+            "putc" => self.add("    printf(\"%lc\", (wint_t) hv0);\n}\n"),
+            "putlnc" => self.add("    printf(\"%lc\\n\", (wint_t) hv0);\n}\n"),
+            "store" => self.add("    *hv0 = hv1;\n}\n"),
+            "panic" => self.add("}\n"),
+            "assert" => self.add("}\n"),
+            "@" => self.add("}\n"),
+            _ => unreachable!(),
         }
     }
 
@@ -376,34 +381,35 @@ impl<'info> Context<'info> {
             Op::Int(i, _) => {
                 let var = self.push(Type::Int(0));
                 self.tabs();
-                self.add(&format!("int64_t hopv_{var} = {i};\n"));
+                self.add(&format!("int64_t hv{var} = {i};\n"));
             }
             Op::Float(f, _) => {
                 let var = self.push(Type::Float(0));
                 self.tabs();
-                self.add(&format!("double hopv_{var} = {f:?};\n"));
+                self.add(&format!("double hv{var} = {f:?};\n"));
             }
             Op::Bool(b, _) => {
                 let var = self.push(Type::Bool(0));
                 self.tabs();
-                self.add(&format!("uint8_t hopv_{var} = {};\n", *b as u8));
+                self.add(&format!("uint8_t hv{var} = {};\n", *b as u8));
             }
             Op::Char(c, _) => {
                 let var = self.push(Type::Int(0));
                 self.tabs();
-                self.add(&format!("int64_t hopv_{var} = {};\n", *c as u64));
+                self.add(&format!("int64_t hv{var} = {};\n", *c as u64));
             }
             Op::String(s, _) => {
                 let var = self.push(Type::Byte(1));
                 self.tabs();
-                self.add(&format!("uint8_t* hopv_{var} = (uint8_t*) {s:?};\n"));
+                self.add(&format!("uint8_t* hv{var} = (uint8_t*) {s:?};\n"));
             }
-            Op::Name(name) => self.make_name(name.name),
+            Op::Name(name) => self.make_name(name),
             Op::Expr(expr, _) => self.make_expr(expr),
         }
     }
 
-    fn make_name(&mut self, name: &str) {
+    fn make_name(&mut self, name: &Name) {
+        let Name { name, span } = name;
         for binds in self.let_binds.iter().rev() {
             if let Some((var, ty)) = binds.get(name) {
                 self.stack.push((*var, *ty));
@@ -411,12 +417,43 @@ impl<'info> Context<'info> {
             }
         }
 
-        if name == "@" {
+        if *name == "@" {
             let (last, ty) = *self.stack.last().unwrap();
             let var = self.push(ty.inc());
             self.tabs();
             self.make_type(&ty);
-            self.add(&format!("* hopv_{var} = &hopv_{last}"));
+            self.add(&format!("* hv{var} = &hv{last};\n"));
+        } else if *name == "panic" {
+            self.tabs();
+            self.add(&format!(
+                "printf({:?});\n",
+                format!(
+                    "panicked at {}:{}:{}\n",
+                    span.file,
+                    span.line + 1,
+                    span.column + 1
+                )
+            ));
+            self.tabs();
+            self.add("exit(EXIT_FAILURE);\n");
+        } else if *name == "assert" && matches!(self.stack.last(), Some((_, Type::Bool(0)))) {
+            let (test, _) = self.stack.pop().unwrap();
+            self.tabs();
+            self.add(&format!("if (!hv{test}) {{\n"));
+            self.tabs();
+            self.add(&format!(
+                "    printf({:?});\n",
+                format!(
+                    "assertion failed at {}:{}:{}\n",
+                    span.file,
+                    span.line + 1,
+                    span.column + 1
+                )
+            ));
+            self.tabs();
+            self.add("    exit(EXIT_FAILURE);\n");
+            self.tabs();
+            self.add("}\n");
         } else {
             for (gid, signature) in self.info.signatures.get(name).unwrap().iter().enumerate() {
                 if let Some(signature) = self.get_signature(signature) {
@@ -445,12 +482,12 @@ impl<'info> Context<'info> {
         for ret in &signature.returns {
             self.tabs();
             self.make_type(ret);
-            self.add(&format!(" hopv_{};\n", self.counter));
+            self.add(&format!(" hv{};\n", self.counter));
             ret_vars.push(self.counter);
             self.counter += 1;
         }
         self.tabs();
-        self.add("hopf");
+        self.add("hf");
         self.escape(name);
         self.add(&format!("_{gid}_{cid}("));
         let mut args = Vec::new();
@@ -461,13 +498,13 @@ impl<'info> Context<'info> {
             if i > 0 {
                 self.add(", ");
             }
-            self.add(&format!("hopv_{var}"));
+            self.add(&format!("hv{var}"));
         }
         for (i, ret) in ret_vars.iter().enumerate() {
             if i > 0 || !args.is_empty() {
                 self.add(", ");
             }
-            self.add(&format!("&hopv_{ret}"));
+            self.add(&format!("&hv{ret}"));
         }
         self.add(");\n");
         for (ret, ty) in ret_vars.into_iter().zip(&signature.returns) {
@@ -495,11 +532,17 @@ impl<'info> Context<'info> {
             }
             self.tabs();
             let (var, _) = self.stack.pop().unwrap();
-            self.add(&format!("if (hopv_{var}) {{\n"));
+            let stack_before = self.stack.clone();
+            self.add(&format!("if (hv{var}) {{\n"));
             self.depth += 1;
             for stmt in body {
                 self.make_stmt(stmt);
             }
+            for ((b, _), (s, _)) in stack_before.iter().zip(&self.stack.clone()) {
+                self.tabs();
+                self.add(&format!("hv{b} = hv{s};\n"));
+            }
+            self.stack = stack_before;
             self.depth -= 1;
             self.tabs();
             self.add("}\n");
@@ -527,7 +570,7 @@ impl<'info> Context<'info> {
         for (var, ty) in &alloc {
             self.tabs();
             self.make_type(ty);
-            self.add(&format!(" hopv_{var};\n"));
+            self.add(&format!(" hv{var};\n"));
         }
 
         self.stack = stack_before;
@@ -537,7 +580,7 @@ impl<'info> Context<'info> {
         }
         self.tabs();
         let (var, _) = self.stack.pop().unwrap();
-        self.add(&format!("if (hopv_{var}) {{\n"));
+        self.add(&format!("if (hv{var}) {{\n"));
         self.depth += 1;
         for stmt in body {
             self.make_stmt(stmt);
@@ -545,7 +588,7 @@ impl<'info> Context<'info> {
         for (var, _) in alloc.iter().rev() {
             self.tabs();
             let s = self.stack.pop().unwrap().0;
-            self.add(&format!("hopv_{var} = hopv_{s};\n",));
+            self.add(&format!("hv{var} = hv{s};\n",));
         }
         self.depth -= 1;
         self.tabs();
@@ -557,7 +600,7 @@ impl<'info> Context<'info> {
         for (var, _) in alloc.iter().rev() {
             self.tabs();
             let s = self.stack.pop().unwrap().0;
-            self.add(&format!("hopv_{var} = hopv_{s};\n",));
+            self.add(&format!("hv{var} = hv{s};\n",));
         }
         self.depth -= 1;
         self.tabs();
@@ -575,9 +618,9 @@ impl<'info> Context<'info> {
         let (test_bool, _) = self.stack.pop().unwrap();
         self.tabs();
         self.make_type(&Type::Bool(0));
-        self.add(&format!(" hopv_{test_var} = hopv_{test_bool};\n"));
+        self.add(&format!(" hv{test_var} = hv{test_bool};\n"));
         self.tabs();
-        self.add(&format!("while (hopv_{test_var}) {{\n"));
+        self.add(&format!("while (hv{test_var}) {{\n"));
         self.depth += 1;
         for stmt in body {
             self.make_stmt(stmt);
@@ -588,7 +631,7 @@ impl<'info> Context<'info> {
         let (test_bool, _) = self.stack.pop().unwrap();
         self.tabs();
         self.make_type(&Type::Bool(0));
-        self.add(&format!(" hopv_{test_var} = hopv_{test_bool};\n"));
+        self.add(&format!(" hv{test_var} = hv{test_bool};\n"));
         self.depth -= 1;
         self.tabs();
         self.add("}\n");
@@ -608,7 +651,7 @@ impl<'info> Context<'info> {
         self.make_type(&ty);
         let for_var = self.var();
         self.add(&format!(
-            " hopv_{for_var} = hopv_{low}; hopv_{for_var} < hopv_{high}; hopv_{for_var}++) {{\n"
+            " hv{for_var} = hv{low}; hv{for_var} < hv{high}; hv{for_var}++) {{\n"
         ));
         self.stack.push((for_var, ty));
         self.depth += 1;
