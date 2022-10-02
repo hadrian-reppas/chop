@@ -624,8 +624,10 @@ impl<'info> Context<'info> {
         for op in test {
             self.make_op(op);
         }
-        self.tabs();
         let (var, _) = self.stack.pop().unwrap();
+        let after_test = self.stack.clone();
+
+        self.tabs();
         self.add(&format!("if (hv{var}) {{\n"));
         self.depth += 1;
         for stmt in body {
@@ -638,8 +640,10 @@ impl<'info> Context<'info> {
         }
         self.depth -= 1;
         self.tabs();
+
         self.add("} else {\n");
         self.depth += 1;
+        self.stack = after_test;
         for stmt in else_body {
             self.make_stmt(stmt);
         }

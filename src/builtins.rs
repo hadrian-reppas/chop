@@ -179,31 +179,31 @@ lazy_static! {
         ),
         (
             "to_byte_ptr",
-            vec![sig!(
-                "to_byte_ptr",
-                genp!(0) => ptr!(BYTE)
-            )]
+            vec![
+                sig!("to_byte_ptr", genp!(0) => ptr!(BYTE)),
+                sig!("to_byte_ptr", INT => ptr!(BYTE)),
+            ]
         ),
         (
             "to_int_ptr",
-            vec![sig!(
-                "to_int_ptr",
-                genp!(0) => ptr!(INT)
-            )]
+            vec![
+                sig!("to_int_ptr", genp!(0) => ptr!(INT)),
+                sig!("to_int_ptr", INT => ptr!(INT)),
+            ]
         ),
         (
             "to_float_ptr",
-            vec![sig!(
-                "to_float_ptr",
-                genp!(0) => ptr!(FLOAT)
-            )]
+            vec![
+                sig!("to_float_ptr", genp!(0) => ptr!(FLOAT)),
+                sig!("to_float_ptr", INT => ptr!(FLOAT)),
+            ]
         ),
         (
             "to_bool_ptr",
-            vec![sig!(
-                "to_bool_ptr",
-                genp!(0) => ptr!(BOOL)
-            )]
+            vec![
+                sig!("to_bool_ptr", genp!(0) => ptr!(BOOL)),
+                sig!("to_bool_ptr", INT => ptr!(BOOL)),
+            ]
         ),
         (
             "size_of",
@@ -248,9 +248,9 @@ lazy_static! {
         ("assert", vec![sig!("assert", BOOL =>)]),
         ("store", vec![sig!("store", genp!(0) gen!(0) =>)]),
         // TODO: exit int ->
-        // TODO: alloc int int -> *byte
+        // TODO: alloc int -> *byte
         // TODO: free [T] *T ->
-        // TODO: malloc int -> *byte
+        // TODO: calloc int -> *byte
         // TODO: copy [T] *T *T int ->
         // TODO: pow float float -> float
         // TODO: random -> float
@@ -262,5 +262,8 @@ lazy_static! {
 
         // TODO: files
         // TODO: stdin
+
+        // CONSIDER: alloc_int -> *int           alloc_list -> *list
+        // CONSIDER: alloc_int_arr int -> *int   alloc_list_arr int -> *list
     ]);
 }

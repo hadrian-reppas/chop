@@ -5,87 +5,118 @@
 #include <inttypes.h>
 #include <wchar.h>
 #include <locale.h>
-struct hopt_63_6f_6d_70_6c_65_78 {
-    double hf_72_65_61_6c;
-    double hf_69_6d_61_67;
+struct hopt_6c_69_73_74 {
+    int64_t hf_76_61_6c_75_65;
+    struct hopt_6c_69_73_74* hf_6e_65_78_74;
 };
-void hf_70_75_74_63_0_0(int64_t);
-void hf_70_75_74_1_0(double);
-void hf_70_75_74_5_0(struct hopt_63_6f_6d_70_6c_65_78);
+void hf_7e_0_0(struct hopt_6c_69_73_74*);
+void hf_7e_0_1(struct hopt_6c_69_73_74);
+void hf_6c_69_73_74_0_0(int64_t, struct hopt_6c_69_73_74*, struct hopt_6c_69_73_74*);
+void hf_3d_3d_1_0(int64_t, int64_t, uint8_t*);
+void hf_70_75_74_0_0(int64_t);
+void hf_74_6f_5f_6c_69_73_74_5f_70_74_72_1_0(int64_t, struct hopt_6c_69_73_74**);
+void hf_40_0_0(struct hopt_6c_69_73_74, struct hopt_6c_69_73_74*, struct hopt_6c_69_73_74**);
 void hf_6c_6e_0_0();
-void hf_2e_72_65_61_6c_0_0(struct hopt_63_6f_6d_70_6c_65_78, double*);
-void hf_2e_69_6d_61_67_0_0(struct hopt_63_6f_6d_70_6c_65_78, double*);
-void hf_2b_8_0(double, double, double*);
-void hf_2b_11_0(struct hopt_63_6f_6d_70_6c_65_78, struct hopt_63_6f_6d_70_6c_65_78, struct hopt_63_6f_6d_70_6c_65_78*);
+void hf_70_75_74_63_0_0(int64_t);
+void hf_2e_2e_76_61_6c_75_65_0_0(struct hopt_6c_69_73_74, struct hopt_6c_69_73_74*, int64_t*);
 void hf_70_75_74_73_0_0(uint8_t*);
-void hf_63_6f_6d_70_6c_65_78_0_0(double, double, struct hopt_63_6f_6d_70_6c_65_78*);
+void hf_2e_6e_65_78_74_0_0(struct hopt_6c_69_73_74, struct hopt_6c_69_73_74**);
+void hf_2a_9_0(struct hopt_6c_69_73_74*, struct hopt_6c_69_73_74*);
+void hf_70_72_69_6e_74_0_0(struct hopt_6c_69_73_74*);
 void hf_6d_61_69_6e_0_0();
-void hf_70_75_74_63_0_0(int64_t hv0) {
-    printf("%lc", (wint_t) hv0);
+void hf_74_6f_5f_69_6e_74_2_0(struct hopt_6c_69_73_74*, int64_t*);
+void hf_2e_0_0(struct hopt_6c_69_73_74*, struct hopt_6c_69_73_74**, struct hopt_6c_69_73_74**);
+void hf_7e_0_0(struct hopt_6c_69_73_74* hv0) {
 }
-void hf_70_75_74_1_0(double hv0) {
-    printf("%.15g", hv0);
+void hf_7e_0_1(struct hopt_6c_69_73_74 hv0) {
 }
-void hf_70_75_74_5_0(struct hopt_63_6f_6d_70_6c_65_78 hv0) {
-    double hv1;
-    hf_2e_72_65_61_6c_0_0(hv0, &hv1);
-    hf_70_75_74_1_0(hv1);
-    uint8_t* hv2 = (uint8_t*) "\x20\x2b\x20";
-    hf_70_75_74_73_0_0(hv2);
-    double hv3;
-    hf_2e_69_6d_61_67_0_0(hv0, &hv3);
-    hf_70_75_74_1_0(hv3);
-    int64_t hv4 = 106;
-    hf_70_75_74_63_0_0(hv4);
+void hf_6c_69_73_74_0_0(int64_t hv0, struct hopt_6c_69_73_74* hv1, struct hopt_6c_69_73_74* hr0) {
+    hr0->hf_76_61_6c_75_65 = hv0;
+    hr0->hf_6e_65_78_74 = hv1;
+}
+void hf_3d_3d_1_0(int64_t hv0, int64_t hv1, uint8_t* hr0) {
+    *hr0 = hv0 == hv1;
+}
+void hf_70_75_74_0_0(int64_t hv0) {
+    printf("%" PRId64, hv0);
+}
+void hf_74_6f_5f_6c_69_73_74_5f_70_74_72_1_0(int64_t hv0, struct hopt_6c_69_73_74** hr0) {
+    *hr0 = (struct hopt_6c_69_73_74*) hv0;
+}
+void hf_40_0_0(struct hopt_6c_69_73_74 hv0, struct hopt_6c_69_73_74* hr0, struct hopt_6c_69_73_74** hr1) {
 }
 void hf_6c_6e_0_0() {
     printf("\n");
-}void hf_2e_72_65_61_6c_0_0(struct hopt_63_6f_6d_70_6c_65_78 hv0, double* hr0) {
-    *hr0 = hv0.hf_72_65_61_6c;
+}void hf_70_75_74_63_0_0(int64_t hv0) {
+    printf("%lc", (wint_t) hv0);
 }
-void hf_2e_69_6d_61_67_0_0(struct hopt_63_6f_6d_70_6c_65_78 hv0, double* hr0) {
-    *hr0 = hv0.hf_69_6d_61_67;
-}
-void hf_2b_8_0(double hv0, double hv1, double* hr0) {
-    *hr0 = hv0 + hv1;
-}
-void hf_2b_11_0(struct hopt_63_6f_6d_70_6c_65_78 hv0, struct hopt_63_6f_6d_70_6c_65_78 hv1, struct hopt_63_6f_6d_70_6c_65_78* hr0) {
-    double hv2;
-    hf_2e_72_65_61_6c_0_0(hv0, &hv2);
-    double hv3;
-    hf_2e_72_65_61_6c_0_0(hv1, &hv3);
-    double hv4;
-    hf_2b_8_0(hv2, hv3, &hv4);
-    double hv5;
-    hf_2e_69_6d_61_67_0_0(hv0, &hv5);
-    double hv6;
-    hf_2e_69_6d_61_67_0_0(hv1, &hv6);
-    double hv7;
-    hf_2b_8_0(hv5, hv6, &hv7);
-    struct hopt_63_6f_6d_70_6c_65_78 hv8;
-    hf_63_6f_6d_70_6c_65_78_0_0(hv4, hv7, &hv8);
-    *hr0 = hv8;
+void hf_2e_2e_76_61_6c_75_65_0_0(struct hopt_6c_69_73_74 hv0, struct hopt_6c_69_73_74* hr0, int64_t* hr1) {
+    *hr0 = hv0;
+    *hr1 = hv0.hf_76_61_6c_75_65;
 }
 void hf_70_75_74_73_0_0(uint8_t* hv0) {
     printf("%s", (char*) hv0);
 }
-void hf_63_6f_6d_70_6c_65_78_0_0(double hv0, double hv1, struct hopt_63_6f_6d_70_6c_65_78* hr0) {
-    hr0->hf_72_65_61_6c = hv0;
-    hr0->hf_69_6d_61_67 = hv1;
+void hf_2e_6e_65_78_74_0_0(struct hopt_6c_69_73_74 hv0, struct hopt_6c_69_73_74** hr0) {
+    *hr0 = hv0.hf_6e_65_78_74;
+}
+void hf_2a_9_0(struct hopt_6c_69_73_74* hv0, struct hopt_6c_69_73_74* hr0) {
+    *hr0 = *hv0;
+}
+void hf_70_72_69_6e_74_0_0(struct hopt_6c_69_73_74* hv0) {
+    struct hopt_6c_69_73_74* hv7;
+    struct hopt_6c_69_73_74* hv8;
+    hf_2e_0_0(hv0, &hv7, &hv8);
+    int64_t hv9;
+    hf_74_6f_5f_69_6e_74_2_0(hv8, &hv9);
+    int64_t hv10 = 0;
+    uint8_t hv11;
+    hf_3d_3d_1_0(hv9, hv10, &hv11);
+    if (hv11) {
+        hf_7e_0_0(hv7);
+        uint8_t* hv12 = (uint8_t*) "\x4e\x55\x4c\x4c";
+        hf_70_75_74_73_0_0(hv12);
+    } else {
+        uint8_t* hv13 = (uint8_t*) "\x6c\x69\x73\x74\x28";
+        hf_70_75_74_73_0_0(hv13);
+        struct hopt_6c_69_73_74 hv14;
+        hf_2a_9_0(hv7, &hv14);
+        struct hopt_6c_69_73_74 hv15;
+        int64_t hv16;
+        hf_2e_2e_76_61_6c_75_65_0_0(hv14, &hv15, &hv16);
+        hf_70_75_74_0_0(hv16);
+        uint8_t* hv17 = (uint8_t*) "\x2c\x20";
+        hf_70_75_74_73_0_0(hv17);
+        struct hopt_6c_69_73_74* hv18;
+        hf_2e_6e_65_78_74_0_0(hv15, &hv18);
+        hf_70_72_69_6e_74_0_0(hv18);
+        int64_t hv19 = 41;
+        hf_70_75_74_63_0_0(hv19);
+    }
 }
 void hf_6d_61_69_6e_0_0() {
-    double hv0 = 1.0;
-    double hv1 = 3.5;
-    struct hopt_63_6f_6d_70_6c_65_78 hv2;
-    hf_63_6f_6d_70_6c_65_78_0_0(hv0, hv1, &hv2);
-    double hv3 = -0.5;
-    double hv4 = 2.1;
-    struct hopt_63_6f_6d_70_6c_65_78 hv5;
-    hf_63_6f_6d_70_6c_65_78_0_0(hv3, hv4, &hv5);
-    struct hopt_63_6f_6d_70_6c_65_78 hv6;
-    hf_2b_11_0(hv2, hv5, &hv6);
-    hf_70_75_74_5_0(hv6);
+    int64_t hv0 = 5;
+    int64_t hv1 = 0;
+    struct hopt_6c_69_73_74* hv2;
+    hf_74_6f_5f_6c_69_73_74_5f_70_74_72_1_0(hv1, &hv2);
+    struct hopt_6c_69_73_74 hv3;
+    hf_6c_69_73_74_0_0(hv0, hv2, &hv3);
+    struct hopt_6c_69_73_74* hv4 = &hv3;
+    int64_t hv5 = 10;
+    struct hopt_6c_69_73_74 hv6;
+    hf_6c_69_73_74_0_0(hv5, hv4, &hv6);
+    struct hopt_6c_69_73_74* hv7 = &hv6;
+    hf_70_72_69_6e_74_0_0(hv7);
     hf_6c_6e_0_0();
+    hf_7e_0_1(hv6);
+    hf_7e_0_1(hv3);
+}
+void hf_74_6f_5f_69_6e_74_2_0(struct hopt_6c_69_73_74* hv0, int64_t* hr0) {
+    *hr0 = (int64_t) hv0;
+}
+void hf_2e_0_0(struct hopt_6c_69_73_74* hv0, struct hopt_6c_69_73_74** hr0, struct hopt_6c_69_73_74** hr1) {
+    *hr0 = hv0;
+    *hr1 = hv0;
 }
 int main(int argc, char** argv) {
     setlocale(LC_ALL, "");

@@ -1048,6 +1048,12 @@ fn get_signatures(item: &Item) -> Result<Vec<GSignature>, Error> {
                     vec![GType::Pointer(Box::new(GType::Custom(*name)))],
                 ),
                 GSignature::new(
+                    Name::new(leak(format!("to_{}_ptr", name.name))),
+                    Kind::Auto(span),
+                    vec![GType::Primitive(Primitive::Int)],
+                    vec![GType::Pointer(Box::new(GType::Custom(*name)))],
+                ),
+                GSignature::new(
                     Name::new("size_of"),
                     Kind::Auto(span),
                     vec![GType::Custom(*name)],
