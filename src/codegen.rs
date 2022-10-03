@@ -21,6 +21,9 @@ const PRELUDE: &str = "
 #include <inttypes.h>
 #include <wchar.h>
 #include <locale.h>
+#include <math.h>
+#include <time.h>
+#include <string.h>
 ";
 
 struct Context<'info> {
@@ -284,18 +287,51 @@ impl<'info> Context<'info> {
             self.make_type(&signature.params[0]);
             self.add(");\n}\n");
         } else if let Some(field) = name.strip_prefix("..") {
-            self.add("    *hr0 = hv0;\n");
-            self.add("    *hr1 = hv0.hf");
-            self.escape(field);
-            self.add(";\n}\n");
+            if signature.params[0].depth() == 0 {
+                self.add("    *hr0 = hv0;\n");
+                self.add("    *hr1 = hv0.hf");
+                self.escape(field);
+                self.add(";\n}\n");
+            } else {
+                self.add("    *hr0 = hv0;\n");
+                self.add("    *hr1 = &hv0->hf");
+                self.escape(field);
+                self.add(";\n}\n");
+            }
         } else if let Some(field) = name.strip_prefix('.') {
-            self.add("    *hr0 = hv0.hf");
-            self.escape(field);
-            self.add(";\n}\n");
+            if signature.params[0].depth() == 0 {
+                self.add("    *hr0 = hv0.hf");
+                self.escape(field);
+                self.add(";\n}\n");
+            } else {
+                self.add("    *hr0 = &hv0->hf");
+                self.escape(field);
+                self.add(";\n}\n");
+            }
         } else if name.starts_with("to_") && name.ends_with("_ptr") {
             self.add("    *hr0 = (");
             self.make_type(&signature.returns[0]);
             self.add(") hv0;\n}\n")
+        } else if name.starts_with("alloc_") {
+            if name.ends_with("_arr") {
+                self.add("    *hr0 = malloc(hv0*sizeof(");
+                self.make_type(&signature.returns[0].dec());
+                self.add("));\n}\n");
+            } else {
+                self.add("    *hr0 = malloc(sizeof(");
+                self.make_type(&signature.returns[0].dec());
+                self.add("));\n}\n");
+            }
+        } else if name.starts_with("zalloc_") {
+            if name.ends_with("_arr") {
+                self.add("    *hr0 = calloc(hv0, sizeof(");
+                self.make_type(&signature.returns[0].dec());
+                self.add("));\n}\n");
+            } else {
+                self.add("    *hr0 = calloc(1, sizeof(");
+                self.make_type(&signature.returns[0].dec());
+                self.add("));\n}\n");
+            }
         } else {
             for (i, (_, field)) in self
                 .info
@@ -397,6 +433,40 @@ impl<'info> Context<'info> {
             "panic" => self.add("}\n"),
             "assert" => self.add("}\n"),
             "@" => self.add("}\n"),
+            "exit" => self.add("    exit(hv0);\n}\n"),
+            "alloc" => self.add("    *hr0 = malloc(hv0);\n}\n"),
+            "zalloc" => self.add("    *hr0 = calloc(hv0, 1);\n}\n"),
+            "free" => self.add("    free(hv0);\n}\n"),
+            "copy" => {
+                self.add("    memmove(hv0, hv1, hv2*sizeof(");
+                self.make_type(&signature.params[0].dec());
+                self.add("));\n}\n");
+            }
+            "pow" => self.add("    *hr0 = pow(hv0, hv1);\n}\n"),
+            "random" => self.add("    *hr0 = rand()/((double) RAND_MAX + 1);\n}\n"),
+            "randint" => {
+                self.add("    *hr0 = (int64_t) (rand()/((double) RAND_MAX + 1) * hv0);\n}\n")
+            }
+            "strcmp" => self.add("    *hr0 = strcmp((char*) hv0, (char*) hv1);\n}\n"),
+            "streq" => self.add("    *hr0 = strcmp((char*) hv0, (char*) hv1) == 0;\n}\n"),
+            "strcpy" => self.add("    strcpy((char*) hv0, (char*) hv1);\n}\n"),
+            "strlen" => self.add("    *hr0 = strlen((char*) hv0);\n}\n"),
+            "alloc_int" => self.add("    *hr0 = malloc(8);\n}\n"),
+            "zalloc_int" => self.add("    *hr0 = calloc(1, 8);\n}\n"),
+            "alloc_int_arr" => self.add("    *hr0 = malloc(8*hv0);\n}\n"),
+            "zalloc_int_arr" => self.add("    *hr0 = calloc(hv0, 8);\n}\n"),
+            "alloc_float" => self.add("    *hr0 = malloc(8);\n}\n"),
+            "zalloc_float" => self.add("    *hr0 = calloc(1, 8);\n}\n"),
+            "alloc_float_arr" => self.add("    *hr0 = malloc(8*hv0);\n}\n"),
+            "zalloc_float_arr" => self.add("    *hr0 = calloc(hv0, 8);\n}\n"),
+            "alloc_byte" => self.add("    *hr0 = malloc(1);\n}\n"),
+            "zalloc_byte" => self.add("    *hr0 = calloc(1, 1);\n}\n"),
+            "alloc_byte_arr" => self.add("    *hr0 = malloc(hv0);\n}\n"),
+            "zalloc_byte_arr" => self.add("    *hr0 = calloc(hv0, 1);\n}\n"),
+            "alloc_bool" => self.add("    *hr0 = malloc(1);\n}\n"),
+            "zalloc_bool" => self.add("    *hr0 = calloc(1, 1);\n}\n"),
+            "alloc_bool_arr" => self.add("    *hr0 = malloc(hv0);\n}\n"),
+            "zalloc_bool_arr" => self.add("    *hr0 = calloc(hv0, 1);\n}\n"),
             _ => unreachable!(),
         }
     }
@@ -666,6 +736,7 @@ impl<'info> Context<'info> {
         }
         let test_var = self.var();
         let (test_bool, _) = self.stack.pop().unwrap();
+        let stack_before = self.stack.clone();
         self.tabs();
         self.make_type(&Type::Bool(0));
         self.add(&format!(" hv{test_var} = hv{test_bool};\n"));
@@ -681,6 +752,11 @@ impl<'info> Context<'info> {
         let (test_bool, _) = self.stack.pop().unwrap();
         self.tabs();
         self.add(&format!("hv{test_var} = hv{test_bool};\n"));
+        for ((b, _), (s, _)) in stack_before.iter().zip(&self.stack.clone()) {
+            self.tabs();
+            self.add(&format!("hv{b} = hv{s};\n"));
+        }
+        self.stack = stack_before;
         self.depth -= 1;
         self.tabs();
         self.add("}\n");
@@ -695,6 +771,7 @@ impl<'info> Context<'info> {
             self.make_op(op);
         }
         let (high, _) = self.stack.pop().unwrap();
+        let stack_before = self.stack.clone();
         self.tabs();
         self.add("for (");
         self.make_type(&ty);
@@ -707,6 +784,11 @@ impl<'info> Context<'info> {
         for stmt in body {
             self.make_stmt(stmt);
         }
+        for ((b, _), (s, _)) in stack_before.iter().zip(&self.stack.clone()) {
+            self.tabs();
+            self.add(&format!("hv{b} = hv{s};\n"));
+        }
+        self.stack = stack_before;
         self.depth -= 1;
         self.tabs();
         self.add("}\n");
@@ -819,6 +901,26 @@ impl Type {
             Type::Int(depth) => Type::Int(depth + 1),
             Type::Float(depth) => Type::Float(depth + 1),
             Type::Bool(depth) => Type::Bool(depth + 1),
+        }
+    }
+
+    pub fn dec(self) -> Type {
+        match self {
+            Type::Custom(name, depth) => Type::Custom(name, depth - 1),
+            Type::Byte(depth) => Type::Byte(depth - 1),
+            Type::Int(depth) => Type::Int(depth - 1),
+            Type::Float(depth) => Type::Float(depth - 1),
+            Type::Bool(depth) => Type::Bool(depth - 1),
+        }
+    }
+
+    pub fn depth(self) -> usize {
+        match self {
+            Type::Custom(_, depth) => depth,
+            Type::Byte(depth) => depth,
+            Type::Int(depth) => depth,
+            Type::Float(depth) => depth,
+            Type::Bool(depth) => depth,
         }
     }
 

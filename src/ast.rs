@@ -49,6 +49,7 @@ impl Name {
 
 pub type Unit = Vec<Item>;
 
+#[allow(clippy::large_enum_variant)]
 pub enum Item {
     Function {
         name: Name,

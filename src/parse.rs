@@ -143,6 +143,16 @@ fn parse_struct(tokens: &mut Tokens) -> Result<Item, Error> {
             name.span,
             "struct names cannot start with 'to_' and end with '_ptr'".to_string(),
         ));
+    } else if name.name.starts_with("alloc_") {
+        return Err(Error::Parse(
+            name.span,
+            "struct names cannot start with 'alloc_'".to_string(),
+        ));
+    } else if name.name.starts_with("zalloc_") {
+        return Err(Error::Parse(
+            name.span,
+            "struct names cannot start with 'zalloc_'".to_string(),
+        ));
     }
     if !tokens.peek().is_lbrace() {
         return Err(Error::Parse(

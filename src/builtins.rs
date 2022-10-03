@@ -62,6 +62,7 @@ macro_rules! eq {
             sig!($op, INT INT => BOOL),
             sig!($op, FLOAT FLOAT => BOOL),
             sig!($op, BOOL BOOL => BOOL),
+            sig!($op, genp!(0) genp!(0) => BOOL),
         ]
     )};
 }
@@ -98,34 +99,6 @@ macro_rules! genp {
     };
 }
 
-/*
-
-struct string {
-    *byte bytes
-    int len
-    int capacity
-}
-
-fn string *byte int int -> string
-fn .bytes string -> *byte
-fn .len string -> int
-fn .capacity string -> int
-fn ..bytes string -> string *byte
-fn ..len string -> string int
-fn ..capacity string -> string int
-fn to_string_ptr [T] *T -> *string
-fn size_of string -> int
-
-//////////////////////////////////////////
-
-import string
-
-fn hello_world {
-    "hello world" new_string
-    & '!' push
-    .bytes putln
-}
-*/
 lazy_static! {
     pub static ref BUILTINS: HashMap<&'static str, Vec<GSignature>> = HashMap::from([
         arith!(
@@ -247,23 +220,35 @@ lazy_static! {
         ("panic", vec![sig!("panic", =>)]),
         ("assert", vec![sig!("assert", BOOL =>)]),
         ("store", vec![sig!("store", genp!(0) gen!(0) =>)]),
-        // TODO: exit int ->
-        // TODO: alloc int -> *byte
-        // TODO: free [T] *T ->
-        // TODO: calloc int -> *byte
-        // TODO: copy [T] *T *T int ->
-        // TODO: pow float float -> float
-        // TODO: random -> float
-        // TODO: randint int int -> int
-        // TODO: strcmp *byte *byte -> int
-        // TODO: streq *byte *byte -> bool
-        // TODO: strcpy *byte *byte ->
-        // TODO: strlen *byte -> int
-
+        ("exit", vec![sig!("exit", INT =>)]),
+        ("alloc", vec![sig!("alloc", INT => ptr!(BYTE))]),
+        ("zalloc", vec![sig!("zalloc", INT => ptr!(BYTE))]),
+        ("free", vec![sig!("free", genp!(0) =>)]),
+        ("copy", vec![sig!("copy", genp!(0) genp!(0) INT =>)]),
+        ("pow", vec![sig!("pow", FLOAT FLOAT => FLOAT)]),
+        ("random", vec![sig!("random", => FLOAT)]),
+        ("randint", vec![sig!("randint", INT => INT)]),
+        ("strcmp", vec![sig!("strcmp", ptr!(BYTE) ptr!(BYTE) => INT)]),
+        ("streq", vec![sig!("streq", ptr!(BYTE) ptr!(BYTE) => BOOL)]),
+        ("strcpy", vec![sig!("strcpy", ptr!(BYTE) ptr!(BYTE) =>)]),
+        ("strlen", vec![sig!("strlen", ptr!(BYTE) => INT)]),
+        ("alloc_int", vec![sig!("alloc_int", => ptr!(INT))]),
+        ("zalloc_int", vec![sig!("zalloc_int", => ptr!(INT))]),
+        ("alloc_int_arr", vec![sig!("alloc_int_arr", INT => ptr!(INT))]),
+        ("zalloc_int_arr", vec![sig!("zalloc_int_arr", INT => ptr!(INT))]),
+        ("alloc_float", vec![sig!("alloc_float", => ptr!(FLOAT))]),
+        ("zalloc_float", vec![sig!("zalloc_float", => ptr!(FLOAT))]),
+        ("alloc_float_arr", vec![sig!("alloc_float_arr", INT => ptr!(FLOAT))]),
+        ("zalloc_float_arr", vec![sig!("zalloc_float_arr", INT => ptr!(FLOAT))]),
+        ("alloc_byte", vec![sig!("alloc_byte", => ptr!(BYTE))]),
+        ("zalloc_byte", vec![sig!("zalloc_byte", => ptr!(BYTE))]),
+        ("alloc_byte_arr", vec![sig!("alloc_byte_arr", INT => ptr!(BYTE))]),
+        ("zalloc_byte_arr", vec![sig!("zalloc_byte_arr", INT => ptr!(BYTE))]),
+        ("alloc_bool", vec![sig!("alloc_bool", => ptr!(BOOL))]),
+        ("zalloc_bool", vec![sig!("zalloc_bool", => ptr!(BOOL))]),
+        ("alloc_bool_arr", vec![sig!("alloc_bool_arr", INT => ptr!(BOOL))]),
+        ("zalloc_bool_arr", vec![sig!("zalloc_bool_arr", INT => ptr!(BOOL))]),
         // TODO: files
         // TODO: stdin
-
-        // CONSIDER: alloc_int -> *int           alloc_list -> *list
-        // CONSIDER: alloc_int_arr int -> *int   alloc_list_arr int -> *list
     ]);
 }
