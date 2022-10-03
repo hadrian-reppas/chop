@@ -79,6 +79,18 @@ macro_rules! cmp {
     )};
 }
 
+macro_rules! shift {
+    ($op:expr) => {(
+        $op,
+        vec![
+            sig!($op, BYTE BYTE => BYTE),
+            sig!($op, BYTE INT => BYTE),
+            sig!($op, INT INT => INT),
+            sig!($op, INT BYTE => INT),
+        ]
+    )};
+}
+
 prim! {Byte => BYTE, Int => INT, Float => FLOAT, Bool => BOOL}
 
 macro_rules! ptr {
@@ -113,6 +125,8 @@ lazy_static! {
         bit!("&"),
         bit!("^"),
         bit!("|"),
+        shift!("<<"),
+        shift!(">>"),
         eq!("=="),
         eq!("!="),
         cmp!("<"),
@@ -223,6 +237,7 @@ lazy_static! {
         ("exit", vec![sig!("exit", INT =>)]),
         ("alloc", vec![sig!("alloc", INT => ptr!(BYTE))]),
         ("zalloc", vec![sig!("zalloc", INT => ptr!(BYTE))]),
+        ("realloc", vec![sig!("realloc", genp!(0) INT => genp!(0))]),
         ("free", vec![sig!("free", genp!(0) =>)]),
         ("copy", vec![sig!("copy", genp!(0) genp!(0) INT =>)]),
         ("pow", vec![sig!("pow", FLOAT FLOAT => FLOAT)]),
@@ -248,6 +263,7 @@ lazy_static! {
         ("zalloc_bool", vec![sig!("zalloc_bool", => ptr!(BOOL))]),
         ("alloc_bool_arr", vec![sig!("alloc_bool_arr", INT => ptr!(BOOL))]),
         ("zalloc_bool_arr", vec![sig!("zalloc_bool_arr", INT => ptr!(BOOL))]),
+        ("DEBUG_STACK", vec![sig!("DEBUG_STACK", =>)]),
         // TODO: files
         // TODO: stdin
     ]);

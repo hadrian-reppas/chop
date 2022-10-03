@@ -7,6 +7,7 @@ use crate::lex::{leak, Span};
 
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::fmt;
+use termion::{color, style};
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub enum GType {
@@ -321,6 +322,24 @@ impl Context {
     }
 
     fn update_stack(&mut self, stack: &mut Vec<GType>, name: Name) -> Result<(), Error> {
+        if name.name == "DEBUG_STACK" {
+            println!(
+                "{}{}DEBUG_STACK{}{} {}:{}:{} {}{}{:?}{}{}",
+                color::Fg(color::Green),
+                style::Bold,
+                color::Fg(color::Reset),
+                style::Reset,
+                name.span.file,
+                name.span.line + 1,
+                name.span.column + 1,
+                color::Fg(color::Blue),
+                style::Bold,
+                stack,
+                color::Fg(color::Reset),
+                style::Reset
+            );
+        }
+
         if let Some(ty) = self.get_let_bind_type(name) {
             stack.push(ty);
             return Ok(());

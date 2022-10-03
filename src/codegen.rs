@@ -95,6 +95,7 @@ impl<'info> Context<'info> {
 
     fn make_main(&mut self, main_signature: &Signature) {
         self.add("int main(int argc, char** argv) {\n");
+        self.add("    srand(time(NULL));\n");
         self.add("    setlocale(LC_ALL, \"\");\n");
         self.add("    int64_t code = 0;\n");
         self.add("    hf_6d_61_69_6e_0_0(");
@@ -398,6 +399,8 @@ impl<'info> Context<'info> {
             "<=" => self.add("    *hr0 = hv0 <= hv1;\n}\n"),
             ">" => self.add("    *hr0 = hv0 > hv1;\n}\n"),
             ">=" => self.add("    *hr0 = hv0 >= hv1;\n}\n"),
+            ">>" => self.add("    *hr0 = hv0 >> hv1;\n}\n"),
+            "<<" => self.add("    *hr0 = hv0 >> hv1;\n}\n"),
             "_" => self.add("}\n"),
             "." => self.add("    *hr0 = hv0;\n    *hr1 = hv0;\n}\n"),
             "to_byte" => self.add("    *hr0 = (uint8_t) hv0;\n}\n"),
@@ -436,6 +439,11 @@ impl<'info> Context<'info> {
             "exit" => self.add("    exit(hv0);\n}\n"),
             "alloc" => self.add("    *hr0 = malloc(hv0);\n}\n"),
             "zalloc" => self.add("    *hr0 = calloc(hv0, 1);\n}\n"),
+            "realloc" => {
+                self.add("    *hr0 = realloc(hv0, hv1*sizeof(");
+                self.make_type(&signature.params[0].dec());
+                self.add("));\n}\n")
+            }
             "free" => self.add("    free(hv0);\n}\n"),
             "copy" => {
                 self.add("    memmove(hv0, hv1, hv2*sizeof(");
@@ -467,6 +475,7 @@ impl<'info> Context<'info> {
             "zalloc_bool" => self.add("    *hr0 = calloc(1, 1);\n}\n"),
             "alloc_bool_arr" => self.add("    *hr0 = malloc(hv0);\n}\n"),
             "zalloc_bool_arr" => self.add("    *hr0 = calloc(hv0, 1);\n}\n"),
+            "DEBUG_STACK" => self.add("}\n"),
             _ => unreachable!(),
         }
     }

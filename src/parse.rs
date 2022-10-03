@@ -271,6 +271,7 @@ fn parse_if(tokens: &mut Tokens) -> Result<Stmt, Error> {
     let (test, lbrace_span) = parse_test(tokens)?;
     let (body, rbrace_span) = parse_body(tokens)?;
 
+    // TODO: parse `else if`
     if tokens.peek().is_else() {
         let else_span = tokens.next()?.span();
         if tokens.peek().is_lbrace() {
