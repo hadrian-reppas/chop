@@ -6,6 +6,8 @@ use crate::parse::parse_group;
 
 use std::iter::Peekable;
 
+// TODO: parse <<, >> and * (deref)
+
 enum Tok {
     Int(i64, Span),
     Float(f64, Span),

@@ -450,7 +450,7 @@ impl Context {
                     name.name,
                     fields
                         .iter()
-                        .map(|Field { ty, name }| (GType::new(*ty, &None), name.name))
+                        .map(|Field { ty, name, .. }| (GType::new(*ty, &None), name.name))
                         .collect(),
                 );
                 Ok(())
@@ -1059,9 +1059,13 @@ fn get_signatures(item: &Item) -> Result<Vec<GSignature>, Error> {
         }
         Item::Struct { name, fields, .. } => {
             let span = name.span;
-            let leaked = leak(format!("to_{}_ptrzalloc_{}_arr", name.name, name.name));
+            let leaked = leak(format!(
+                "to_{}_ptrzalloc_{}_arrsize_of_{}",
+                name.name, name.name, name.name
+            ));
             let to_name_ptr = &leaked[..(name.name.len() + 7)];
-            let zalloc_name_arr = &leaked[(name.name.len() + 7)..];
+            let zalloc_name_arr = &leaked[(name.name.len() + 7)..(2 * name.name.len() + 18)];
+            let size_of_name = &leaked[(2 * name.name.len() + 18)..];
             let alloc_name_arr = zalloc_name_arr.strip_prefix('z').unwrap();
             let zalloc_name = zalloc_name_arr.strip_suffix("_arr").unwrap();
             let alloc_name = zalloc_name.strip_prefix('z').unwrap();
@@ -1085,9 +1089,9 @@ fn get_signatures(item: &Item) -> Result<Vec<GSignature>, Error> {
                     vec![GType::Pointer(Box::new(GType::Custom(*name)))],
                 ),
                 GSignature::new(
-                    Name::new("size_of"),
+                    Name::new(size_of_name),
                     Kind::Auto(span),
-                    vec![GType::Custom(*name)],
+                    vec![],
                     vec![GType::Primitive(Primitive::Int)],
                 ),
                 GSignature::new(
@@ -1115,7 +1119,10 @@ fn get_signatures(item: &Item) -> Result<Vec<GSignature>, Error> {
                     vec![GType::Pointer(Box::new(GType::Custom(*name)))],
                 ),
             ];
-            for Field { name: fname, ty } in fields {
+            for Field {
+                name: fname, ty, ..
+            } in fields
+            {
                 let dotdot = leak(format!("..{}", fname.name));
                 signatures.push(GSignature::new(
                     Name::new(&dotdot[1..]),

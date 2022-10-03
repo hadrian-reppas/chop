@@ -91,6 +91,8 @@ impl fmt::Debug for Item {
 pub struct Field {
     pub name: Name,
     pub ty: PType,
+
+    pub colon_span: Span,
 }
 
 impl fmt::Debug for Field {

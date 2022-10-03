@@ -55,7 +55,7 @@ impl<'info> Context<'info> {
         self.fill_graph("main", 0, Vec::new());
 
         for (name, fields) in &self.info.struct_fields {
-            self.add("struct hopt");
+            self.add("struct ht");
             self.escape(name);
             self.add(" {\n");
             for (ty, field) in fields {
@@ -196,7 +196,7 @@ impl<'info> Context<'info> {
     fn make_type(&mut self, ty: &Type) {
         match ty {
             Type::Custom(name, depth) => {
-                self.add("struct hopt");
+                self.add("struct ht");
                 self.escape(name);
                 self.add(&"*".repeat(*depth));
             }
@@ -283,9 +283,9 @@ impl<'info> Context<'info> {
 
     fn make_auto(&mut self, name: &str, gid: usize, cid: usize, signature: &Signature) {
         self.being_fn(name, gid, cid, signature);
-        if name == "size_of" {
-            self.add("    *hr0 = sizeof(");
-            self.make_type(&signature.params[0]);
+        if let Some(struct_name) = name.strip_prefix("size_of_") {
+            self.add("    *hr0 = sizeof(struct ht");
+            self.escape(struct_name);
             self.add(");\n}\n");
         } else if let Some(field) = name.strip_prefix("..") {
             if signature.params[0].depth() == 0 {
@@ -387,11 +387,6 @@ impl<'info> Context<'info> {
                 }
             }
             "neg" => self.add("    *hr0 = -hv0;\n}\n"),
-            "size_of" => {
-                self.add("    *hr0 = sizeof(");
-                self.make_type(&signature.params[0]);
-                self.add(");\n}\n");
-            }
             "~" => self.add("}\n"),
             "==" => self.add("    *hr0 = hv0 == hv1;\n}\n"),
             "!=" => self.add("    *hr0 = hv0 != hv1;\n}\n"),
@@ -427,7 +422,7 @@ impl<'info> Context<'info> {
                     .add("    if (hv0) {printf(\"true\\n\");} else {printf(\"false\\n\");}\n}\n"),
                 _ => self.add("    printf(\"%p\n\" , hv0);\n}\n"),
             },
-            "ln" => self.add("    printf(\"\\n\");\n}"),
+            "ln" => self.add("    printf(\"\\n\");\n}\n"),
             "puts" => self.add("    printf(\"%s\", (char*) hv0);\n}\n"),
             "putlns" => self.add("    printf(\"%s\\n\", (char*) hv0);\n}\n"),
             "putc" => self.add("    printf(\"%lc\", (wint_t) hv0);\n}\n"),
@@ -475,6 +470,10 @@ impl<'info> Context<'info> {
             "zalloc_bool" => self.add("    *hr0 = calloc(1, 1);\n}\n"),
             "alloc_bool_arr" => self.add("    *hr0 = malloc(hv0);\n}\n"),
             "zalloc_bool_arr" => self.add("    *hr0 = calloc(hv0, 1);\n}\n"),
+            "size_of_int" => self.add("    *hr0 = 8;\n}\n"),
+            "size_of_float" => self.add("    *hr0 = 8;\n}\n"),
+            "size_of_byte" => self.add("    *hr0 = 1;\n}\n"),
+            "size_of_bool" => self.add("    *hr0 = 1;\n}\n"),
             "DEBUG_STACK" => self.add("}\n"),
             _ => unreachable!(),
         }

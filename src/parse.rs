@@ -164,9 +164,20 @@ fn parse_struct(tokens: &mut Tokens) -> Result<Item, Error> {
 
     let mut fields = Vec::new();
     while !tokens.peek().is_rbrace() {
-        let ty = parse_type(tokens)?;
         let name = parse_name(tokens)?;
-        fields.push(Field { name, ty })
+        if !tokens.peek().is_colon() {
+            return Err(Error::Parse(
+                tokens.peek().span(),
+                "expected ':'".to_string(),
+            ));
+        }
+        let colon_span = tokens.next()?.span();
+        let ty = parse_type(tokens)?;
+        fields.push(Field {
+            name,
+            ty,
+            colon_span,
+        })
     }
 
     let rbrace_span = tokens.next()?.span();

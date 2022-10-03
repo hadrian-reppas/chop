@@ -192,16 +192,10 @@ lazy_static! {
                 sig!("to_bool_ptr", INT => ptr!(BOOL)),
             ]
         ),
-        (
-            "size_of",
-            vec![
-                sig!("size_of", INT => INT),
-                sig!("size_of", FLOAT => INT),
-                sig!("size_of", BYTE => INT),
-                sig!("size_of", BOOL => INT),
-                sig!("size_of", genp!(0) => INT),
-            ]
-        ),
+        ("size_of_int", vec![sig!("size_of_int", => INT)]),
+        ("size_of_float", vec![sig!("size_of_float", => INT)]),
+        ("size_of_byte", vec![sig!("size_of_byte", => INT)]),
+        ("size_of_bool", vec![sig!("size_of_bool", => INT)]),
         (
             "neg",
             vec![sig!("neg", INT => INT), sig!("neg", FLOAT => FLOAT)]

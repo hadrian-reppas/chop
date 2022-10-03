@@ -62,6 +62,7 @@ pub enum Token {
     RBrace(Span),
     LBrack(Span),
     RBrack(Span),
+    Colon(Span),
 
     Fn(Span),
     If(Span),
@@ -94,6 +95,7 @@ impl Token {
             Token::RBrace(span) => *span,
             Token::LBrack(span) => *span,
             Token::RBrack(span) => *span,
+            Token::Colon(span) => *span,
             Token::Fn(span) => *span,
             Token::If(span) => *span,
             Token::Else(span) => *span,
@@ -132,6 +134,10 @@ impl Token {
 
     pub fn is_arrow(&self) -> bool {
         matches!(self, Token::Arrow(_))
+    }
+
+    pub fn is_colon(&self) -> bool {
+        matches!(self, Token::Colon(_))
     }
 
     pub fn is_if(&self) -> bool {
@@ -296,6 +302,8 @@ impl TokenIter {
             return Ok(Token::LBrack(self.make_span(1)));
         } else if self.suffix.starts_with(']') {
             return Ok(Token::RBrack(self.make_span(1)));
+        } else if self.suffix.starts_with(':') {
+            return Ok(Token::Colon(self.make_span(1)));
         } else if self.suffix.starts_with('"') {
             return self.lex_string();
         } else if self.suffix.starts_with('\'') {
@@ -510,6 +518,7 @@ fn is_symbol_continue(suffix: &str) -> bool {
         && !suffix.starts_with('}')
         && !suffix.starts_with('[')
         && !suffix.starts_with(']')
+        && !suffix.starts_with(':')
         && !suffix.starts_with('"')
         && !suffix.starts_with('\'')
         && !suffix.starts_with("//")
