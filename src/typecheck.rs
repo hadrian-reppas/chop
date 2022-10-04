@@ -189,8 +189,33 @@ impl GSignature {
 #[derive(Clone)]
 pub enum Kind {
     Builtin,
-    Auto(Span),
     Custom(Vec<Stmt>),
+    Constructor(Span),
+    Field(Span),
+    PtrCast(Span),
+    SizeOf(Span),
+    Alloc(Span),
+    AllocArr(Span),
+    GlobalRead(Span),
+    GlobalWrite(Span),
+    GlobalPtr(Span),
+}
+
+impl Kind {
+    fn span(&self) -> Span {
+        match self {
+            Kind::Constructor(span) => *span,
+            Kind::Field(span) => *span,
+            Kind::PtrCast(span) => *span,
+            Kind::SizeOf(span) => *span,
+            Kind::Alloc(span) => *span,
+            Kind::AllocArr(span) => *span,
+            Kind::GlobalRead(span) => *span,
+            Kind::GlobalWrite(span) => *span,
+            Kind::GlobalPtr(span) => *span,
+            _ => panic!(),
+        }
+    }
 }
 
 //                 name          id
@@ -230,6 +255,8 @@ struct Context {
     let_binds: Vec<HashMap<&'static str, GType>>,
     call_graph: CallGraph,
     struct_fields: HashMap<&'static str, Vec<(GType, &'static str)>>,
+    globals: Vec<(&'static str, GType)>,
+    global_init: Vec<Op>,
 }
 
 impl Context {
@@ -239,12 +266,14 @@ impl Context {
             let_binds: Vec::new(),
             call_graph: CallGraph::new(),
             struct_fields: HashMap::new(),
+            globals: Vec::new(),
+            global_init: Vec::new(),
         }
     }
 
     fn init_signatures(&mut self, unit: &[Item]) -> Result<(), Error> {
         for item in unit {
-            for signature in get_signatures(item)? {
+            for signature in self.get_signatures(item)? {
                 self.insert_signature(signature)?;
             }
         }
@@ -429,7 +458,7 @@ impl Context {
                 rbrace_span,
                 ..
             } => {
-                let [signature]: [GSignature; 1] = get_signatures(item)?.try_into().unwrap();
+                let [signature]: [GSignature; 1] = self.get_signatures(item)?.try_into().unwrap();
                 let id = self
                     .signatures
                     .get(name.name)
@@ -438,6 +467,12 @@ impl Context {
                     .position(|s| s.params == signature.params)
                     .unwrap();
                 self.call_graph.set_active(name.name, id);
+                if name.name == "main" {
+                    let mut stack = Vec::new();
+                    for op in &self.global_init.clone() {
+                        self.check_op(&mut stack, op)?;
+                    }
+                }
                 let mut stack = init_stack(&signature);
                 for stmt in body {
                     self.check_stmt(&mut stack, stmt)?;
@@ -454,6 +489,40 @@ impl Context {
                         .collect(),
                 );
                 Ok(())
+            }
+            Item::Global {
+                name,
+                ty,
+                definition,
+                ..
+            } => {
+                self.globals.push((name.name, GType::new(*ty, &None)));
+                if let Some(Definition {
+                    group, lbrace_span, ..
+                }) = definition
+                {
+                    let mut stack = Vec::new();
+                    for op in group {
+                        self.check_op(&mut stack, op)?;
+                    }
+                    if stack.len() == 1 && stack[0] == GType::new(*ty, &None) {
+                        Ok(())
+                    } else {
+                        Err(Error::Type(
+                            *lbrace_span,
+                            "stack does not match declared type".to_string(),
+                            vec![
+                                Note::new(
+                                    None,
+                                    format!("delcare type is [{:?}]", GType::new(*ty, &None)),
+                                ),
+                                Note::new(None, format!("stack is {:?}", stack)),
+                            ],
+                        ))
+                    }
+                } else {
+                    Ok(())
+                }
             }
         }
     }
@@ -866,6 +935,188 @@ impl Context {
             }
         }
     }
+
+    fn get_signatures(&mut self, item: &Item) -> Result<Vec<GSignature>, Error> {
+        match item {
+            Item::Function {
+                name,
+                generics,
+                params,
+                returns,
+                body,
+                ..
+            } => {
+                let params: Vec<_> = params
+                    .iter()
+                    .copied()
+                    .map(|t| GType::new(t, generics))
+                    .collect();
+                let returns = returns
+                    .iter()
+                    .copied()
+                    .map(|t| GType::new(t, generics))
+                    .collect();
+
+                if let Some(generics) = generics {
+                    let mut seen = vec![false; generics.names.len()];
+                    for param in &params {
+                        if let Some(index) = param.generic_index() {
+                            seen[index] = true;
+                        }
+                    }
+                    for (i, seen) in seen.into_iter().enumerate() {
+                        if !seen {
+                            return Err(Error::Parse(
+                                generics.names[i].span,
+                                format!(
+                                    "generic argument '{}' does not appear in function parameters",
+                                    generics.names[i].name
+                                ),
+                            ));
+                        }
+                    }
+                }
+
+                Ok(vec![GSignature {
+                    name: *name,
+                    kind: Kind::Custom(body.clone()),
+                    params,
+                    returns,
+                }])
+            }
+            Item::Struct { name, fields, .. } => {
+                let span = name.span;
+                let leaked = leak(format!(
+                    "to_{}_ptrzalloc_{}_arrsize_of_{}",
+                    name.name, name.name, name.name
+                ));
+                let to_name_ptr = &leaked[..(name.name.len() + 7)];
+                let zalloc_name_arr = &leaked[(name.name.len() + 7)..(2 * name.name.len() + 18)];
+                let size_of_name = &leaked[(2 * name.name.len() + 18)..];
+                let alloc_name_arr = zalloc_name_arr.strip_prefix('z').unwrap();
+                let zalloc_name = zalloc_name_arr.strip_suffix("_arr").unwrap();
+                let alloc_name = zalloc_name.strip_prefix('z').unwrap();
+                let mut signatures = vec![
+                    GSignature::new(
+                        *name,
+                        Kind::Constructor(span),
+                        fields.iter().map(|f| GType::new(f.ty, &None)).collect(),
+                        vec![GType::Custom(*name)],
+                    ),
+                    GSignature::new(
+                        Name::new(to_name_ptr),
+                        Kind::PtrCast(span),
+                        vec![GType::Pointer(Box::new(GType::Generic(0)))],
+                        vec![GType::Pointer(Box::new(GType::Custom(*name)))],
+                    ),
+                    GSignature::new(
+                        Name::new(to_name_ptr),
+                        Kind::PtrCast(span),
+                        vec![GType::Primitive(Primitive::Int)],
+                        vec![GType::Pointer(Box::new(GType::Custom(*name)))],
+                    ),
+                    GSignature::new(
+                        Name::new(size_of_name),
+                        Kind::SizeOf(span),
+                        vec![],
+                        vec![GType::Primitive(Primitive::Int)],
+                    ),
+                    GSignature::new(
+                        Name::new(alloc_name),
+                        Kind::Alloc(span),
+                        vec![],
+                        vec![GType::Pointer(Box::new(GType::Custom(*name)))],
+                    ),
+                    GSignature::new(
+                        Name::new(zalloc_name),
+                        Kind::Alloc(span),
+                        vec![],
+                        vec![GType::Pointer(Box::new(GType::Custom(*name)))],
+                    ),
+                    GSignature::new(
+                        Name::new(alloc_name_arr),
+                        Kind::AllocArr(span),
+                        vec![GType::Primitive(Primitive::Int)],
+                        vec![GType::Pointer(Box::new(GType::Custom(*name)))],
+                    ),
+                    GSignature::new(
+                        Name::new(zalloc_name_arr),
+                        Kind::AllocArr(span),
+                        vec![GType::Primitive(Primitive::Int)],
+                        vec![GType::Pointer(Box::new(GType::Custom(*name)))],
+                    ),
+                ];
+                for Field {
+                    name: fname, ty, ..
+                } in fields
+                {
+                    let dotdot = leak(format!("..{}", fname.name));
+                    signatures.push(GSignature::new(
+                        Name::new(&dotdot[1..]),
+                        Kind::Field(span),
+                        vec![GType::Custom(*name)],
+                        vec![GType::new(*ty, &None)],
+                    ));
+                    signatures.push(GSignature::new(
+                        Name::new(dotdot),
+                        Kind::Field(span),
+                        vec![GType::Custom(*name)],
+                        vec![GType::Custom(*name), GType::new(*ty, &None)],
+                    ));
+                    signatures.push(GSignature::new(
+                        Name::new(&dotdot[1..]),
+                        Kind::Field(span),
+                        vec![GType::Pointer(Box::new(GType::Custom(*name)))],
+                        vec![GType::Pointer(Box::new(GType::new(*ty, &None)))],
+                    ));
+                    signatures.push(GSignature::new(
+                        Name::new(dotdot),
+                        Kind::Field(span),
+                        vec![GType::Pointer(Box::new(GType::Custom(*name)))],
+                        vec![
+                            GType::Pointer(Box::new(GType::Custom(*name))),
+                            GType::Pointer(Box::new(GType::new(*ty, &None))),
+                        ],
+                    ));
+                }
+                Ok(signatures)
+            }
+            Item::Global {
+                name,
+                ty,
+                definition,
+                ..
+            } => {
+                let write_name_ptr = leak(format!("write_{}_ptr", name.name));
+                let write_name = write_name_ptr.strip_suffix("_ptr").unwrap();
+                let name_ptr = write_name_ptr.strip_prefix("write_").unwrap();
+                if let Some(definition) = definition {
+                    self.global_init.extend(definition.group.iter().cloned());
+                    self.global_init.push(Op::Name(Name::new(write_name)));
+                }
+                Ok(vec![
+                    GSignature::new(
+                        *name,
+                        Kind::GlobalRead(name.span),
+                        vec![],
+                        vec![GType::new(*ty, &None)],
+                    ),
+                    GSignature::new(
+                        Name::new(write_name),
+                        Kind::GlobalWrite(name.span),
+                        vec![GType::new(*ty, &None)],
+                        vec![],
+                    ),
+                    GSignature::new(
+                        Name::new(name_ptr),
+                        Kind::GlobalPtr(name.span),
+                        vec![],
+                        vec![GType::Pointer(Box::new(GType::new(*ty, &None)))],
+                    ),
+                ])
+            }
+        }
+    }
 }
 
 pub fn flatten_expr(expr: &Expr, ops: &mut Vec<Op>) {
@@ -982,7 +1233,7 @@ fn check_for_conflicts(
 ) -> Result<(), Error> {
     for existing in existing_signatures {
         if conflict(&existing.params, &new_signature.params) {
-            let notes = match existing.kind {
+            let notes = match &existing.kind {
                 Kind::Builtin => vec![
                     Note::new(
                         None,
@@ -993,11 +1244,20 @@ fn check_for_conflicts(
                         format!("'{}' has signature {:?}", existing.name.name, existing),
                     ),
                 ],
-                Kind::Auto(span) => vec![Note::new(Some(span), "autogenerated here".to_string())],
                 Kind::Custom(_) => vec![Note::new(
                     Some(existing.name.span),
                     "previous definition is here".to_string(),
                 )],
+                auto => vec![
+                    Note::new(
+                        Some(auto.span()),
+                        format!("function '{}' was autogenerated here", existing.name.name),
+                    ),
+                    Note::new(
+                        Some(auto.span()),
+                        format!("'{}' has signature {:?}", existing.name.name, existing),
+                    ),
+                ],
             };
             return Err(Error::Type(
                 new_signature.name.span,
@@ -1007,154 +1267,6 @@ fn check_for_conflicts(
         }
     }
     Ok(())
-}
-
-fn get_signatures(item: &Item) -> Result<Vec<GSignature>, Error> {
-    match item {
-        Item::Function {
-            name,
-            generics,
-            params,
-            returns,
-            body,
-            ..
-        } => {
-            let params: Vec<_> = params
-                .iter()
-                .copied()
-                .map(|t| GType::new(t, generics))
-                .collect();
-            let returns = returns
-                .iter()
-                .copied()
-                .map(|t| GType::new(t, generics))
-                .collect();
-
-            if let Some(generics) = generics {
-                let mut seen = vec![false; generics.names.len()];
-                for param in &params {
-                    if let Some(index) = param.generic_index() {
-                        seen[index] = true;
-                    }
-                }
-                for (i, seen) in seen.into_iter().enumerate() {
-                    if !seen {
-                        return Err(Error::Parse(
-                            generics.names[i].span,
-                            format!(
-                                "generic argument '{}' does not appear in function parameters",
-                                generics.names[i].name
-                            ),
-                        ));
-                    }
-                }
-            }
-
-            Ok(vec![GSignature {
-                name: *name,
-                kind: Kind::Custom(body.clone()),
-                params,
-                returns,
-            }])
-        }
-        Item::Struct { name, fields, .. } => {
-            let span = name.span;
-            let leaked = leak(format!(
-                "to_{}_ptrzalloc_{}_arrsize_of_{}",
-                name.name, name.name, name.name
-            ));
-            let to_name_ptr = &leaked[..(name.name.len() + 7)];
-            let zalloc_name_arr = &leaked[(name.name.len() + 7)..(2 * name.name.len() + 18)];
-            let size_of_name = &leaked[(2 * name.name.len() + 18)..];
-            let alloc_name_arr = zalloc_name_arr.strip_prefix('z').unwrap();
-            let zalloc_name = zalloc_name_arr.strip_suffix("_arr").unwrap();
-            let alloc_name = zalloc_name.strip_prefix('z').unwrap();
-            let mut signatures = vec![
-                GSignature::new(
-                    *name,
-                    Kind::Auto(span),
-                    fields.iter().map(|f| GType::new(f.ty, &None)).collect(),
-                    vec![GType::Custom(*name)],
-                ),
-                GSignature::new(
-                    Name::new(to_name_ptr),
-                    Kind::Auto(span),
-                    vec![GType::Pointer(Box::new(GType::Generic(0)))],
-                    vec![GType::Pointer(Box::new(GType::Custom(*name)))],
-                ),
-                GSignature::new(
-                    Name::new(to_name_ptr),
-                    Kind::Auto(span),
-                    vec![GType::Primitive(Primitive::Int)],
-                    vec![GType::Pointer(Box::new(GType::Custom(*name)))],
-                ),
-                GSignature::new(
-                    Name::new(size_of_name),
-                    Kind::Auto(span),
-                    vec![],
-                    vec![GType::Primitive(Primitive::Int)],
-                ),
-                GSignature::new(
-                    Name::new(alloc_name),
-                    Kind::Auto(span),
-                    vec![],
-                    vec![GType::Pointer(Box::new(GType::Custom(*name)))],
-                ),
-                GSignature::new(
-                    Name::new(zalloc_name),
-                    Kind::Auto(span),
-                    vec![],
-                    vec![GType::Pointer(Box::new(GType::Custom(*name)))],
-                ),
-                GSignature::new(
-                    Name::new(alloc_name_arr),
-                    Kind::Auto(span),
-                    vec![GType::Primitive(Primitive::Int)],
-                    vec![GType::Pointer(Box::new(GType::Custom(*name)))],
-                ),
-                GSignature::new(
-                    Name::new(zalloc_name_arr),
-                    Kind::Auto(span),
-                    vec![GType::Primitive(Primitive::Int)],
-                    vec![GType::Pointer(Box::new(GType::Custom(*name)))],
-                ),
-            ];
-            for Field {
-                name: fname, ty, ..
-            } in fields
-            {
-                let dotdot = leak(format!("..{}", fname.name));
-                signatures.push(GSignature::new(
-                    Name::new(&dotdot[1..]),
-                    Kind::Auto(span),
-                    vec![GType::Custom(*name)],
-                    vec![GType::new(*ty, &None)],
-                ));
-                signatures.push(GSignature::new(
-                    Name::new(dotdot),
-                    Kind::Auto(span),
-                    vec![GType::Custom(*name)],
-                    vec![GType::Custom(*name), GType::new(*ty, &None)],
-                ));
-                signatures.push(GSignature::new(
-                    Name::new(&dotdot[1..]),
-                    Kind::Auto(span),
-                    vec![GType::Pointer(Box::new(GType::Custom(*name)))],
-                    vec![GType::Pointer(Box::new(GType::new(*ty, &None)))],
-                ));
-                signatures.push(GSignature::new(
-                    Name::new(dotdot),
-                    Kind::Auto(span),
-                    vec![GType::Pointer(Box::new(GType::Custom(*name)))],
-                    vec![
-                        GType::Pointer(Box::new(GType::Custom(*name))),
-                        GType::Pointer(Box::new(GType::new(*ty, &None))),
-                    ],
-                ));
-            }
-            Ok(signatures)
-        }
-    }
 }
 
 fn conflict(params_a: &[GType], params_b: &[GType]) -> bool {
@@ -1169,6 +1281,8 @@ pub struct TypeInfo {
     pub signatures: HashMap<&'static str, Vec<GSignature>>,
     pub graph: HashMap<FnInfo, HashSet<CallInfo>>,
     pub struct_fields: HashMap<&'static str, Vec<(GType, &'static str)>>,
+    pub globals: Vec<(&'static str, GType)>,
+    pub global_init: Vec<Op>,
 }
 
 pub fn typecheck(unit: &[Item]) -> Result<TypeInfo, Error> {
@@ -1181,5 +1295,7 @@ pub fn typecheck(unit: &[Item]) -> Result<TypeInfo, Error> {
         signatures: context.signatures,
         graph: context.call_graph.graph,
         struct_fields: context.struct_fields,
+        globals: context.globals,
+        global_init: context.global_init,
     })
 }

@@ -72,10 +72,8 @@ pub enum Token {
     To(Span),
     Let(Span),
     Struct(Span),
-
-    // import
-    // const
-    // global
+    Global(Span),
+    // Import(Span),
     Eof(Span),
 }
 
@@ -104,6 +102,7 @@ impl Token {
             Token::To(span) => *span,
             Token::Let(span) => *span,
             Token::Struct(span) => *span,
+            Token::Global(span) => *span,
             Token::Eof(span) => *span,
         }
     }
@@ -349,6 +348,7 @@ impl TokenIter {
             "to" => Token::To(span),
             "let" => Token::Let(span),
             "struct" => Token::Struct(span),
+            "global" => Token::Global(span),
             "true" => Token::Bool(true, span),
             "false" => Token::Bool(false, span),
             _ => Token::Name(span),

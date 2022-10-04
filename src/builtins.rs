@@ -227,7 +227,7 @@ lazy_static! {
         ("ln", vec![sig!("ln", =>)]),
         ("panic", vec![sig!("panic", =>)]),
         ("assert", vec![sig!("assert", BOOL =>)]),
-        ("store", vec![sig!("store", genp!(0) gen!(0) =>)]),
+        ("write", vec![sig!("write", genp!(0) gen!(0) =>)]),
         ("exit", vec![sig!("exit", INT =>)]),
         ("alloc", vec![sig!("alloc", INT => ptr!(BYTE))]),
         ("zalloc", vec![sig!("zalloc", INT => ptr!(BYTE))]),

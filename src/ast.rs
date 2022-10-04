@@ -71,6 +71,14 @@ pub enum Item {
         lbrace_span: Span,
         rbrace_span: Span,
     },
+    Global {
+        name: Name,
+        ty: PType,
+        definition: Option<Definition>,
+
+        global_span: Span,
+        colon_span: Span,
+    },
 }
 
 impl fmt::Debug for Item {
@@ -84,7 +92,26 @@ impl fmt::Debug for Item {
                 ..
             } => write!(f, "Function({name:?}, {params:?}, {returns:?}, {body:?})"),
             Item::Struct { name, fields, .. } => write!(f, "Struct({name:?}, {fields:?})"),
+            Item::Global {
+                name,
+                ty,
+                definition,
+                ..
+            } => write!(f, "Global({name:?}, {ty:?}, {definition:?})"),
         }
+    }
+}
+
+pub struct Definition {
+    pub group: Vec<Op>,
+
+    pub lbrace_span: Span,
+    pub rbrace_span: Span,
+}
+
+impl fmt::Debug for Definition {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Definition({:?})", self.group)
     }
 }
 

@@ -1,8 +1,0 @@
-fn eat bool char -> {
-    let b c {}
-}
-
-fn nothing {
-    1 true 'x'
-    let a b c {}
-}

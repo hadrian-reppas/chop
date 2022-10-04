@@ -1,3 +1,0 @@
-fn main {
-    for 0 to 1 {}
-}

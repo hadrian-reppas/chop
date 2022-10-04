@@ -81,6 +81,13 @@ impl<'info> Context<'info> {
             }
         }
 
+        for (name, ty) in &self.info.globals {
+            self.make_type(&Type::convert(ty, &[]));
+            self.add(" hg");
+            self.escape(name);
+            self.add(";\n");
+        }
+
         for (name, gid, cid, signature, _) in &functions {
             self.make_declaration(name, *gid, *cid, signature);
         }
@@ -97,6 +104,9 @@ impl<'info> Context<'info> {
         self.add("int main(int argc, char** argv) {\n");
         self.add("    srand(time(NULL));\n");
         self.add("    setlocale(LC_ALL, \"\");\n");
+        for op in &self.info.global_init {
+            self.make_op(op);
+        }
         self.add("    int64_t code = 0;\n");
         self.add("    hf_6d_61_69_6e_0_0(");
         if !main_signature.params.is_empty() {
@@ -229,12 +239,109 @@ impl<'info> Context<'info> {
     ) {
         match kind {
             Kind::Builtin => self.make_builtin(name, gid, cid, signature),
-            Kind::Auto(_) => self.make_auto(name, gid, cid, signature),
             Kind::Custom(body) => self.make_custom(name, gid, cid, signature, body),
+            Kind::Constructor(_) => {
+                self.begin_fn(name, gid, cid, signature);
+                for (i, (_, field)) in self
+                    .info
+                    .struct_fields
+                    .get(name)
+                    .unwrap()
+                    .iter()
+                    .enumerate()
+                {
+                    self.add("    hr0->hf");
+                    self.escape(field);
+                    self.add(&format!(" = hv{i};\n"));
+                }
+                self.add("}\n");
+            }
+            Kind::Field(_) => {
+                self.begin_fn(name, gid, cid, signature);
+                if let Some(field) = name.strip_prefix("..") {
+                    if signature.params[0].depth() == 0 {
+                        self.add("    *hr0 = hv0;\n");
+                        self.add("    *hr1 = hv0.hf");
+                        self.escape(field);
+                        self.add(";\n}\n");
+                    } else {
+                        self.add("    *hr0 = hv0;\n");
+                        self.add("    *hr1 = &hv0->hf");
+                        self.escape(field);
+                        self.add(";\n}\n");
+                    }
+                } else {
+                    let field = name.strip_prefix('.').unwrap();
+                    if signature.params[0].depth() == 0 {
+                        self.add("    *hr0 = hv0.hf");
+                        self.escape(field);
+                        self.add(";\n}\n");
+                    } else {
+                        self.add("    *hr0 = &hv0->hf");
+                        self.escape(field);
+                        self.add(";\n}\n");
+                    }
+                }
+            }
+            Kind::PtrCast(_) => {
+                self.begin_fn(name, gid, cid, signature);
+                self.add("    *hr0 = (");
+                self.make_type(&signature.returns[0]);
+                self.add(") hv0;\n}\n")
+            }
+            Kind::SizeOf(_) => {
+                self.begin_fn(name, gid, cid, signature);
+                let struct_name = name.strip_prefix("size_of_").unwrap();
+                self.add("    *hr0 = sizeof(struct ht");
+                self.escape(struct_name);
+                self.add(");\n}\n");
+            }
+            Kind::Alloc(_) => {
+                self.begin_fn(name, gid, cid, signature);
+                if name.starts_with('z') {
+                    self.add("    *hr0 = calloc(1, sizeof(");
+                    self.make_type(&signature.returns[0].dec());
+                    self.add("));\n}\n");
+                } else {
+                    self.add("    *hr0 = malloc(sizeof(");
+                    self.make_type(&signature.returns[0].dec());
+                    self.add("));\n}\n");
+                }
+            }
+            Kind::AllocArr(_) => {
+                self.begin_fn(name, gid, cid, signature);
+                if name.starts_with('z') {
+                    self.add("    *hr0 = calloc(hv0, sizeof(");
+                    self.make_type(&signature.returns[0].dec());
+                    self.add("));\n}\n");
+                } else {
+                    self.add("    *hr0 = malloc(hv0*sizeof(");
+                    self.make_type(&signature.returns[0].dec());
+                    self.add("));\n}\n");
+                }
+            }
+            Kind::GlobalRead(_) => {
+                self.begin_fn(name, gid, cid, signature);
+                self.add("    *hr0 = hg");
+                self.escape(name);
+                self.add(";\n}\n");
+            }
+            Kind::GlobalWrite(_) => {
+                self.begin_fn(name, gid, cid, signature);
+                self.add("    hg");
+                self.escape(name.strip_prefix("write_").unwrap());
+                self.add(" = hv0;\n}\n");
+            }
+            Kind::GlobalPtr(_) => {
+                self.begin_fn(name, gid, cid, signature);
+                self.add("    *hr0 = &hg");
+                self.escape(name.strip_suffix("_ptr").unwrap());
+                self.add(";\n}\n");
+            }
         }
     }
 
-    fn being_fn(&mut self, name: &str, gid: usize, cid: usize, signature: &Signature) {
+    fn begin_fn(&mut self, name: &str, gid: usize, cid: usize, signature: &Signature) {
         self.counter = signature.params.len();
         self.stack = signature.params.iter().cloned().enumerate().collect();
 
@@ -274,84 +381,15 @@ impl<'info> Context<'info> {
         signature: &Signature,
         body: &[Stmt],
     ) {
-        self.being_fn(name, gid, cid, signature);
+        self.begin_fn(name, gid, cid, signature);
         for stmt in body {
             self.make_stmt(stmt);
         }
         self.end_fn();
     }
 
-    fn make_auto(&mut self, name: &str, gid: usize, cid: usize, signature: &Signature) {
-        self.being_fn(name, gid, cid, signature);
-        if let Some(struct_name) = name.strip_prefix("size_of_") {
-            self.add("    *hr0 = sizeof(struct ht");
-            self.escape(struct_name);
-            self.add(");\n}\n");
-        } else if let Some(field) = name.strip_prefix("..") {
-            if signature.params[0].depth() == 0 {
-                self.add("    *hr0 = hv0;\n");
-                self.add("    *hr1 = hv0.hf");
-                self.escape(field);
-                self.add(";\n}\n");
-            } else {
-                self.add("    *hr0 = hv0;\n");
-                self.add("    *hr1 = &hv0->hf");
-                self.escape(field);
-                self.add(";\n}\n");
-            }
-        } else if let Some(field) = name.strip_prefix('.') {
-            if signature.params[0].depth() == 0 {
-                self.add("    *hr0 = hv0.hf");
-                self.escape(field);
-                self.add(";\n}\n");
-            } else {
-                self.add("    *hr0 = &hv0->hf");
-                self.escape(field);
-                self.add(";\n}\n");
-            }
-        } else if name.starts_with("to_") && name.ends_with("_ptr") {
-            self.add("    *hr0 = (");
-            self.make_type(&signature.returns[0]);
-            self.add(") hv0;\n}\n")
-        } else if name.starts_with("alloc_") {
-            if name.ends_with("_arr") {
-                self.add("    *hr0 = malloc(hv0*sizeof(");
-                self.make_type(&signature.returns[0].dec());
-                self.add("));\n}\n");
-            } else {
-                self.add("    *hr0 = malloc(sizeof(");
-                self.make_type(&signature.returns[0].dec());
-                self.add("));\n}\n");
-            }
-        } else if name.starts_with("zalloc_") {
-            if name.ends_with("_arr") {
-                self.add("    *hr0 = calloc(hv0, sizeof(");
-                self.make_type(&signature.returns[0].dec());
-                self.add("));\n}\n");
-            } else {
-                self.add("    *hr0 = calloc(1, sizeof(");
-                self.make_type(&signature.returns[0].dec());
-                self.add("));\n}\n");
-            }
-        } else {
-            for (i, (_, field)) in self
-                .info
-                .struct_fields
-                .get(name)
-                .unwrap()
-                .iter()
-                .enumerate()
-            {
-                self.add("    hr0->hf");
-                self.escape(field);
-                self.add(&format!(" = hv{i};\n"));
-            }
-            self.add("}\n");
-        }
-    }
-
     fn make_builtin(&mut self, name: &str, gid: usize, cid: usize, signature: &Signature) {
-        self.being_fn(name, gid, cid, signature);
+        self.begin_fn(name, gid, cid, signature);
         match name {
             "+" => self.add("    *hr0 = hv0 + hv1;\n}\n"),
             "-" => self.add("    *hr0 = hv0 - hv1;\n}\n"),
@@ -427,7 +465,7 @@ impl<'info> Context<'info> {
             "putlns" => self.add("    printf(\"%s\\n\", (char*) hv0);\n}\n"),
             "putc" => self.add("    printf(\"%lc\", (wint_t) hv0);\n}\n"),
             "putlnc" => self.add("    printf(\"%lc\\n\", (wint_t) hv0);\n}\n"),
-            "store" => self.add("    *hv0 = hv1;\n}\n"),
+            "write" => self.add("    *hv0 = hv1;\n}\n"),
             "panic" => self.add("}\n"),
             "assert" => self.add("}\n"),
             "@" => self.add("}\n"),

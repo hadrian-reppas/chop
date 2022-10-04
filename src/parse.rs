@@ -17,6 +17,7 @@ pub fn parse(mut tokens: Tokens) -> Result<Unit, Error> {
         match tokens.peek() {
             Token::Fn(_) => items.push(parse_fn(&mut tokens)?),
             Token::Struct(_) => items.push(parse_struct(&mut tokens)?),
+            Token::Global(_) => items.push(parse_global(&mut tokens)?),
             Token::Eof(_) => return Ok(items),
             token => return Err(Error::Parse(token.span(), "unexpected token".to_string())),
         }
@@ -188,6 +189,46 @@ fn parse_struct(tokens: &mut Tokens) -> Result<Item, Error> {
         struct_span,
         lbrace_span,
         rbrace_span,
+    })
+}
+
+fn parse_global(tokens: &mut Tokens) -> Result<Item, Error> {
+    let global_span = tokens.next()?.span();
+    let name = parse_name(tokens)?;
+    if !tokens.peek().is_colon() {
+        return Err(Error::Parse(
+            tokens.peek().span(),
+            "expected ':'".to_string(),
+        ));
+    }
+    let colon_span = tokens.next()?.span();
+    let ty = parse_type(tokens)?;
+
+    let definition = if tokens.peek().is_lbrace() {
+        let lbrace_span = tokens.next()?.span();
+        let group = parse_group(tokens)?;
+        if !tokens.peek().is_rbrace() {
+            return Err(Error::Parse(
+                tokens.peek().span(),
+                "expected '}'".to_string(),
+            ));
+        }
+        let rbrace_span = tokens.next()?.span();
+        Some(Definition {
+            group,
+            lbrace_span,
+            rbrace_span,
+        })
+    } else {
+        None
+    };
+
+    Ok(Item::Global {
+        name,
+        ty,
+        definition,
+        global_span,
+        colon_span,
     })
 }
 
