@@ -61,7 +61,7 @@ impl<'info> Context<'info> {
             for (ty, field) in fields {
                 self.add("    ");
                 self.make_type(&Type::convert(ty, &[]));
-                self.add(" hf");
+                self.add(" hm_");
                 self.escape(field);
                 self.add(";\n")
             }
@@ -108,7 +108,7 @@ impl<'info> Context<'info> {
             self.make_op(op);
         }
         self.add("    int64_t code = 0;\n");
-        self.add("    hf_6d_61_69_6e_0_0(");
+        self.add("    hf_main_0_0(");
         if !main_signature.params.is_empty() {
             self.add("argc, (uint8_t**) argv");
         }
@@ -180,12 +180,18 @@ impl<'info> Context<'info> {
 
     fn escape(&mut self, name: &str) {
         for c in name.chars() {
-            self.add(&format!("_{:x}", c as i32));
+            if c.is_ascii_alphanumeric() {
+                self.code.push(c);
+            } else if c == '_' {
+                self.add("___");
+            } else {
+                self.add(&format!("_{:x}_", c as i32));
+            }
         }
     }
 
     fn make_declaration(&mut self, name: &str, gid: usize, cid: usize, signature: &Signature) {
-        self.add("void hf");
+        self.add("void hf_");
         self.escape(name);
         self.add(&format!("_{gid}_{cid}("));
         for (i, param) in signature.params.iter().enumerate() {
@@ -250,7 +256,7 @@ impl<'info> Context<'info> {
                     .iter()
                     .enumerate()
                 {
-                    self.add("    hr0->hf");
+                    self.add("    hr0->hm_");
                     self.escape(field);
                     self.add(&format!(" = hv{i};\n"));
                 }
@@ -261,23 +267,23 @@ impl<'info> Context<'info> {
                 if let Some(field) = name.strip_prefix("..") {
                     if signature.params[0].depth() == 0 {
                         self.add("    *hr0 = hv0;\n");
-                        self.add("    *hr1 = hv0.hf");
+                        self.add("    *hr1 = hv0.hm_");
                         self.escape(field);
                         self.add(";\n}\n");
                     } else {
                         self.add("    *hr0 = hv0;\n");
-                        self.add("    *hr1 = &hv0->hf");
+                        self.add("    *hr1 = &hv0->hm_");
                         self.escape(field);
                         self.add(";\n}\n");
                     }
                 } else {
                     let field = name.strip_prefix('.').unwrap();
                     if signature.params[0].depth() == 0 {
-                        self.add("    *hr0 = hv0.hf");
+                        self.add("    *hr0 = hv0.hm_");
                         self.escape(field);
                         self.add(";\n}\n");
                     } else {
-                        self.add("    *hr0 = &hv0->hf");
+                        self.add("    *hr0 = &hv0->hm_");
                         self.escape(field);
                         self.add(";\n}\n");
                     }
@@ -345,7 +351,7 @@ impl<'info> Context<'info> {
         self.counter = signature.params.len();
         self.stack = signature.params.iter().cloned().enumerate().collect();
 
-        self.add("void hf");
+        self.add("void hf_");
         self.escape(name);
         self.add(&format!("_{gid}_{cid}("));
         for (i, param) in signature.params.iter().enumerate() {
@@ -649,7 +655,7 @@ impl<'info> Context<'info> {
             self.counter += 1;
         }
         self.tabs();
-        self.add("hf");
+        self.add("hf_");
         self.escape(name);
         self.add(&format!("_{gid}_{cid}("));
         let mut args = Vec::new();
