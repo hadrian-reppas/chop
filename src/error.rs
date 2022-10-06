@@ -16,6 +16,7 @@ pub enum Error {
     Parse(Span, String),
     Type(Span, String, Vec<Note>),
     Main(String, Vec<Note>),
+    Import(Span, String),
 }
 
 #[derive(Debug)]
@@ -66,6 +67,10 @@ impl Error {
                         print!("\n{}note:{} {msg}", BLUE.as_str(), RESET.as_str());
                     }
                 }
+            }
+            Error::Import(span, msg) => {
+                print!("{}import error:{} {msg}", RED.as_str(), RESET.as_str());
+                print_span(*span);
             }
         }
     }

@@ -13,6 +13,7 @@ pub struct Span {
     pub column: usize,
     pub code: &'static str,
     pub file: &'static str,
+    pub is_std: bool,
 }
 
 impl Span {
@@ -41,6 +42,7 @@ impl Span {
             column: 0,
             code: "",
             file: "",
+            is_std: false,
         }
     }
 }
@@ -73,7 +75,8 @@ pub enum Token {
     Let(Span),
     Struct(Span),
     Global(Span),
-    // Import(Span),
+    Import(Span),
+
     Eof(Span),
 }
 
@@ -103,6 +106,7 @@ impl Token {
             Token::Let(span) => *span,
             Token::Struct(span) => *span,
             Token::Global(span) => *span,
+            Token::Import(span) => *span,
             Token::Eof(span) => *span,
         }
     }
@@ -200,6 +204,12 @@ impl Tokens {
         Ok(Tokens { iter, peek })
     }
 
+    pub fn from_str(code: &'static str, file: &'static str) -> Result<Tokens, Error> {
+        let mut iter = TokenIter::from_str(code, file);
+        let peek = iter.next()?;
+        Ok(Tokens { iter, peek })
+    }
+
     pub fn next(&mut self) -> Result<Token, Error> {
         Ok(std::mem::replace(&mut self.peek, self.iter.next()?))
     }
@@ -215,6 +225,7 @@ struct TokenIter {
     column: usize,
     code: &'static str,
     file: &'static str,
+    is_std: bool,
 }
 
 impl TokenIter {
@@ -228,9 +239,21 @@ impl TokenIter {
                 column: 0,
                 code,
                 file,
+                is_std: false,
             })
         } else {
             Err(Error::Io(format!("cannot open {}", path)))
+        }
+    }
+
+    fn from_str(code: &'static str, file: &'static str) -> TokenIter {
+        TokenIter {
+            suffix: code,
+            line: 0,
+            column: 0,
+            code,
+            file,
+            is_std: true,
         }
     }
 
@@ -242,6 +265,7 @@ impl TokenIter {
                 column: self.column,
                 code: self.code,
                 file: self.file,
+                is_std: self.is_std,
             }))
         } else if self.suffix.starts_with(char::is_whitespace) {
             self.skip_whitespace();
@@ -258,6 +282,7 @@ impl TokenIter {
             column: self.column,
             code: self.code,
             file: self.file,
+            is_std: self.is_std,
         };
 
         self.suffix = &self.suffix[len..];
@@ -349,6 +374,7 @@ impl TokenIter {
             "let" => Token::Let(span),
             "struct" => Token::Struct(span),
             "global" => Token::Global(span),
+            "import" => Token::Import(span),
             "true" => Token::Bool(true, span),
             "false" => Token::Bool(false, span),
             _ => Token::Name(span),

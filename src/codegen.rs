@@ -183,7 +183,7 @@ impl<'info> Context<'info> {
             if c.is_ascii_alphanumeric() {
                 self.code.push(c);
             } else if c == '_' {
-                self.add("___");
+                self.add("__");
             } else {
                 self.add(&format!("_{:x}_", c as i32));
             }
@@ -464,7 +464,7 @@ impl<'info> Context<'info> {
                 Type::Float(0) => self.add("    printf(\"%.15g\\n\", hv0);\n}\n"),
                 Type::Bool(0) => self
                     .add("    if (hv0) {printf(\"true\\n\");} else {printf(\"false\\n\");}\n}\n"),
-                _ => self.add("    printf(\"%p\n\" , hv0);\n}\n"),
+                _ => self.add("    printf(\"%p\\n\" , hv0);\n}\n"),
             },
             "ln" => self.add("    printf(\"\\n\");\n}\n"),
             "puts" => self.add("    printf(\"%s\", (char*) hv0);\n}\n"),

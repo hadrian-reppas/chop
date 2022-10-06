@@ -18,6 +18,7 @@ pub fn parse(mut tokens: Tokens) -> Result<Unit, Error> {
             Token::Fn(_) => items.push(parse_fn(&mut tokens)?),
             Token::Struct(_) => items.push(parse_struct(&mut tokens)?),
             Token::Global(_) => items.push(parse_global(&mut tokens)?),
+            Token::Import(_) => items.push(parse_import(&mut tokens)?),
             Token::Eof(_) => return Ok(items),
             token => return Err(Error::Parse(token.span(), "unexpected token".to_string())),
         }
@@ -139,21 +140,6 @@ fn parse_struct(tokens: &mut Tokens) -> Result<Item, Error> {
             name.span,
             "structs must have normal names".to_string(),
         ));
-    } else if name.name.starts_with("to_") && name.name.ends_with("_ptr") {
-        return Err(Error::Parse(
-            name.span,
-            "struct names cannot start with 'to_' and end with '_ptr'".to_string(),
-        ));
-    } else if name.name.starts_with("alloc_") {
-        return Err(Error::Parse(
-            name.span,
-            "struct names cannot start with 'alloc_'".to_string(),
-        ));
-    } else if name.name.starts_with("zalloc_") {
-        return Err(Error::Parse(
-            name.span,
-            "struct names cannot start with 'zalloc_'".to_string(),
-        ));
     }
     if !tokens.peek().is_lbrace() {
         return Err(Error::Parse(
@@ -229,6 +215,21 @@ fn parse_global(tokens: &mut Tokens) -> Result<Item, Error> {
         definition,
         global_span,
         colon_span,
+    })
+}
+
+fn parse_import(tokens: &mut Tokens) -> Result<Item, Error> {
+    let import_span = tokens.next()?.span();
+    let mut path = vec![parse_name(tokens)?];
+    let mut colon_spans = Vec::new();
+    while tokens.peek().is_colon() {
+        colon_spans.push(tokens.next()?.span());
+        path.push(parse_name(tokens)?);
+    }
+    Ok(Item::Import {
+        path,
+        import_span,
+        colon_spans,
     })
 }
 

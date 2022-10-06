@@ -79,6 +79,12 @@ pub enum Item {
         global_span: Span,
         colon_span: Span,
     },
+    Import {
+        path: Vec<Name>,
+
+        import_span: Span,
+        colon_spans: Vec<Span>,
+    },
 }
 
 impl fmt::Debug for Item {
@@ -98,6 +104,7 @@ impl fmt::Debug for Item {
                 definition,
                 ..
             } => write!(f, "Global({name:?}, {ty:?}, {definition:?})"),
+            Item::Import { path, .. } => write!(f, "Import({:?})", path),
         }
     }
 }
