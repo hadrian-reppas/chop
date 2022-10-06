@@ -1,0 +1,6 @@
+fn main {
+    size_of_int 8 == assert
+    size_of_float 8 == assert
+    size_of_byte 1 == assert
+    size_of_bool 1 == assert
+}

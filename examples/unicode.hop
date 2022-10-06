@@ -1,0 +1,13 @@
+fn Δ float float float -> float {
+    let a b c {
+        (b*b - 4*a*c)
+    }
+}
+
+fn main {
+    "🅰️ 1.5" putlns
+    "🅱️ 4.8" putlns
+    "𝛾 -0.5" putlns
+    'Δ' putc ' ' putc
+    1.5 4.8 -0.5 Δ putln
+}

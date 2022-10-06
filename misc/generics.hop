@@ -1,0 +1,11 @@
+fn ** [T] **T -> T {
+    * *
+}
+
+fn swap [T U] T U -> U T {
+    let a b {
+        b a
+    }
+}
+
+fn * [T] *T -> T {*}

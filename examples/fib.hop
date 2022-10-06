@@ -1,0 +1,25 @@
+fn fib int -> int {
+    let n {
+        if n 0 == n 1 == | {
+            n
+        } else {
+            n 1 - fib n 2 - fib +
+        }
+    }
+}
+
+fn main {
+    0 fib 0 == assert
+    1 fib 1 == assert
+    2 fib 1 == assert
+    3 fib 2 == assert
+    4 fib 3 == assert
+    5 fib 5 == assert
+    6 fib 8 == assert
+
+    for 0 to 10 {
+        . put
+        ": " puts
+        fib putln
+    }
+}

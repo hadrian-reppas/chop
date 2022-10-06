@@ -1,0 +1,9 @@
+fn a [T U] T U {~ ~}
+fn b [T] T T {~ ~}
+
+fn z [A B] A B -> B { let _ b {b} }
+
+fn c int int {a}
+fn d int int {b}
+fn e int bool {a} 
+fn f int bool {b} // this should fail

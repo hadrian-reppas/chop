@@ -785,7 +785,7 @@ impl Context {
             _ => {
                 return Err(Error::Type(
                     lbrace_span,
-                    format!("upper bound in for statement should have type 'int'"),
+                    "upper bound in for statement should have type 'int'".to_string(),
                     vec![Note::new(
                         None,
                         format!("stack is {}{stack:?}{}", BLUE.as_str(), RESET.as_str()),

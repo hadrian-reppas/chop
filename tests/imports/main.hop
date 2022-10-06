@@ -1,0 +1,7 @@
+import helper1
+import helper2
+
+fn main {
+    helper1_global assert
+    helper2_global ! assert
+}

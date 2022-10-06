@@ -1,0 +1,7 @@
+fn read_ptrs *int *int -> int int {
+    * swap * swap
+}
+
+fn ** **int -> int {
+    * *
+}

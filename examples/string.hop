@@ -1,0 +1,20 @@
+import std : string
+
+fn main {
+    new_string
+    @ 'a' push
+    @ 'b' push
+    @ 'c' push
+    @ 'ങ' push
+    @ '𢄯' push
+    @ 'Γ' push
+    @ 'x' push
+    @ '𢐎' push
+    @ 'y' push
+    @ 'z' push
+    ..bytes putlns
+    free_string
+
+    "size_of_string: " puts
+    size_of_string putln
+}

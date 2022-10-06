@@ -1,0 +1,21 @@
+import std : string
+
+global expected: *byte { "abcങ𢄯Γx𢐎yz" }
+
+fn main {
+    new_string
+    @ 'a' push
+    @ 'b' push
+    @ 'c' push
+    @ 'ങ' push
+    @ '𢄯' push
+    @ 'Γ' push
+    @ 'x' push
+    @ '𢐎' push
+    @ 'y' push
+    @ 'z' push
+
+    ..bytes expected streq assert
+
+    free_string
+}

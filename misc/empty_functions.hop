@@ -1,0 +1,11 @@
+fn a {}
+
+fn b u8 {}
+
+fn c u8 -> {}
+
+fn d u8 -> u8 {}
+
+fn e -> u8 {}
+
+fn f -> {}

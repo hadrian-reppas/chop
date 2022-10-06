@@ -1,0 +1,52 @@
+fn main {
+    two_vals
+    true bool_to_int 1 == assert
+    false bool_to_int 0 == assert
+    1 2 3 consume_stack
+    no_else
+    else_if
+}
+
+fn two_vals {
+    if true {
+        true 1
+    } else {
+        true 1
+    }
+    1 == assert
+    assert
+}
+
+fn bool_to_int bool -> int {
+    if _ {
+        1
+    } else {
+        0
+    }
+}
+
+fn consume_stack int int int {
+    if 1 == {
+        ~ ~
+    } else {
+        ~ true "str" ~ ~ ~
+    }
+}
+
+fn no_else {
+    if true {
+        1 ~
+    }
+}
+
+fn else_if {
+    true
+    if . {
+
+    } else if _ {
+        true
+    } else {
+        true
+    }
+    assert
+}

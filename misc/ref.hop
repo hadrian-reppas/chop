@@ -1,0 +1,9 @@
+fn main int **byte {
+    ~
+    @ set_to_100
+    putln
+}
+
+fn set_to_100 *int {
+    100 store
+}

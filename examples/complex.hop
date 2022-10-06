@@ -1,0 +1,27 @@
+struct complex {
+    real: float
+    imag: float
+}
+
+fn + complex complex -> complex {
+    let a b {
+        a .real b .real +
+        a .imag b .imag +
+        complex
+    }
+}
+
+fn put complex {
+    let z {
+        z .real put
+        " + " puts
+        z .imag put
+        'j' putc
+    }
+}
+
+fn main {
+    1.0 3.5 complex
+    -0.5 2.1 complex
+    + put ln
+}
