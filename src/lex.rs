@@ -342,9 +342,8 @@ impl TokenIter {
                 if c == '\n' {
                     len += 1;
                     break;
-                } else {
-                    len += c.len_utf8();
                 }
+                len += c.len_utf8();
             }
             self.make_span(len);
             return self.next();

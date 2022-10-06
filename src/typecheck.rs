@@ -216,9 +216,7 @@ impl Kind {
     }
 }
 
-//                 name          id
 pub type FnInfo = (&'static str, usize);
-//                   name          id     bindings
 pub type CallInfo = (&'static str, usize, Vec<GType>);
 
 struct CallGraph {
@@ -391,7 +389,7 @@ impl Context {
     ) -> Result<(GSignature, Vec<GType>), Error> {
         if let Some(signatures) = self.signatures.get(name.name) {
             for (id, signature) in signatures.iter().enumerate() {
-                if let Some(bindings) = self.get_bindings(stack, signature) {
+                if let Some(bindings) = get_bindings(stack, signature) {
                     self.call_graph.insert(name.name, id, bindings.clone());
                     return Ok((signature.clone(), bindings));
                 }
@@ -417,30 +415,6 @@ impl Context {
                 format!("symbol '{}' does not exists", name.name),
                 vec![],
             ))
-        }
-    }
-
-    fn get_bindings(&self, stack: &[GType], signature: &GSignature) -> Option<Vec<GType>> {
-        if signature.params.len() > stack.len() {
-            None
-        } else {
-            let mut bindings = vec![None; signature.params.len()];
-            for (arg, param) in stack.iter().rev().zip(signature.params.iter().rev()) {
-                match param.bind(arg) {
-                    Ok(Some((index, ty))) => {
-                        if let Some(bound) = &bindings[index] {
-                            if bound != &ty {
-                                return None;
-                            }
-                        } else {
-                            bindings[index] = Some(ty);
-                        }
-                    }
-                    Ok(None) => {}
-                    Err(_) => return None,
-                }
-            }
-            Some(bindings.into_iter().flatten().collect())
         }
     }
 
@@ -1211,6 +1185,30 @@ impl Context {
             }
             Item::Import { .. } => unreachable!(),
         }
+    }
+}
+
+fn get_bindings(stack: &[GType], signature: &GSignature) -> Option<Vec<GType>> {
+    if signature.params.len() > stack.len() {
+        None
+    } else {
+        let mut bindings = vec![None; signature.params.len()];
+        for (arg, param) in stack.iter().rev().zip(signature.params.iter().rev()) {
+            match param.bind(arg) {
+                Ok(Some((index, ty))) => {
+                    if let Some(bound) = &bindings[index] {
+                        if bound != &ty {
+                            return None;
+                        }
+                    } else {
+                        bindings[index] = Some(ty);
+                    }
+                }
+                Ok(None) => {}
+                Err(_) => return None,
+            }
+        }
+        Some(bindings.into_iter().flatten().collect())
     }
 }
 

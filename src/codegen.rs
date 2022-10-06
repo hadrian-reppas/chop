@@ -63,7 +63,7 @@ impl<'info> Context<'info> {
                 self.make_type(&Type::convert(ty, &[]));
                 self.add(" hm_");
                 self.escape(field);
-                self.add(";\n")
+                self.add(";\n");
             }
             self.add("};\n");
         }
@@ -349,7 +349,7 @@ impl<'info> Context<'info> {
 
     fn begin_fn(&mut self, name: &str, gid: usize, cid: usize, signature: &Signature) {
         self.counter = signature.params.len();
-        self.stack = signature.params.iter().cloned().enumerate().collect();
+        self.stack = signature.params.iter().copied().enumerate().collect();
 
         self.add("void hf_");
         self.escape(name);
@@ -359,14 +359,14 @@ impl<'info> Context<'info> {
                 self.add(", ");
             }
             self.make_type(param);
-            self.add(&format!(" hv{i}"))
+            self.add(&format!(" hv{i}"));
         }
         for (i, ret) in signature.returns.iter().enumerate() {
             if i > 0 || !signature.params.is_empty() {
                 self.add(", ");
             }
             self.make_type(&ret.inc());
-            self.add(&format!(" hr{i}"))
+            self.add(&format!(" hr{i}"));
         }
         self.add(") {\n");
     }
@@ -559,7 +559,7 @@ impl<'info> Context<'info> {
             Op::Bool(b, _) => {
                 let var = self.push(Type::Bool(0));
                 self.tabs();
-                self.add(&format!("uint8_t hv{var} = {};\n", *b as u8));
+                self.add(&format!("uint8_t hv{var} = {};\n", u8::from(*b)));
             }
             Op::Char(c, _) => {
                 let var = self.push(Type::Int(0));

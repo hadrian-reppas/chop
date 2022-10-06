@@ -164,7 +164,7 @@ fn parse_struct(tokens: &mut Tokens) -> Result<Item, Error> {
             name,
             ty,
             colon_span,
-        })
+        });
     }
 
     let rbrace_span = tokens.next()?.span();

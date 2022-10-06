@@ -36,7 +36,7 @@ impl Error {
     pub fn print(&self) {
         match self {
             Error::Io(msg) => {
-                print!("{}io error:{} {}", RED.as_str(), RESET.as_str(), msg)
+                print!("{}io error:{} {}", RED.as_str(), RESET.as_str(), msg);
             }
             Error::Lex(span, msg) => {
                 println!("{}lex error:{} {msg}", RED.as_str(), RESET.as_str());
@@ -100,7 +100,7 @@ fn print_span(span: Span) {
         space,
         BLUE.as_str(),
         get_carets(span.line_prefix(), span.text)
-    )
+    );
 }
 
 fn get_carets(prefix: &str, text: &str) -> String {
