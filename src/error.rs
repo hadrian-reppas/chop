@@ -4,9 +4,10 @@ use lazy_static::lazy_static;
 use termion::{color, style};
 
 lazy_static! {
-    static ref RED: String = format!("{}{}", color::Fg(color::Red), style::Bold);
-    static ref BLUE: String = format!("{}{}", color::Fg(color::Blue), style::Bold);
-    static ref RESET: String = format!("{}{}", color::Fg(color::Reset), style::Reset);
+    pub static ref RED: String = format!("{}{}", color::Fg(color::Red), style::Bold);
+    pub static ref GREEN: String = format!("{}{}", color::Fg(color::Green), style::Bold);
+    pub static ref BLUE: String = format!("{}{}", color::Fg(color::Blue), style::Bold);
+    pub static ref RESET: String = format!("{}{}", color::Fg(color::Reset), style::Reset);
 }
 
 #[derive(Debug)]
@@ -69,7 +70,7 @@ impl Error {
                 }
             }
             Error::Import(span, msg) => {
-                print!("{}import error:{} {msg}", RED.as_str(), RESET.as_str());
+                println!("{}import error:{} {msg}", RED.as_str(), RESET.as_str());
                 print_span(*span);
             }
         }
@@ -81,18 +82,15 @@ impl Error {
     }
 }
 
-// TOOD: remove pub
-pub fn print_span(span: Span) {
+fn print_span(span: Span) {
     let line_num = format!("{}", span.line + 1);
     let space = " ".repeat(line_num.len());
     println!(
-        "{}{}-->{} {}:{}:{}",
+        "{}{}-->{} {}",
         space,
         BLUE.as_str(),
         RESET.as_str(),
-        span.file,
-        span.line + 1,
-        span.column + 1
+        span.location()
     );
 
     println!("{} {}|", space, BLUE.as_str());

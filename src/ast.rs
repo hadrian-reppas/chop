@@ -178,6 +178,7 @@ pub enum Stmt {
         rbrace_span: Span,
 
         else_part: Option<ElsePart>,
+        is_else_if: bool,
     },
     While {
         test: Group,
@@ -222,6 +223,26 @@ impl fmt::Debug for Stmt {
                 low, high, body, ..
             } => write!(f, "For({low:?}, {high:?}, {body:?})"),
             Stmt::Let { names, body, .. } => write!(f, "Let({names:?}, {body:?})"),
+        }
+    }
+}
+
+impl Stmt {
+    pub fn brace_spans(&self) -> (Span, Span) {
+        match self {
+            Stmt::If {
+                lbrace_span,
+                rbrace_span,
+                ..
+            } => (*lbrace_span, *rbrace_span),
+            _ => panic!(),
+        }
+    }
+
+    pub fn set_else_if(&mut self) {
+        match self {
+            Stmt::If { is_else_if, .. } => *is_else_if = true,
+            _ => panic!(),
         }
     }
 }

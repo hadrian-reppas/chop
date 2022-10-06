@@ -595,12 +595,7 @@ impl<'info> Context<'info> {
             self.tabs();
             self.add(&format!(
                 "printf({:?});\n",
-                format!(
-                    "panicked at {}:{}:{}\n",
-                    span.file,
-                    span.line + 1,
-                    span.column + 1
-                )
+                format!("panicked at {}\n", span.location())
             ));
             self.tabs();
             self.add("exit(EXIT_FAILURE);\n");
@@ -611,12 +606,7 @@ impl<'info> Context<'info> {
             self.tabs();
             self.add(&format!(
                 "    printf({:?});\n",
-                format!(
-                    "assertion failed at {}:{}:{}\n",
-                    span.file,
-                    span.line + 1,
-                    span.column + 1
-                )
+                format!("assertion failed at {}\n", span.location())
             ));
             self.tabs();
             self.add("    exit(EXIT_FAILURE);\n");

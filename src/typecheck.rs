@@ -1,12 +1,11 @@
 use crate::ast::*;
 use crate::builtins::BUILTINS;
 use crate::codegen::Type;
-use crate::error::{Error, Note};
+use crate::error::{Error, Note, BLUE, GREEN, RESET};
 use crate::lex::{leak, Span};
 
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::fmt;
-use termion::{color, style};
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub enum GType {
@@ -352,19 +351,12 @@ impl Context {
     fn update_stack(&mut self, stack: &mut Vec<GType>, name: Name) -> Result<(), Error> {
         if name.name == "DEBUG_STACK" {
             println!(
-                "{}{}DEBUG_STACK{}{} {}:{}:{} {}{}{:?}{}{}",
-                color::Fg(color::Green),
-                style::Bold,
-                color::Fg(color::Reset),
-                style::Reset,
-                name.span.file,
-                name.span.line + 1,
-                name.span.column + 1,
-                color::Fg(color::Blue),
-                style::Bold,
-                stack,
-                color::Fg(color::Reset),
-                style::Reset
+                "{}DEBUG_STACK{} {}{stack:?}{} ({})",
+                GREEN.as_str(),
+                RESET.as_str(),
+                BLUE.as_str(),
+                RESET.as_str(),
+                name.span.location(),
             );
         }
 
@@ -404,11 +396,14 @@ impl Context {
                     return Ok((signature.clone(), bindings));
                 }
             }
-            let mut notes = vec![Note::new(None, format!("stack is {:?}", stack))];
+            let mut notes = vec![Note::new(
+                None,
+                format!("stack is {}{stack:?}{}", BLUE.as_str(), RESET.as_str()),
+            )];
             for signature in signatures {
                 notes.push(Note::new(
                     None,
-                    format!("'{}' has signature {:?}", name.name, signature),
+                    format!("'{}' has signature {signature:?}", name.name),
                 ));
             }
             Err(Error::Type(
@@ -515,7 +510,14 @@ impl Context {
                                     None,
                                     format!("delcare type is [{:?}]", GType::new(*ty, &None)),
                                 ),
-                                Note::new(None, format!("stack is {:?}", stack)),
+                                Note::new(
+                                    None,
+                                    format!(
+                                        "stack is {}{stack:?}{}",
+                                        BLUE.as_str(),
+                                        RESET.as_str()
+                                    ),
+                                ),
                             ],
                         ))
                     }
@@ -541,8 +543,17 @@ impl Context {
                 lbrace_span,
                 rbrace_span,
                 else_part,
+                is_else_if,
                 ..
-            } => self.check_if(stack, test, body, *lbrace_span, *rbrace_span, else_part),
+            } => self.check_if(
+                stack,
+                test,
+                body,
+                *lbrace_span,
+                *rbrace_span,
+                else_part,
+                *is_else_if,
+            ),
             Stmt::Let {
                 names,
                 body,
@@ -568,6 +579,7 @@ impl Context {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn check_if(
         &mut self,
         stack: &mut Vec<GType>,
@@ -576,6 +588,7 @@ impl Context {
         lbrace_span: Span,
         rbrace_span: Span,
         else_part: &Option<ElsePart>,
+        is_else_if: bool,
     ) -> Result<(), Error> {
         for op in test {
             self.check_op(stack, op)?;
@@ -585,13 +598,30 @@ impl Context {
             return Err(Error::Type(
                 lbrace_span,
                 "expected a 'bool' for if statement".to_string(),
-                vec![Note::new(None, format!("stack is {:?}", stack))],
+                vec![Note::new(
+                    None,
+                    format!("stack is {}{stack:?}{}", BLUE.as_str(), RESET.as_str()),
+                )],
             ));
         }
         stack.pop();
 
         if let Some(else_part) = else_part {
-            let stack_before = format!("before if block, stack is {:?}", stack);
+            let stack_before = if is_else_if {
+                format!(
+                    "before else if block, stack is {}{stack:?}{} ({})",
+                    BLUE.as_str(),
+                    RESET.as_str(),
+                    lbrace_span.location()
+                )
+            } else {
+                format!(
+                    "before if block, stack is {}{stack:?}{} ({})",
+                    BLUE.as_str(),
+                    RESET.as_str(),
+                    lbrace_span.location()
+                )
+            };
             let mut else_stack = stack.clone();
             for stmt in body {
                 self.check_stmt(stack, stmt)?;
@@ -606,8 +636,36 @@ impl Context {
                     "if and else blocks have mismatched stacks".to_string(),
                     vec![
                         Note::new(None, stack_before),
-                        Note::new(None, format!("after if block, stack is {:?}", stack)),
-                        Note::new(None, format!("after else block, stack is {:?}", else_stack)),
+                        if is_else_if {
+                            Note::new(
+                                None,
+                                format!(
+                                    "after else if block, stack is {}{stack:?}{} ({})",
+                                    BLUE.as_str(),
+                                    RESET.as_str(),
+                                    rbrace_span.location()
+                                ),
+                            )
+                        } else {
+                            Note::new(
+                                None,
+                                format!(
+                                    "after if block, stack is {}{stack:?}{} ({})",
+                                    BLUE.as_str(),
+                                    RESET.as_str(),
+                                    rbrace_span.location()
+                                ),
+                            )
+                        },
+                        Note::new(
+                            None,
+                            format!(
+                                "after else block, stack is {}{else_stack:?}{} ({})",
+                                BLUE.as_str(),
+                                RESET.as_str(),
+                                else_part.rbrace_span.location(),
+                            ),
+                        ),
                     ],
                 ));
             }
@@ -623,9 +681,22 @@ impl Context {
                     vec![
                         Note::new(
                             None,
-                            format!("before if block, stack is {:?}", stack_before),
+                            format!(
+                                "before if block, stack is {}{stack_before:?}{} ({})",
+                                BLUE.as_str(),
+                                RESET.as_str(),
+                                lbrace_span.location()
+                            ),
                         ),
-                        Note::new(None, format!("after if block, stack is {:?}", stack)),
+                        Note::new(
+                            None,
+                            format!(
+                                "after if block, stack is {}{stack:?}{} ({})",
+                                BLUE.as_str(),
+                                RESET.as_str(),
+                                rbrace_span.location()
+                            ),
+                        ),
                     ],
                 ));
             }
@@ -650,7 +721,10 @@ impl Context {
                     if stack.is_empty() { "" } else { "only " },
                     stack.len()
                 ),
-                vec![Note::new(None, format!("stack is {stack:?}"))],
+                vec![Note::new(
+                    None,
+                    format!("stack is {}{stack:?}{}", BLUE.as_str(), RESET.as_str()),
+                )],
             ));
         }
 
@@ -683,28 +757,22 @@ impl Context {
         lbrace_span: Span,
         rbrace_span: Span,
     ) -> Result<(), Error> {
-        let mut stack_before = stack.clone();
+        let stack_before = stack.clone();
         for op in low {
             self.check_op(stack, op)?;
         }
 
-        let iter_type = match stack.pop() {
-            Some(GType::Primitive(Primitive::Int)) => GType::Primitive(Primitive::Int),
-            Some(GType::Primitive(Primitive::Byte)) => GType::Primitive(Primitive::Byte),
-            Some(ty) => {
-                stack_before.push(ty);
+        match stack.pop() {
+            Some(GType::Primitive(Primitive::Int)) => {}
+            _ => {
                 return Err(Error::Type(
                     to_span,
-                    "lower bound in for statement should be an 'int' or 'byte'".to_string(),
-                    vec![Note::new(None, format!("stack is {stack_before:?}"))],
+                    "lower bound in for statement should be an 'int'".to_string(),
+                    vec![Note::new(
+                        None,
+                        format!("stack is {}{stack:?}{}", BLUE.as_str(), RESET.as_str()),
+                    )],
                 ));
-            }
-            None => {
-                return Err(Error::Type(
-                    to_span,
-                    "lower bound in for statement should be an 'int' or 'byte'".to_string(),
-                    vec![Note::new(None, "stack is empty".to_string())],
-                ))
             }
         };
 
@@ -713,25 +781,20 @@ impl Context {
         }
 
         match stack.pop() {
-            Some(ty) if ty == iter_type => {}
-            Some(ty) => {
-                stack_before.push(ty);
+            Some(GType::Primitive(Primitive::Int)) => {}
+            _ => {
                 return Err(Error::Type(
                     lbrace_span,
-                    format!("upper bound in for statement should have type '{iter_type:?}'"),
-                    vec![Note::new(None, format!("stack is {stack_before:?}"))],
+                    format!("upper bound in for statement should have type 'int'"),
+                    vec![Note::new(
+                        None,
+                        format!("stack is {}{stack:?}{}", BLUE.as_str(), RESET.as_str()),
+                    )],
                 ));
-            }
-            None => {
-                return Err(Error::Type(
-                    lbrace_span,
-                    format!("upper bound in for statement should have type '{iter_type:?}'"),
-                    vec![Note::new(None, "stack is empty".to_string())],
-                ))
             }
         };
 
-        stack.push(iter_type);
+        stack.push(GType::Primitive(Primitive::Int));
         for stmt in body {
             self.check_stmt(stack, stmt)?;
         }
@@ -741,8 +804,22 @@ impl Context {
                 rbrace_span,
                 "stack does not match the stack before the for block".to_string(),
                 vec![
-                    Note::new(None, format!("before for block, stack is {stack_before:?}")),
-                    Note::new(None, format!("after for block, stack is {stack:?}")),
+                    Note::new(
+                        None,
+                        format!(
+                            "before for block, stack is {}{stack_before:?}{}",
+                            BLUE.as_str(),
+                            RESET.as_str()
+                        ),
+                    ),
+                    Note::new(
+                        None,
+                        format!(
+                            "after for block, stack is {}{stack:?}{}",
+                            BLUE.as_str(),
+                            RESET.as_str()
+                        ),
+                    ),
                 ],
             ))
         } else {
@@ -768,7 +845,10 @@ impl Context {
             return Err(Error::Type(
                 lbrace_span,
                 "expected a 'bool' for while statement".to_string(),
-                vec![Note::new(None, format!("stack is {:?}", stack))],
+                vec![Note::new(
+                    None,
+                    format!("stack is {}{:?}{}", BLUE.as_str(), stack, RESET.as_str()),
+                )],
             ));
         }
         stack.pop();
@@ -784,9 +864,20 @@ impl Context {
                 vec![
                     Note::new(
                         None,
-                        format!("before while block, stack is {stack_before:?}"),
+                        format!(
+                            "before while block, stack is {}{stack_before:?}{}",
+                            BLUE.as_str(),
+                            RESET.as_str()
+                        ),
                     ),
-                    Note::new(None, format!("after while block, stack is {stack:?}")),
+                    Note::new(
+                        None,
+                        format!(
+                            "after while block, stack is {}{stack:?}{}",
+                            BLUE.as_str(),
+                            RESET.as_str()
+                        ),
+                    ),
                 ],
             ))
         } else {
@@ -929,7 +1020,10 @@ impl Context {
                     _ => Err(Error::Type(
                         *span,
                         "expression group yields multiple values".to_string(),
-                        vec![Note::new(None, format!("stack is {stack:?}"))],
+                        vec![Note::new(
+                            None,
+                            format!("stack is {}{stack:?}{}", BLUE.as_str(), RESET.as_str()),
+                        )],
                     )),
                 }
             }

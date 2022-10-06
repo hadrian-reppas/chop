@@ -324,30 +324,50 @@ fn parse_if(tokens: &mut Tokens) -> Result<Stmt, Error> {
     let (test, lbrace_span) = parse_test(tokens)?;
     let (body, rbrace_span) = parse_body(tokens)?;
 
-    // TODO: parse `else if`
     if tokens.peek().is_else() {
         let else_span = tokens.next()?.span();
-        if tokens.peek().is_lbrace() {
-            let else_lbrace_span = tokens.next()?.span();
-            let (else_body, else_rbrace_span) = parse_body(tokens)?;
-            Ok(Stmt::If {
-                test,
-                body,
-                if_span,
-                lbrace_span,
-                rbrace_span,
-                else_part: Some(ElsePart {
-                    body: else_body,
-                    else_span,
-                    lbrace_span: else_lbrace_span,
-                    rbrace_span: else_rbrace_span,
-                }),
-            })
-        } else {
-            Err(Error::Parse(
-                tokens.peek().span(),
-                "expected '{'".to_string(),
-            ))
+        match tokens.peek() {
+            Token::LBrace(_) => {
+                let else_lbrace_span = tokens.next()?.span();
+                let (else_body, else_rbrace_span) = parse_body(tokens)?;
+                Ok(Stmt::If {
+                    test,
+                    body,
+                    if_span,
+                    lbrace_span,
+                    rbrace_span,
+                    else_part: Some(ElsePart {
+                        body: else_body,
+                        else_span,
+                        lbrace_span: else_lbrace_span,
+                        rbrace_span: else_rbrace_span,
+                    }),
+                    is_else_if: false,
+                })
+            }
+            Token::If(_) => {
+                let mut else_body = parse_if(tokens)?;
+                else_body.set_else_if();
+                let (else_lbrace_span, else_rbrace_span) = else_body.brace_spans();
+                Ok(Stmt::If {
+                    test,
+                    body,
+                    if_span,
+                    lbrace_span,
+                    rbrace_span,
+                    else_part: Some(ElsePart {
+                        body: vec![else_body],
+                        else_span,
+                        lbrace_span: else_lbrace_span,
+                        rbrace_span: else_rbrace_span,
+                    }),
+                    is_else_if: false,
+                })
+            }
+            other => Err(Error::Parse(
+                other.span(),
+                "expected '{' or 'if'".to_string(),
+            )),
         }
     } else {
         Ok(Stmt::If {
@@ -357,6 +377,7 @@ fn parse_if(tokens: &mut Tokens) -> Result<Stmt, Error> {
             lbrace_span,
             rbrace_span,
             else_part: None,
+            is_else_if: false,
         })
     }
 }

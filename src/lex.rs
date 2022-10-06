@@ -45,6 +45,10 @@ impl Span {
             is_std: false,
         }
     }
+
+    pub fn location(self) -> String {
+        format!("{}:{}:{}", self.file, self.line + 1, self.column + 1)
+    }
 }
 
 #[derive(Clone, Debug)]
