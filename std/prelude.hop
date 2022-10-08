@@ -1,0 +1,5 @@
+fn swap [T U] T U -> U T {
+    let t u {
+        u t
+    }
+}

@@ -3,6 +3,7 @@ fn main {
     minus
     times
     div
+    power
 }
 
 fn aeq float float -> bool {
@@ -41,4 +42,10 @@ fn div {
     21 4 / 5 == assert
     52.4 13.1 / 4.0 aeq assert
     86 to_byte 2 to_byte / 43 to_byte == assert
+}
+
+fn power {
+    2.0 3.0 pow 8.0 aeq assert
+    -1.0 2.0 pow 1.0 aeq assert
+    2.0 0.5 pow 1.4142135623730951 aeq assert
 }

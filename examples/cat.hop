@@ -1,0 +1,16 @@
+import std : prelude
+
+fn main int **byte -> int {
+    swap
+    if 2 != {
+        ~ "USAGE: cat <filename>" putlns 1
+    } else {
+        1 + *
+        read_file
+        if . 0 to_byte_ptr == {
+            ~ 1
+        } else {
+            putlns 0
+        }
+    }
+}

@@ -1,4 +1,8 @@
-fn quadform f64 f64 f64 -> f64 f64 {
+fn sqrt float -> float {
+    0.5 pow
+}
+
+fn quadform float float float -> float float {
     let a b c {
         (b*b - 4*a*c) sqrt
         a b c
@@ -8,3 +12,5 @@ fn quadform f64 f64 f64 -> f64 f64 {
         ((-b - Δ)/(2*a))
     }
 }
+
+fn main {}
