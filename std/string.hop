@@ -10,20 +10,24 @@ fn new_string -> string {
 
 fn push *string int {
     if . 128 < {
-        to_byte std_string_push_one
-    } else { if . 2048 < {
-        std_string_two_bytes std_string_push_two
-    } else { if . 65536 < {
-        std_string_three_bytes std_string_push_three
+        to_byte std_push_one
+    } else if . 2048 < {
+        std_two_bytes std_push_two
+    } else if . 65536 < {
+        std_three_bytes std_push_three
     } else {
-        std_string_four_bytes std_string_push_four
-    }}}
+        std_four_bytes std_push_four
+    }
 }
 
-fn std_string_push_one *string byte {
+fn push *string *byte {
+    ~ ~ panic
+}
+
+fn std_push_one *string byte {
     let s b {
         if s .length * 2 + s .capacity * >= {
-            s std_string_grow_string
+            s std_grow_string
         }
         s .bytes * s .length * + b write
         s .bytes * s .length * + 1 + 0 to_byte write
@@ -31,10 +35,10 @@ fn std_string_push_one *string byte {
     }
 }
 
-fn std_string_push_two *string byte byte {
+fn std_push_two *string byte byte {
     let s b1 b2 {
         if s .length * 3 + s .capacity * >= {
-            s std_string_grow_string
+            s std_grow_string
         }
         s .bytes * s .length * + b1 write
         s .bytes * s .length * + 1 + b2 write
@@ -43,10 +47,10 @@ fn std_string_push_two *string byte byte {
     }
 }
 
-fn std_string_push_three *string byte byte byte {
+fn std_push_three *string byte byte byte {
     let s b1 b2 b3 {
         if s .length * 4 + s .capacity * >= {
-            s std_string_grow_string
+            s std_grow_string
         }
         s .bytes * s .length * + b1 write
         s .bytes * s .length * + 1 + b2 write
@@ -56,10 +60,10 @@ fn std_string_push_three *string byte byte byte {
     }
 }
 
-fn std_string_push_four *string byte byte byte byte {
+fn std_push_four *string byte byte byte byte {
     let s b1 b2 b3 b4 {
         if s .length * 5 + s .capacity * >= {
-            s std_string_grow_string
+            s std_grow_string
         }
         s .bytes * s .length * + b1 write
         s .bytes * s .length * + 1 + b2 write
@@ -70,14 +74,14 @@ fn std_string_push_four *string byte byte byte byte {
     }
 }
 
-fn std_string_two_bytes int -> byte byte {
+fn std_two_bytes int -> byte byte {
     let c {
         c 6 >> 31 & 192 | to_byte
         c 63 & 128 | to_byte
     }
 }
 
-fn std_string_three_bytes int -> byte byte byte {
+fn std_three_bytes int -> byte byte byte {
     let c {
         c 12 >> 15 & 224 | to_byte
         c 6 >> 63 & 128 | to_byte
@@ -85,7 +89,7 @@ fn std_string_three_bytes int -> byte byte byte {
     }
 }
 
-fn std_string_four_bytes int -> byte byte byte byte {
+fn std_four_bytes int -> byte byte byte byte {
     let c {
         c 18 >> 7 & 240 | to_byte
         c 12 >> 63 & 128 | to_byte
@@ -94,7 +98,7 @@ fn std_string_four_bytes int -> byte byte byte byte {
     }
 }
 
-fn std_string_grow_string *string {
+fn std_grow_string *string {
     ..capacity * 2 *
     if . 10 > {}
     else { ~ 10 }

@@ -4,7 +4,6 @@ use crate::typecheck::{flatten_expr, GSignature, GType, Kind, Primitive, TypeInf
 use std::collections::{hash_map, HashMap, HashSet};
 use std::fmt;
 
-//                       name                 id     concrete signatures
 type Concrete = HashMap<&'static str, HashMap<usize, Vec<Signature>>>;
 type Done = HashSet<(&'static str, usize, Vec<Type>)>;
 
@@ -518,6 +517,29 @@ impl<'info> Context<'info> {
             "size_of_float" => self.add("    *hr0 = 8;\n}\n"),
             "size_of_byte" => self.add("    *hr0 = 1;\n}\n"),
             "size_of_bool" => self.add("    *hr0 = 1;\n}\n"),
+            "read_file" => self.add(
+                "    char* buf = NULL;
+    long length;
+    FILE* f = fopen ((char*) hv0, \"r\");
+    if (f) {
+        fseek(f, 0, SEEK_END);
+        length = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        buf = malloc(length);
+        if (buf) {
+            fread(buf, 1, length, f);
+        }
+        fclose(f);
+    }
+    *hr0 = (uint8_t*) buf;\n}\n",
+            ),
+            "write_to_file" => self.add(
+                "   FILE *f = fopen((char*) hv1, \"a\");
+    if (f) {
+        fputs((char*) hv0, f);
+        fclose(f);
+    }\n}\n",
+            ),
             "DEBUG_STACK" => self.add("}\n"),
             _ => unreachable!(),
         }

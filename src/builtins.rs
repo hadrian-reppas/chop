@@ -257,8 +257,9 @@ lazy_static! {
         ("zalloc_bool", vec![sig!("zalloc_bool", => ptr!(BOOL))]),
         ("alloc_bool_arr", vec![sig!("alloc_bool_arr", INT => ptr!(BOOL))]),
         ("zalloc_bool_arr", vec![sig!("zalloc_bool_arr", INT => ptr!(BOOL))]),
+        ("read_file", vec![sig!("read_file", ptr!(BYTE) => ptr!(BYTE))]),
+        ("write_to_file", vec![sig!("write_to_file", ptr!(BYTE) ptr!(BYTE) =>)]),
         ("DEBUG_STACK", vec![sig!("DEBUG_STACK", =>)]),
-        // TODO: files
         // TODO: stdin
     ]);
 }

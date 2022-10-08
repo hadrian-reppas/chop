@@ -7,10 +7,12 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 const STRING: &str = include_str!("../std/string.hop");
+const PRELUDE: &str = include_str!("../std/prelude.hop");
 
 fn std_unit(path: &[&'static str], err_span: Span) -> Result<Vec<Item>, Error> {
     match path {
         ["std", "string"] => Ok(parse(Tokens::from_str(STRING, "std/string.hop")?)?),
+        ["std", "prelude"] => Ok(parse(Tokens::from_str(PRELUDE, "std/prelude.hop")?)?),
         _ => Err(Error::Import(
             err_span,
             format!("cannot find {} in the standard library", path.join(":")),
