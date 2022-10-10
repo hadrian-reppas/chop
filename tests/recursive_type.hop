@@ -1,0 +1,9 @@
+struct list {
+    value: int
+    next: list
+}
+
+fn main {
+    alloc_list
+    .value * putln
+}

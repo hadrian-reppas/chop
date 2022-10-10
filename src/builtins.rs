@@ -1,6 +1,6 @@
 use crate::ast::Name;
 use crate::lex::Span;
-use crate::typecheck::{GSignature, GType, Kind, Primitive};
+use crate::typecheck::{GSignature, GType, Kind};
 
 use lazy_static::lazy_static;
 use std::collections::HashMap;
@@ -20,7 +20,7 @@ macro_rules! sig {
 
 macro_rules! prim {
     ($($var:ident => $name:ident),*) => {
-        $(const $name: GType = GType::Primitive(Primitive::$var);)*
+        $(const $name: GType = GType::$var(0);)*
     };
 }
 
@@ -95,13 +95,13 @@ prim! {Byte => BYTE, Int => INT, Float => FLOAT, Bool => BOOL}
 
 macro_rules! ptr {
     ($ty:expr) => {
-        GType::Pointer(Box::new($ty))
+        $ty.inc()
     };
 }
 
 macro_rules! gen {
     ($id:expr) => {
-        GType::Generic($id)
+        GType::Generic($id, 0)
     };
 }
 

@@ -151,14 +151,14 @@ impl fmt::Debug for Generics {
 #[derive(Clone, Copy)]
 pub enum PType {
     Normal(Name),
-    Pointer(Name, usize),
+    Pointer(Name, Name),
 }
 
 impl fmt::Debug for PType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             PType::Normal(name) => write!(f, "PType({name:?})"),
-            PType::Pointer(name, depth) => write!(f, "PType({}{name:?})", "*".repeat(*depth)),
+            PType::Pointer(stars, name) => write!(f, "PType({name:?}, {stars:?})"),
         }
     }
 }

@@ -1,5 +1,5 @@
 use crate::ast::{ElsePart, Expr, Name, Op, Stmt};
-use crate::typecheck::{flatten_expr, GSignature, GType, Kind, Primitive, TypeInfo};
+use crate::typecheck::{flatten_expr, GSignature, GType, Kind, TypeInfo};
 
 use std::collections::{hash_map, HashMap, HashSet};
 use std::fmt;
@@ -978,6 +978,26 @@ impl Type {
         }
     }
 
+    pub fn deref_n(self, n: usize) -> Option<Type> {
+        match self {
+            Type::Custom(name, depth) => Some(Type::Custom(name, depth.checked_sub(n)?)),
+            Type::Byte(depth) => Some(Type::Byte(depth.checked_sub(n)?)),
+            Type::Int(depth) => Some(Type::Int(depth.checked_sub(n)?)),
+            Type::Float(depth) => Some(Type::Float(depth.checked_sub(n)?)),
+            Type::Bool(depth) => Some(Type::Bool(depth.checked_sub(n)?)),
+        }
+    }
+
+    pub fn ref_n(self, n: usize) -> Type {
+        match self {
+            Type::Custom(name, depth) => Type::Custom(name, depth + n),
+            Type::Byte(depth) => Type::Byte(depth + n),
+            Type::Int(depth) => Type::Int(depth + n),
+            Type::Float(depth) => Type::Float(depth + n),
+            Type::Bool(depth) => Type::Bool(depth + n),
+        }
+    }
+
     pub fn depth(self) -> usize {
         match self {
             Type::Custom(_, depth) => depth,
@@ -990,15 +1010,12 @@ impl Type {
 
     fn convert(ty: &GType, binds: &[Type]) -> Type {
         match ty {
-            GType::Primitive(prim) => match prim {
-                Primitive::Int => Type::Int(0),
-                Primitive::Float => Type::Float(0),
-                Primitive::Byte => Type::Byte(0),
-                Primitive::Bool => Type::Bool(0),
-            },
-            GType::Pointer(ty) => Type::convert(ty, binds).inc(),
-            GType::Custom(name) => Type::Custom(name.name, 0),
-            GType::Generic(index) => binds[*index],
+            GType::Int(depth) => Type::Int(*depth),
+            GType::Float(depth) => Type::Float(*depth),
+            GType::Byte(depth) => Type::Byte(*depth),
+            GType::Bool(depth) => Type::Bool(*depth),
+            GType::Custom(name, depth) => Type::Custom(name, *depth),
+            GType::Generic(index, depth) => binds[*index].ref_n(*depth),
         }
     }
 }

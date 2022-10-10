@@ -7,116 +7,170 @@ use crate::lex::{leak, Span};
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::fmt;
 
+// TODO: Check for recursive structs
+
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub enum GType {
-    Primitive(Primitive),
-    Pointer(Box<GType>),
-    Generic(usize),
-    Custom(Name),
+    Int(usize),
+    Float(usize),
+    Byte(usize),
+    Bool(usize),
+    Generic(usize, usize),
+    Custom(&'static str, usize),
 }
 
 impl fmt::Debug for GType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            GType::Primitive(Primitive::Int) => write!(f, "int"),
-            GType::Primitive(Primitive::Float) => write!(f, "float"),
-            GType::Primitive(Primitive::Byte) => write!(f, "byte"),
-            GType::Primitive(Primitive::Bool) => write!(f, "bool"),
-            GType::Pointer(ty) => write!(f, "*{ty:?}"),
-            GType::Generic(n) => write!(f, "T{}", n),
-            GType::Custom(name) => write!(f, "{:?}", name),
+            GType::Int(depth) => write!(f, "{}int", "*".repeat(*depth)),
+            GType::Float(depth) => write!(f, "{}float", "*".repeat(*depth)),
+            GType::Byte(depth) => write!(f, "{}byte", "*".repeat(*depth)),
+            GType::Bool(depth) => write!(f, "{}bool", "*".repeat(*depth)),
+            GType::Generic(index, depth) => write!(f, "{}T{}", "*".repeat(*depth), index),
+            GType::Custom(name, depth) => write!(f, "{}{}", "*".repeat(*depth), name),
         }
     }
 }
 
 impl GType {
     fn new(ty: PType, generics: &Option<Generics>) -> GType {
-        match ty {
-            PType::Normal(name) => match name.name {
-                "byte" => GType::Primitive(Primitive::Byte),
-                "int" => GType::Primitive(Primitive::Int),
-                "float" => GType::Primitive(Primitive::Float),
-                "bool" => GType::Primitive(Primitive::Bool),
-                _ => {
-                    if let Some(generics) = generics {
-                        if let Some(i) = generics.names.iter().position(|gen| gen.name == name.name)
-                        {
-                            GType::Generic(i)
-                        } else {
-                            GType::Custom(name)
-                        }
+        let (name, depth) = match ty {
+            PType::Normal(name) => (name.name, 0),
+            PType::Pointer(stars, name) => (name.name, stars.name.len()),
+        };
+        match name {
+            "byte" => GType::Byte(depth),
+            "int" => GType::Int(depth),
+            "float" => GType::Float(depth),
+            "bool" => GType::Bool(depth),
+            _ => {
+                if let Some(generics) = generics {
+                    if let Some(index) = generics.names.iter().position(|gen| gen.name == name) {
+                        GType::Generic(index, depth)
                     } else {
-                        GType::Custom(name)
+                        GType::Custom(name, depth)
                     }
+                } else {
+                    GType::Custom(name, depth)
                 }
-            },
-            PType::Pointer(name, depth) => {
-                let mut ty = GType::new(PType::Normal(name), generics);
-                for _ in 0..depth {
-                    ty = GType::Pointer(Box::new(ty));
-                }
-                ty
             }
         }
     }
 
     fn compatible(&self, other: &GType) -> bool {
         match (self, other) {
-            (GType::Generic(_), _) | (_, GType::Generic(_)) => true,
-            (GType::Primitive(s), GType::Primitive(o)) => s == o,
-            (GType::Custom(s), GType::Custom(o)) => s.name == o.name,
-            (GType::Pointer(s), GType::Pointer(o)) => s.compatible(o),
+            (GType::Generic(_, depth), _) => other.depth() >= *depth,
+            (_, GType::Generic(_, depth)) => self.depth() >= *depth,
+            (GType::Custom(s_name, s_depth), GType::Custom(o_name, o_depth)) => {
+                s_name == o_name && s_depth == o_depth
+            }
+            (GType::Bool(s_depth), GType::Bool(o_depth)) => s_depth == o_depth,
+            (GType::Byte(s_depth), GType::Byte(o_depth)) => s_depth == o_depth,
+            (GType::Int(s_depth), GType::Int(o_depth)) => s_depth == o_depth,
+            (GType::Float(s_depth), GType::Float(o_depth)) => s_depth == o_depth,
             _ => false,
+        }
+    }
+
+    fn depth(&self) -> usize {
+        match self {
+            GType::Int(depth) => *depth,
+            GType::Float(depth) => *depth,
+            GType::Byte(depth) => *depth,
+            GType::Bool(depth) => *depth,
+            GType::Generic(_, depth) => *depth,
+            GType::Custom(_, depth) => *depth,
         }
     }
 
     fn bind(&self, other: &GType) -> Result<Option<(usize, GType)>, ()> {
         match (self, other) {
-            (GType::Generic(index), other) => Ok(Some((*index, other.clone()))),
-            (GType::Custom(self_name), GType::Custom(other_name)) => {
-                if self_name.name == other_name.name {
+            (GType::Int(s_depth), GType::Int(o_depth))
+            | (GType::Float(s_depth), GType::Float(o_depth))
+            | (GType::Byte(s_depth), GType::Byte(o_depth))
+            | (GType::Bool(s_depth), GType::Bool(o_depth)) => {
+                if s_depth == o_depth {
                     Ok(None)
                 } else {
                     Err(())
                 }
             }
-            (GType::Primitive(self_prim), GType::Primitive(other_prim)) => {
-                if self_prim == other_prim {
+            (GType::Generic(index, depth), other) => {
+                if let Some(ty) = other.deref_n(*depth) {
+                    Ok(Some((*index, ty)))
+                } else {
+                    Err(())
+                }
+            }
+            (GType::Custom(s_name, s_depth), GType::Custom(o_name, o_depth)) => {
+                if s_name == o_name && s_depth == o_depth {
                     Ok(None)
                 } else {
                     Err(())
                 }
             }
-            (GType::Pointer(self_ty), GType::Pointer(other_ty)) => self_ty.bind(other_ty),
             _ => Err(()),
+        }
+    }
+
+    fn deref_n(&self, n: usize) -> Option<GType> {
+        match self {
+            GType::Int(depth) => Some(GType::Int(depth.checked_sub(n)?)),
+            GType::Float(depth) => Some(GType::Float(depth.checked_sub(n)?)),
+            GType::Byte(depth) => Some(GType::Byte(depth.checked_sub(n)?)),
+            GType::Bool(depth) => Some(GType::Bool(depth.checked_sub(n)?)),
+            GType::Generic(index, depth) => Some(GType::Generic(*index, depth.checked_sub(n)?)),
+            GType::Custom(name, depth) => Some(GType::Custom(name, depth.checked_sub(n)?)),
+        }
+    }
+
+    fn ref_n(&self, n: usize) -> GType {
+        match self {
+            GType::Byte(depth) => GType::Byte(*depth + n),
+            GType::Int(depth) => GType::Int(*depth + n),
+            GType::Float(depth) => GType::Float(*depth + n),
+            GType::Bool(depth) => GType::Bool(*depth + n),
+            GType::Generic(index, depth) => GType::Generic(*index, *depth + n),
+            GType::Custom(name, depth) => GType::Custom(name, *depth + n),
+        }
+    }
+
+    pub fn inc(self) -> GType {
+        match self {
+            GType::Byte(depth) => GType::Byte(depth + 1),
+            GType::Int(depth) => GType::Int(depth + 1),
+            GType::Float(depth) => GType::Float(depth + 1),
+            GType::Bool(depth) => GType::Bool(depth + 1),
+            GType::Generic(index, depth) => GType::Generic(index, depth + 1),
+            GType::Custom(name, depth) => GType::Custom(name, depth + 1),
         }
     }
 
     pub fn bind_(&self, other: Type) -> Result<Option<(usize, Type)>, ()> {
         match (self, other) {
-            (GType::Generic(index), other) => Ok(Some((*index, other))),
-            (GType::Custom(self_name), Type::Custom(other_name, depth)) => {
-                if self_name.name == other_name && depth == 0 {
+            (GType::Int(s_depth), Type::Int(o_depth))
+            | (GType::Float(s_depth), Type::Float(o_depth))
+            | (GType::Byte(s_depth), Type::Byte(o_depth))
+            | (GType::Bool(s_depth), Type::Bool(o_depth)) => {
+                if *s_depth == o_depth {
                     Ok(None)
                 } else {
                     Err(())
                 }
             }
-            (GType::Primitive(Primitive::Int), Type::Int(0)) => Ok(None),
-            (GType::Primitive(Primitive::Bool), Type::Bool(0)) => Ok(None),
-            (GType::Primitive(Primitive::Float), Type::Float(0)) => Ok(None),
-            (GType::Primitive(Primitive::Byte), Type::Byte(0)) => Ok(None),
-            (GType::Pointer(_), Type::Bool(0)) => Err(()),
-            (GType::Pointer(_), Type::Byte(0)) => Err(()),
-            (GType::Pointer(_), Type::Int(0)) => Err(()),
-            (GType::Pointer(_), Type::Float(0)) => Err(()),
-            (GType::Pointer(_), Type::Custom(_, 0)) => Err(()),
-            (GType::Pointer(self_ty), Type::Bool(depth)) => self_ty.bind_(Type::Bool(depth - 1)),
-            (GType::Pointer(self_ty), Type::Byte(depth)) => self_ty.bind_(Type::Byte(depth - 1)),
-            (GType::Pointer(self_ty), Type::Int(depth)) => self_ty.bind_(Type::Int(depth - 1)),
-            (GType::Pointer(self_ty), Type::Float(depth)) => self_ty.bind_(Type::Float(depth - 1)),
-            (GType::Pointer(self_ty), Type::Custom(name, depth)) => {
-                self_ty.bind_(Type::Custom(name, depth - 1))
+            (GType::Generic(index, depth), other) => {
+                if let Some(ty) = other.deref_n(*depth) {
+                    Ok(Some((*index, ty)))
+                } else {
+                    Err(())
+                }
+            }
+            (GType::Custom(s_name, s_depth), Type::Custom(o_name, o_depth)) => {
+                if *s_name == o_name && *s_depth == o_depth {
+                    Ok(None)
+                } else {
+                    Err(())
+                }
             }
             _ => Err(()),
         }
@@ -124,39 +178,28 @@ impl GType {
 
     fn substitute(&self, bindings: &[GType]) -> GType {
         match self {
-            GType::Generic(index) => bindings[*index].clone(),
-            GType::Pointer(ty) => GType::Pointer(Box::new(ty.substitute(bindings))),
+            GType::Generic(index, depth) => bindings[*index].clone().ref_n(*depth),
             other => other.clone(),
         }
     }
 
     pub fn substitute_(&self, bindings: &[Type]) -> Type {
         match self {
-            GType::Generic(index) => bindings[*index],
-            GType::Pointer(ty) => ty.substitute_(bindings).inc(),
-            GType::Custom(name) => Type::Custom(name.name, 0),
-            GType::Primitive(Primitive::Bool) => Type::Bool(0),
-            GType::Primitive(Primitive::Byte) => Type::Byte(0),
-            GType::Primitive(Primitive::Int) => Type::Int(0),
-            GType::Primitive(Primitive::Float) => Type::Float(0),
+            GType::Int(depth) => Type::Int(*depth),
+            GType::Float(depth) => Type::Float(*depth),
+            GType::Byte(depth) => Type::Byte(*depth),
+            GType::Bool(depth) => Type::Bool(*depth),
+            GType::Generic(index, depth) => bindings[*index].ref_n(*depth),
+            GType::Custom(name, depth) => Type::Custom(name, *depth),
         }
     }
 
     fn generic_index(&self) -> Option<usize> {
         match self {
-            GType::Generic(index) => Some(*index),
-            GType::Pointer(ty) => ty.generic_index(),
+            GType::Generic(index, _) => Some(*index),
             _ => None,
         }
     }
-}
-
-#[derive(PartialEq, Eq, Debug, Clone, Hash)]
-pub enum Primitive {
-    Int,   // i32
-    Float, // f32
-    Byte,  // u8
-    Bool,  // i1
 }
 
 #[derive(Clone)]
@@ -282,15 +325,7 @@ impl Context {
                     ..
                 } = mains[0].clone();
 
-                if !params.is_empty()
-                    && params
-                        != [
-                            GType::Primitive(Primitive::Int),
-                            GType::Pointer(Box::new(GType::Pointer(Box::new(GType::Primitive(
-                                Primitive::Byte,
-                            ))))),
-                        ]
-                {
+                if !params.is_empty() && params != [GType::Int(0), GType::Byte(2)] {
                     Err(Error::Type(
                         name.span,
                         "'main' must have parameters [] or [int, **byte]".to_string(),
@@ -299,7 +334,7 @@ impl Context {
                             format!("'main' has signature {params:?} -> {returns:?}"),
                         )],
                     ))
-                } else if !returns.is_empty() && returns != [GType::Primitive(Primitive::Int)] {
+                } else if !returns.is_empty() && returns != [GType::Int(0)] {
                     Err(Error::Type(
                         name.span,
                         "'main' must return [] or [int]".to_string(),
@@ -568,7 +603,7 @@ impl Context {
             self.check_op(stack, op)?;
         }
 
-        if stack.last() != Some(&GType::Primitive(Primitive::Bool)) {
+        if stack.last() != Some(&GType::Bool(0)) {
             return Err(Error::Type(
                 lbrace_span,
                 "expected a 'bool' for if statement".to_string(),
@@ -736,39 +771,33 @@ impl Context {
             self.check_op(stack, op)?;
         }
 
-        match stack.pop() {
-            Some(GType::Primitive(Primitive::Int)) => {}
-            _ => {
-                return Err(Error::Type(
-                    to_span,
-                    "lower bound in for statement should be an 'int'".to_string(),
-                    vec![Note::new(
-                        None,
-                        format!("stack is {}{stack:?}{}", BLUE.as_str(), RESET.as_str()),
-                    )],
-                ));
-            }
-        };
+        if stack.last() != Some(&GType::Int(0)) {
+            return Err(Error::Type(
+                to_span,
+                "lower bound in for statement should be an 'int'".to_string(),
+                vec![Note::new(
+                    None,
+                    format!("stack is {}{stack:?}{}", BLUE.as_str(), RESET.as_str()),
+                )],
+            ));
+        }
+        stack.pop();
 
         for op in high {
             self.check_op(stack, op)?;
         }
 
-        match stack.pop() {
-            Some(GType::Primitive(Primitive::Int)) => {}
-            _ => {
-                return Err(Error::Type(
-                    lbrace_span,
-                    "upper bound in for statement should have type 'int'".to_string(),
-                    vec![Note::new(
-                        None,
-                        format!("stack is {}{stack:?}{}", BLUE.as_str(), RESET.as_str()),
-                    )],
-                ));
-            }
-        };
+        if stack.last() != Some(&GType::Int(0)) {
+            return Err(Error::Type(
+                lbrace_span,
+                "upper bound in for statement should have type 'int'".to_string(),
+                vec![Note::new(
+                    None,
+                    format!("stack is {}{stack:?}{}", BLUE.as_str(), RESET.as_str()),
+                )],
+            ));
+        }
 
-        stack.push(GType::Primitive(Primitive::Int));
         for stmt in body {
             self.check_stmt(stack, stmt)?;
         }
@@ -815,7 +844,7 @@ impl Context {
             self.check_op(stack, op)?;
         }
 
-        if stack.last() != Some(&GType::Primitive(Primitive::Bool)) {
+        if stack.last() != Some(&GType::Bool(0)) {
             return Err(Error::Type(
                 lbrace_span,
                 "expected a 'bool' for while statement".to_string(),
@@ -865,24 +894,20 @@ impl Context {
 
     fn check_op(&mut self, stack: &mut Vec<GType>, op: &Op) -> Result<(), Error> {
         match op {
-            Op::Int(_, _) => {
-                stack.push(GType::Primitive(Primitive::Int));
+            Op::Int(_, _) | Op::Char(_, _) => {
+                stack.push(GType::Int(0));
                 Ok(())
             }
             Op::Float(_, _) => {
-                stack.push(GType::Primitive(Primitive::Float));
+                stack.push(GType::Float(0));
                 Ok(())
             }
             Op::Bool(_, _) => {
-                stack.push(GType::Primitive(Primitive::Bool));
-                Ok(())
-            }
-            Op::Char(_, _) => {
-                stack.push(GType::Primitive(Primitive::Int));
+                stack.push(GType::Bool(0));
                 Ok(())
             }
             Op::String(_, _) => {
-                stack.push(GType::Pointer(Box::new(GType::Primitive(Primitive::Byte))));
+                stack.push(GType::Byte(1));
                 Ok(())
             }
             Op::Name(name) => self.update_stack(stack, *name),
@@ -924,10 +949,10 @@ impl Context {
         }
 
         match expr {
-            Expr::Int(_, _) => Ok(GType::Primitive(Primitive::Int)),
-            Expr::Float(_, _) => Ok(GType::Primitive(Primitive::Float)),
-            Expr::Bool(_, _) => Ok(GType::Primitive(Primitive::Bool)),
-            Expr::Char(_, _) => Ok(GType::Primitive(Primitive::Int)),
+            Expr::Int(_, _) => Ok(GType::Int(0)),
+            Expr::Float(_, _) => Ok(GType::Float(0)),
+            Expr::Bool(_, _) => Ok(GType::Bool(0)),
+            Expr::Char(_, _) => Ok(GType::Int(0)),
             Expr::Name(name) => {
                 if let Some(ty) = self.get_let_bind_type(*name) {
                     Ok(ty)
@@ -956,9 +981,9 @@ impl Context {
             Expr::Not(expr, span) => {
                 let ty = self.type_of(expr)?;
                 match ty {
-                    GType::Primitive(Primitive::Bool) => Ok(GType::Primitive(Primitive::Bool)),
-                    GType::Primitive(Primitive::Byte) => Ok(GType::Primitive(Primitive::Byte)),
-                    GType::Primitive(Primitive::Int) => Ok(GType::Primitive(Primitive::Int)),
+                    GType::Bool(0) => Ok(GType::Bool(0)),
+                    GType::Byte(0) => Ok(GType::Byte(0)),
+                    GType::Int(0) => Ok(GType::Int(0)),
                     _ => Err(Error::Type(
                         *span,
                         format!("operator '!' is not defined for '{ty:?}'"),
@@ -969,9 +994,9 @@ impl Context {
             Expr::Negate(expr, span) => {
                 let ty = self.type_of(expr)?;
                 match ty {
-                    GType::Primitive(Primitive::Byte) => Ok(GType::Primitive(Primitive::Byte)),
-                    GType::Primitive(Primitive::Int) => Ok(GType::Primitive(Primitive::Int)),
-                    GType::Primitive(Primitive::Float) => Ok(GType::Primitive(Primitive::Float)),
+                    GType::Float(0) => Ok(GType::Float(0)),
+                    GType::Byte(0) => Ok(GType::Byte(0)),
+                    GType::Int(0) => Ok(GType::Int(0)),
                     _ => Err(Error::Type(
                         *span,
                         format!("operator '-' is not defined for '{ty:?}'"),
@@ -1069,49 +1094,49 @@ impl Context {
                         *name,
                         Kind::Constructor(span),
                         fields.iter().map(|f| GType::new(f.ty, &None)).collect(),
-                        vec![GType::Custom(*name)],
+                        vec![GType::Custom(name.name, 0)],
                     ),
                     GSignature::new(
                         Name::new(to_name_ptr),
                         Kind::PtrCast(span),
-                        vec![GType::Pointer(Box::new(GType::Generic(0)))],
-                        vec![GType::Pointer(Box::new(GType::Custom(*name)))],
+                        vec![GType::Generic(0, 1)],
+                        vec![GType::Custom(name.name, 1)],
                     ),
                     GSignature::new(
                         Name::new(to_name_ptr),
                         Kind::PtrCast(span),
-                        vec![GType::Primitive(Primitive::Int)],
-                        vec![GType::Pointer(Box::new(GType::Custom(*name)))],
+                        vec![GType::Int(0)],
+                        vec![GType::Custom(name.name, 1)],
                     ),
                     GSignature::new(
                         Name::new(size_of_name),
                         Kind::SizeOf(span),
                         vec![],
-                        vec![GType::Primitive(Primitive::Int)],
+                        vec![GType::Int(0)],
                     ),
                     GSignature::new(
                         Name::new(alloc_name),
                         Kind::Alloc(span),
                         vec![],
-                        vec![GType::Pointer(Box::new(GType::Custom(*name)))],
+                        vec![GType::Custom(name.name, 1)],
                     ),
                     GSignature::new(
                         Name::new(zalloc_name),
                         Kind::Alloc(span),
                         vec![],
-                        vec![GType::Pointer(Box::new(GType::Custom(*name)))],
+                        vec![GType::Custom(name.name, 1)],
                     ),
                     GSignature::new(
                         Name::new(alloc_name_arr),
                         Kind::AllocArr(span),
-                        vec![GType::Primitive(Primitive::Int)],
-                        vec![GType::Pointer(Box::new(GType::Custom(*name)))],
+                        vec![GType::Int(0)],
+                        vec![GType::Custom(name.name, 1)],
                     ),
                     GSignature::new(
                         Name::new(zalloc_name_arr),
                         Kind::AllocArr(span),
-                        vec![GType::Primitive(Primitive::Int)],
-                        vec![GType::Pointer(Box::new(GType::Custom(*name)))],
+                        vec![GType::Int(0)],
+                        vec![GType::Custom(name.name, 1)],
                     ),
                 ];
                 for Field {
@@ -1122,29 +1147,26 @@ impl Context {
                     signatures.push(GSignature::new(
                         Name::new(&dotdot[1..]),
                         Kind::Field(span),
-                        vec![GType::Custom(*name)],
+                        vec![GType::Custom(name.name, 0)],
                         vec![GType::new(*ty, &None)],
                     ));
                     signatures.push(GSignature::new(
                         Name::new(dotdot),
                         Kind::Field(span),
-                        vec![GType::Custom(*name)],
-                        vec![GType::Custom(*name), GType::new(*ty, &None)],
+                        vec![GType::Custom(name.name, 0)],
+                        vec![GType::Custom(name.name, 0), GType::new(*ty, &None)],
                     ));
                     signatures.push(GSignature::new(
                         Name::new(&dotdot[1..]),
                         Kind::Field(span),
-                        vec![GType::Pointer(Box::new(GType::Custom(*name)))],
-                        vec![GType::Pointer(Box::new(GType::new(*ty, &None)))],
+                        vec![GType::Custom(name.name, 1)],
+                        vec![GType::new(*ty, &None).inc()],
                     ));
                     signatures.push(GSignature::new(
                         Name::new(dotdot),
                         Kind::Field(span),
-                        vec![GType::Pointer(Box::new(GType::Custom(*name)))],
-                        vec![
-                            GType::Pointer(Box::new(GType::Custom(*name))),
-                            GType::Pointer(Box::new(GType::new(*ty, &None))),
-                        ],
+                        vec![GType::Custom(name.name, 1)],
+                        vec![GType::Custom(name.name, 1), GType::new(*ty, &None).inc()],
                     ));
                 }
                 Ok(signatures)
@@ -1179,7 +1201,7 @@ impl Context {
                         Name::new(name_ptr),
                         Kind::GlobalPtr(name.span),
                         vec![],
-                        vec![GType::Pointer(Box::new(GType::new(*ty, &None)))],
+                        vec![GType::new(*ty, &None).inc()],
                     ),
                 ])
             }

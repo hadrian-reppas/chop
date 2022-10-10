@@ -240,7 +240,7 @@ fn parse_type(tokens: &mut Tokens) -> Result<PType, Error> {
     } else if first.is_ptr() {
         let second = parse_name(tokens)?;
         if second.is_normal() {
-            Ok(PType::Pointer(second, first.name.len()))
+            Ok(PType::Pointer(first, second))
         } else {
             Err(Error::Parse(
                 second.span,
