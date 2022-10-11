@@ -4,9 +4,6 @@ use crate::typecheck::{flatten_expr, GSignature, GType, Kind, TypeInfo};
 use std::collections::{hash_map, HashMap, HashSet};
 use std::fmt;
 
-type Concrete = HashMap<&'static str, HashMap<usize, Vec<Signature>>>;
-type Done = HashSet<(&'static str, usize, Vec<Type>)>;
-
 pub fn generate(info: &TypeInfo) -> String {
     let mut context = Context::new(info);
     context.make();
@@ -29,8 +26,7 @@ struct Context<'info> {
     code: String,
     info: &'info TypeInfo,
     stack: Vec<(usize, Type)>,
-    concrete: Concrete,
-    done: Done,
+    concrete: HashMap<&'static str, Vec<Signature>>,
     counter: usize,
     depth: usize,
     let_binds: Vec<HashMap<&'static str, (usize, Type)>>,
@@ -43,7 +39,6 @@ impl<'info> Context<'info> {
             info,
             stack: Vec::new(),
             concrete: HashMap::new(),
-            done: HashSet::new(),
             counter: 0,
             depth: 1,
             let_binds: Vec::new(),
@@ -51,10 +46,11 @@ impl<'info> Context<'info> {
     }
 
     fn make(&mut self) {
-        self.fill_graph("main", 0, Vec::new());
+        let mut done = HashSet::new();
+        self.fill_graph("main", 0, Vec::new(), &mut done);
 
         for (name, fields) in &self.info.struct_fields {
-            self.add("struct ht");
+            self.add("struct ht_");
             self.escape(name);
             self.add(" {\n");
             for (ty, field) in fields {
@@ -67,15 +63,15 @@ impl<'info> Context<'info> {
             self.add("};\n");
         }
 
+        // TODO: Remove these clones
+        // TODO: Precompute a HashMap<Vec<Type>, &Kind> (or maybe Vec<GType>?)
         let mut functions = Vec::new();
-        for (name, signatures) in &self.info.signatures {
-            for (gid, GSignature { kind, .. }) in signatures.iter().enumerate() {
-                if let Some(signatures) = self.concrete.get(name) {
-                    if let Some(signatures) = signatures.get(&gid) {
-                        for (cid, signature) in signatures.iter().enumerate() {
-                            functions.push((*name, gid, cid, signature.clone(), kind.clone()));
-                        }
-                    }
+        for (name, index, binds) in done {
+            let gsignature = &self.info.signatures[name][index];
+            let sig = Signature::convert(gsignature, &binds);
+            for (id, signature) in self.concrete[name].iter().enumerate() {
+                if sig.params == signature.params {
+                    functions.push((name, id, signature.clone(), gsignature.kind.clone()));
                 }
             }
         }
@@ -87,15 +83,17 @@ impl<'info> Context<'info> {
             self.add(";\n");
         }
 
-        for (name, gid, cid, signature, _) in &functions {
-            self.make_declaration(name, *gid, *cid, signature);
+        for (name, id, signature, _) in &functions {
+            self.make_declaration(name, *id, signature);
         }
 
-        for (name, gid, cid, signature, kind) in functions {
-            self.make_function(name, gid, cid, &signature, &kind);
+        for (name, id, signature, kind) in &functions {
+            self.make_function(name, *id, signature, kind);
         }
 
-        let main_signature = self.concrete.get("main").unwrap().get(&0).unwrap()[0].clone();
+        // TODO: remove this clone
+        let main_signature = self.concrete.get("main").unwrap()[0].clone();
+
         self.make_main(&main_signature);
     }
 
@@ -107,7 +105,7 @@ impl<'info> Context<'info> {
             self.make_op(op);
         }
         self.add("    int64_t code = 0;\n");
-        self.add("    hf_main_0_0(");
+        self.add("    hf_main_0(");
         if !main_signature.params.is_empty() {
             self.add("argc, (uint8_t**) argv");
         }
@@ -189,10 +187,10 @@ impl<'info> Context<'info> {
         }
     }
 
-    fn make_declaration(&mut self, name: &str, gid: usize, cid: usize, signature: &Signature) {
+    fn make_declaration(&mut self, name: &str, id: usize, signature: &Signature) {
         self.add("void hf_");
         self.escape(name);
-        self.add(&format!("_{gid}_{cid}("));
+        self.add(&format!("_{id}("));
         for (i, param) in signature.params.iter().enumerate() {
             if i > 0 {
                 self.add(", ");
@@ -211,7 +209,7 @@ impl<'info> Context<'info> {
     fn make_type(&mut self, ty: &Type) {
         match ty {
             Type::Custom(name, depth) => {
-                self.add("struct ht");
+                self.add("struct ht_");
                 self.escape(name);
                 self.add(&"*".repeat(*depth));
             }
@@ -234,19 +232,12 @@ impl<'info> Context<'info> {
         }
     }
 
-    fn make_function(
-        &mut self,
-        name: &str,
-        gid: usize,
-        cid: usize,
-        signature: &Signature,
-        kind: &Kind,
-    ) {
+    fn make_function(&mut self, name: &str, id: usize, signature: &Signature, kind: &Kind) {
         match kind {
-            Kind::Builtin => self.make_builtin(name, gid, cid, signature),
-            Kind::Custom(body) => self.make_custom(name, gid, cid, signature, body),
+            Kind::Builtin => self.make_builtin(name, id, signature),
+            Kind::Custom(body) => self.make_custom(name, id, signature, body),
             Kind::Constructor(_) => {
-                self.begin_fn(name, gid, cid, signature);
+                self.begin_fn(name, id, signature);
                 for (i, (_, field)) in self
                     .info
                     .struct_fields
@@ -262,7 +253,7 @@ impl<'info> Context<'info> {
                 self.add("}\n");
             }
             Kind::Field(_) => {
-                self.begin_fn(name, gid, cid, signature);
+                self.begin_fn(name, id, signature);
                 if let Some(field) = name.strip_prefix("..") {
                     if signature.params[0].depth() == 0 {
                         self.add("    *hr0 = hv0;\n");
@@ -289,20 +280,20 @@ impl<'info> Context<'info> {
                 }
             }
             Kind::PtrCast(_) => {
-                self.begin_fn(name, gid, cid, signature);
+                self.begin_fn(name, id, signature);
                 self.add("    *hr0 = (");
                 self.make_type(&signature.returns[0]);
                 self.add(") hv0;\n}\n")
             }
             Kind::SizeOf(_) => {
-                self.begin_fn(name, gid, cid, signature);
+                self.begin_fn(name, id, signature);
                 let struct_name = name.strip_prefix("size_of_").unwrap();
-                self.add("    *hr0 = sizeof(struct ht");
+                self.add("    *hr0 = sizeof(struct ht_");
                 self.escape(struct_name);
                 self.add(");\n}\n");
             }
             Kind::Alloc(_) => {
-                self.begin_fn(name, gid, cid, signature);
+                self.begin_fn(name, id, signature);
                 if name.starts_with('z') {
                     self.add("    *hr0 = calloc(1, sizeof(");
                     self.make_type(&signature.returns[0].dec());
@@ -314,7 +305,7 @@ impl<'info> Context<'info> {
                 }
             }
             Kind::AllocArr(_) => {
-                self.begin_fn(name, gid, cid, signature);
+                self.begin_fn(name, id, signature);
                 if name.starts_with('z') {
                     self.add("    *hr0 = calloc(hv0, sizeof(");
                     self.make_type(&signature.returns[0].dec());
@@ -326,19 +317,19 @@ impl<'info> Context<'info> {
                 }
             }
             Kind::GlobalRead(_) => {
-                self.begin_fn(name, gid, cid, signature);
+                self.begin_fn(name, id, signature);
                 self.add("    *hr0 = hg");
                 self.escape(name);
                 self.add(";\n}\n");
             }
             Kind::GlobalWrite(_) => {
-                self.begin_fn(name, gid, cid, signature);
+                self.begin_fn(name, id, signature);
                 self.add("    hg");
                 self.escape(name.strip_prefix("write_").unwrap());
                 self.add(" = hv0;\n}\n");
             }
             Kind::GlobalPtr(_) => {
-                self.begin_fn(name, gid, cid, signature);
+                self.begin_fn(name, id, signature);
                 self.add("    *hr0 = &hg");
                 self.escape(name.strip_suffix("_ptr").unwrap());
                 self.add(";\n}\n");
@@ -346,13 +337,13 @@ impl<'info> Context<'info> {
         }
     }
 
-    fn begin_fn(&mut self, name: &str, gid: usize, cid: usize, signature: &Signature) {
+    fn begin_fn(&mut self, name: &str, id: usize, signature: &Signature) {
         self.counter = signature.params.len();
         self.stack = signature.params.iter().copied().enumerate().collect();
 
         self.add("void hf_");
         self.escape(name);
-        self.add(&format!("_{gid}_{cid}("));
+        self.add(&format!("_{id}("));
         for (i, param) in signature.params.iter().enumerate() {
             if i > 0 {
                 self.add(", ");
@@ -378,23 +369,16 @@ impl<'info> Context<'info> {
         self.add("}\n");
     }
 
-    fn make_custom(
-        &mut self,
-        name: &str,
-        gid: usize,
-        cid: usize,
-        signature: &Signature,
-        body: &[Stmt],
-    ) {
-        self.begin_fn(name, gid, cid, signature);
+    fn make_custom(&mut self, name: &str, id: usize, signature: &Signature, body: &[Stmt]) {
+        self.begin_fn(name, id, signature);
         for stmt in body {
             self.make_stmt(stmt);
         }
         self.end_fn();
     }
 
-    fn make_builtin(&mut self, name: &str, gid: usize, cid: usize, signature: &Signature) {
-        self.begin_fn(name, gid, cid, signature);
+    fn make_builtin(&mut self, name: &str, id: usize, signature: &Signature) {
+        self.begin_fn(name, id, signature);
         match name {
             "+" => self.add("    *hr0 = hv0 + hv1;\n}\n"),
             "-" => self.add("    *hr0 = hv0 - hv1;\n}\n"),
@@ -635,29 +619,24 @@ impl<'info> Context<'info> {
             self.tabs();
             self.add("}\n");
         } else {
-            for (gid, signature) in self.info.signatures.get(name).unwrap().iter().enumerate() {
-                if let Some(signature) = self.get_signature(signature) {
-                    for (cid, csig) in self
-                        .concrete
-                        .get(name)
-                        .unwrap()
-                        .clone()
-                        .get(&gid)
-                        .unwrap()
-                        .iter()
-                        .enumerate()
-                    {
-                        if csig == &signature {
-                            self.make_call(name, gid, cid, &signature);
-                            return;
-                        }
-                    }
+            for (id, signature) in self.concrete.clone().get(name).unwrap().iter().enumerate() {
+                if self
+                    .stack
+                    .iter()
+                    .rev()
+                    .map(|(_, ty)| ty)
+                    .zip(signature.params.iter().rev())
+                    .all(|(s, p)| s == p)
+                {
+                    self.make_call(name, id, signature);
+                    return;
                 }
             }
+            unreachable!();
         }
     }
 
-    fn make_call(&mut self, name: &str, gid: usize, cid: usize, signature: &Signature) {
+    fn make_call(&mut self, name: &str, id: usize, signature: &Signature) {
         let mut ret_vars = Vec::new();
         for ret in &signature.returns {
             self.tabs();
@@ -669,7 +648,7 @@ impl<'info> Context<'info> {
         self.tabs();
         self.add("hf_");
         self.escape(name);
-        self.add(&format!("_{gid}_{cid}("));
+        self.add(&format!("_{id}("));
         let mut args = Vec::new();
         for _ in 0..signature.params.len() {
             args.push(self.stack.pop().unwrap());
@@ -870,40 +849,42 @@ impl<'info> Context<'info> {
         self.let_binds.pop();
     }
 
-    fn fill_graph(&mut self, name: &'static str, id: usize, binds: Vec<Type>) {
-        let tup = (name, id, binds);
-        if self.done.contains(&tup) {
+    fn fill_graph(
+        &mut self,
+        name: &'static str,
+        index: usize,
+        binds: Vec<Type>,
+        done: &mut HashSet<(&'static str, usize, Vec<Type>)>,
+    ) {
+        let tup = (name, index, binds);
+        if done.contains(&tup) {
             return;
         }
         let (_, _, binds) = tup;
-        self.done.insert((name, id, binds.clone()));
+        done.insert((name, index, binds.clone()));
 
-        let signature = Signature::convert(&self.info.signatures.get(name).unwrap()[id], &binds);
+        let signature = Signature::convert(&self.info.signatures.get(name).unwrap()[index], &binds);
 
         match self.concrete.entry(name) {
             hash_map::Entry::Vacant(v) => {
-                v.insert(HashMap::from([(id, vec![signature])]));
+                v.insert(vec![signature]);
             }
-            hash_map::Entry::Occupied(mut o) => match o.get_mut().entry(id) {
-                hash_map::Entry::Vacant(v) => {
-                    v.insert(vec![signature]);
-                }
-                hash_map::Entry::Occupied(mut o) => o.get_mut().push(signature),
-            },
+            hash_map::Entry::Occupied(mut o) => o.get_mut().push(signature),
         }
 
-        for (call_name, call_id, call_binds) in
-            self.info.graph.get(&(name, id)).into_iter().flatten()
+        for (call_name, call_index, call_binds) in
+            self.info.graph.get(&(name, index)).into_iter().flatten()
         {
             let converted_binds: Vec<_> = call_binds
                 .iter()
                 .map(|ty| Type::convert(ty, &binds))
                 .collect();
-            self.fill_graph(call_name, *call_id, converted_binds);
+            self.fill_graph(call_name, *call_index, converted_binds, done);
         }
     }
 }
 
+// TODO: dont escape every character
 fn escape(s: &str) -> String {
     let mut out = "\"".to_string();
     for c in s.chars() {
@@ -945,6 +926,14 @@ impl Signature {
                 .map(|ty| Type::convert(ty, binds))
                 .collect(),
         }
+    }
+
+    fn conflict(&self, params: &[GType]) -> bool {
+        self.params
+            .iter()
+            .rev()
+            .zip(params.iter().rev())
+            .all(|(c, g)| g.bind_(*c).is_ok())
     }
 }
 

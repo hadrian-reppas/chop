@@ -259,6 +259,24 @@ impl Kind {
     }
 }
 
+impl fmt::Debug for Kind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Kind::Builtin => write!(f, "Builtin"),
+            Kind::Custom(_) => write!(f, "Custom"),
+            Kind::Constructor(_) => write!(f, "Constructor"),
+            Kind::Field(_) => write!(f, "Field"),
+            Kind::PtrCast(_) => write!(f, "PtrCast"),
+            Kind::SizeOf(_) => write!(f, "SizeOf"),
+            Kind::Alloc(_) => write!(f, "Alloc"),
+            Kind::AllocArr(_) => write!(f, "AllocArr"),
+            Kind::GlobalRead(_) => write!(f, "GlobalRead"),
+            Kind::GlobalWrite(_) => write!(f, "GlobalWrite"),
+            Kind::GlobalPtr(_) => write!(f, "GlobalPtr"),
+        }
+    }
+}
+
 pub type FnInfo = (&'static str, usize);
 pub type CallInfo = (&'static str, usize, Vec<GType>);
 
