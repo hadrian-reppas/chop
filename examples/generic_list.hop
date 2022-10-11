@@ -1,0 +1,8 @@
+struct list[T] {
+    value: T
+    next: *list[T]
+}
+
+fn main {
+
+}

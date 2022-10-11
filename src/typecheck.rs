@@ -34,10 +34,13 @@ impl fmt::Debug for GType {
 
 impl GType {
     fn new(ty: PType, generics: &Option<Generics>) -> GType {
+        /*
         let (name, depth) = match ty {
             PType::Normal(name) => (name.name, 0),
             PType::Pointer(stars, name) => (name.name, stars.name.len()),
         };
+        */
+        let (name, depth) = todo!();
         match name {
             "byte" => GType::Byte(depth),
             "int" => GType::Int(depth),
@@ -506,7 +509,7 @@ impl Context {
                     name.name,
                     fields
                         .iter()
-                        .map(|Field { ty, name, .. }| (GType::new(*ty, &None), name.name))
+                        .map(|Field { ty, name, .. }| (GType::new(ty.clone(), &None), name.name))
                         .collect(),
                 );
                 Ok(())
@@ -517,7 +520,8 @@ impl Context {
                 definition,
                 ..
             } => {
-                self.globals.push((name.name, GType::new(*ty, &None)));
+                self.globals
+                    .push((name.name, GType::new(ty.clone(), &None)));
                 if let Some(Definition {
                     group, lbrace_span, ..
                 }) = definition
@@ -526,7 +530,7 @@ impl Context {
                     for op in group {
                         self.check_op(&mut stack, op)?;
                     }
-                    if stack.len() == 1 && stack[0] == GType::new(*ty, &None) {
+                    if stack.len() == 1 && stack[0] == GType::new(ty.clone(), &None) {
                         Ok(())
                     } else {
                         Err(Error::Type(
@@ -535,7 +539,10 @@ impl Context {
                             vec![
                                 Note::new(
                                     None,
-                                    format!("delcare type is [{:?}]", GType::new(*ty, &None)),
+                                    format!(
+                                        "delcare type is [{:?}]",
+                                        GType::new(ty.clone(), &None)
+                                    ),
                                 ),
                                 Note::new(
                                     None,
@@ -1059,12 +1066,12 @@ impl Context {
             } => {
                 let params: Vec<_> = params
                     .iter()
-                    .copied()
+                    .cloned()
                     .map(|t| GType::new(t, generics))
                     .collect();
                 let returns = returns
                     .iter()
-                    .copied()
+                    .cloned()
                     .map(|t| GType::new(t, generics))
                     .collect();
 
@@ -1111,7 +1118,10 @@ impl Context {
                     GSignature::new(
                         *name,
                         Kind::Constructor(span),
-                        fields.iter().map(|f| GType::new(f.ty, &None)).collect(),
+                        fields
+                            .iter()
+                            .map(|f| GType::new(f.ty.clone(), &None))
+                            .collect(),
                         vec![GType::Custom(name.name, 0)],
                     ),
                     GSignature::new(
@@ -1166,25 +1176,28 @@ impl Context {
                         Name::new(&dotdot[1..]),
                         Kind::Field(span),
                         vec![GType::Custom(name.name, 0)],
-                        vec![GType::new(*ty, &None)],
+                        vec![GType::new(ty.clone(), &None)],
                     ));
                     signatures.push(GSignature::new(
                         Name::new(dotdot),
                         Kind::Field(span),
                         vec![GType::Custom(name.name, 0)],
-                        vec![GType::Custom(name.name, 0), GType::new(*ty, &None)],
+                        vec![GType::Custom(name.name, 0), GType::new(ty.clone(), &None)],
                     ));
                     signatures.push(GSignature::new(
                         Name::new(&dotdot[1..]),
                         Kind::Field(span),
                         vec![GType::Custom(name.name, 1)],
-                        vec![GType::new(*ty, &None).inc()],
+                        vec![GType::new(ty.clone(), &None).inc()],
                     ));
                     signatures.push(GSignature::new(
                         Name::new(dotdot),
                         Kind::Field(span),
                         vec![GType::Custom(name.name, 1)],
-                        vec![GType::Custom(name.name, 1), GType::new(*ty, &None).inc()],
+                        vec![
+                            GType::Custom(name.name, 1),
+                            GType::new(ty.clone(), &None).inc(),
+                        ],
                     ));
                 }
                 Ok(signatures)
@@ -1207,19 +1220,19 @@ impl Context {
                         *name,
                         Kind::GlobalRead(name.span),
                         vec![],
-                        vec![GType::new(*ty, &None)],
+                        vec![GType::new(ty.clone(), &None)],
                     ),
                     GSignature::new(
                         Name::new(write_name),
                         Kind::GlobalWrite(name.span),
-                        vec![GType::new(*ty, &None)],
+                        vec![GType::new(ty.clone(), &None)],
                         vec![],
                     ),
                     GSignature::new(
                         Name::new(name_ptr),
                         Kind::GlobalPtr(name.span),
                         vec![],
-                        vec![GType::new(*ty, &None).inc()],
+                        vec![GType::new(ty.clone(), &None).inc()],
                     ),
                 ])
             }

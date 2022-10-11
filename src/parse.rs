@@ -49,43 +49,7 @@ fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
     let fn_span = tokens.next()?.span();
     let name = parse_name(tokens)?;
 
-    let generics = if tokens.peek().is_lbrack() {
-        let lbrack_span = tokens.next()?.span();
-
-        let mut names = Vec::new();
-        while tokens.peek().is_name() {
-            let generic = parse_name(tokens)?;
-            if !generic.is_normal() {
-                return Err(Error::Parse(
-                    generic.span,
-                    "generics must have normal names".to_string(),
-                ));
-            } else if RESERVED_TYPES.contains(generic.name) {
-                return Err(Error::Parse(
-                    generic.span,
-                    format!("'{}' is a reserved type name", generic.name),
-                ));
-            }
-            names.push(generic);
-        }
-
-        if !tokens.peek().is_rbrack() {
-            return Err(Error::Parse(
-                tokens.peek().span(),
-                "expected ']'".to_string(),
-            ));
-        }
-
-        let rbrack_span = tokens.next()?.span();
-
-        Some(Generics {
-            names,
-            lbrack_span,
-            rbrack_span,
-        })
-    } else {
-        None
-    };
+    let generics = parse_generics(tokens)?;
 
     let mut params = Vec::new();
     let mut returns = Vec::new();
@@ -132,6 +96,46 @@ fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
     })
 }
 
+fn parse_generics(tokens: &mut Tokens) -> Result<Option<Generics>, Error> {
+    if tokens.peek().is_lbrack() {
+        let lbrack_span = tokens.next()?.span();
+
+        let mut names = Vec::new();
+        while tokens.peek().is_name() {
+            let generic = parse_name(tokens)?;
+            if !generic.is_normal() {
+                return Err(Error::Parse(
+                    generic.span,
+                    "generics must have normal names".to_string(),
+                ));
+            } else if RESERVED_TYPES.contains(generic.name) {
+                return Err(Error::Parse(
+                    generic.span,
+                    format!("'{}' is a reserved type name", generic.name),
+                ));
+            }
+            names.push(generic);
+        }
+
+        if !tokens.peek().is_rbrack() {
+            return Err(Error::Parse(
+                tokens.peek().span(),
+                "expected ']'".to_string(),
+            ));
+        }
+
+        let rbrack_span = tokens.next()?.span();
+
+        Ok(Some(Generics {
+            names,
+            lbrack_span,
+            rbrack_span,
+        }))
+    } else {
+        Ok(None)
+    }
+}
+
 fn parse_struct(tokens: &mut Tokens) -> Result<Item, Error> {
     let struct_span = tokens.next()?.span();
     let name = parse_name(tokens)?;
@@ -141,6 +145,7 @@ fn parse_struct(tokens: &mut Tokens) -> Result<Item, Error> {
             "structs must have normal names".to_string(),
         ));
     }
+    let generics = parse_generics(tokens)?;
     if !tokens.peek().is_lbrace() {
         return Err(Error::Parse(
             tokens.peek().span(),
@@ -171,6 +176,7 @@ fn parse_struct(tokens: &mut Tokens) -> Result<Item, Error> {
 
     Ok(Item::Struct {
         name,
+        generics,
         fields,
         struct_span,
         lbrace_span,
@@ -236,11 +242,21 @@ fn parse_import(tokens: &mut Tokens) -> Result<Item, Error> {
 fn parse_type(tokens: &mut Tokens) -> Result<PType, Error> {
     let first = parse_name(tokens)?;
     if first.is_normal() {
-        Ok(PType::Normal(first))
+        let generics = parse_generics(tokens)?;
+        Ok(PType {
+            stars: None,
+            name: first,
+            generics,
+        })
     } else if first.is_ptr() {
         let second = parse_name(tokens)?;
         if second.is_normal() {
-            Ok(PType::Pointer(first, second))
+            let generics = parse_generics(tokens)?;
+            Ok(PType {
+                stars: Some(first),
+                name: second,
+                generics,
+            })
         } else {
             Err(Error::Parse(
                 second.span,

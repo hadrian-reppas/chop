@@ -65,6 +65,7 @@ pub enum Item {
     },
     Struct {
         name: Name,
+        generics: Option<Generics>,
         fields: Vec<Field>,
 
         struct_span: Span,
@@ -97,7 +98,12 @@ impl fmt::Debug for Item {
                 body,
                 ..
             } => write!(f, "Function({name:?}, {params:?}, {returns:?}, {body:?})"),
-            Item::Struct { name, fields, .. } => write!(f, "Struct({name:?}, {fields:?})"),
+            Item::Struct {
+                name,
+                generics,
+                fields,
+                ..
+            } => write!(f, "Struct({name:?}, {generics:?}, {fields:?})"),
             Item::Global {
                 name,
                 ty,
@@ -135,6 +141,7 @@ impl fmt::Debug for Field {
     }
 }
 
+#[derive(Clone)]
 pub struct Generics {
     pub names: Vec<Name>,
 
@@ -148,18 +155,20 @@ impl fmt::Debug for Generics {
     }
 }
 
-#[derive(Clone, Copy)]
-pub enum PType {
-    Normal(Name),
-    Pointer(Name, Name),
+#[derive(Clone)]
+pub struct PType {
+    pub stars: Option<Name>,
+    pub name: Name,
+    pub generics: Option<Generics>,
 }
 
 impl fmt::Debug for PType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            PType::Normal(name) => write!(f, "PType({name:?})"),
-            PType::Pointer(stars, name) => write!(f, "PType({name:?}, {stars:?})"),
-        }
+        write!(
+            f,
+            "PType({:?}, {:?}, {:?})",
+            self.name, self.stars, self.generics
+        )
     }
 }
 
