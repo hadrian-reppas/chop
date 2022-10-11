@@ -242,7 +242,7 @@ fn parse_import(tokens: &mut Tokens) -> Result<Item, Error> {
 fn parse_type(tokens: &mut Tokens) -> Result<PType, Error> {
     let first = parse_name(tokens)?;
     if first.is_normal() {
-        let generics = parse_generics(tokens)?;
+        let generics = parse_type_generics(tokens)?;
         Ok(PType {
             stars: None,
             name: first,
@@ -251,7 +251,7 @@ fn parse_type(tokens: &mut Tokens) -> Result<PType, Error> {
     } else if first.is_ptr() {
         let second = parse_name(tokens)?;
         if second.is_normal() {
-            let generics = parse_generics(tokens)?;
+            let generics = parse_type_generics(tokens)?;
             Ok(PType {
                 stars: Some(first),
                 name: second,
@@ -268,6 +268,27 @@ fn parse_type(tokens: &mut Tokens) -> Result<PType, Error> {
             first.span,
             "type names must be normal".to_string(),
         ))
+    }
+}
+
+fn parse_type_generics(tokens: &mut Tokens) -> Result<Option<TypeGenerics>, Error> {
+    if tokens.peek().is_lbrack() {
+        let lbrack_span = tokens.next()?.span();
+
+        let mut types = Vec::new();
+        while !tokens.peek().is_rbrack() {
+            types.push(parse_type(tokens)?);
+        }
+
+        let rbrack_span = tokens.next()?.span();
+
+        Ok(Some(TypeGenerics {
+            types,
+            lbrack_span,
+            rbrack_span,
+        }))
+    } else {
+        Ok(None)
     }
 }
 

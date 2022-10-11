@@ -159,7 +159,7 @@ impl fmt::Debug for Generics {
 pub struct PType {
     pub stars: Option<Name>,
     pub name: Name,
-    pub generics: Option<Generics>,
+    pub generics: Option<TypeGenerics>,
 }
 
 impl fmt::Debug for PType {
@@ -169,6 +169,20 @@ impl fmt::Debug for PType {
             "PType({:?}, {:?}, {:?})",
             self.name, self.stars, self.generics
         )
+    }
+}
+
+#[derive(Clone)]
+pub struct TypeGenerics {
+    pub types: Vec<PType>,
+
+    pub lbrack_span: Span,
+    pub rbrack_span: Span,
+}
+
+impl fmt::Debug for TypeGenerics {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "TypeGenerics({:?})", self.types)
     }
 }
 
