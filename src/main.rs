@@ -33,6 +33,7 @@ fn main() {
 fn transpile(file_name: &str) -> Result<(), error::Error> {
     let main_unit = parse::parse_file(file_name)?;
     let unit = imports::resolve_imports(main_unit, PathBuf::from(file_name))?;
+    println!("{:#?}", unit);
     let info = typecheck::typecheck(&unit)?;
     let code = codegen::generate(&info);
     let mut file = File::create("out.c").unwrap();

@@ -16,7 +16,7 @@ pub enum GType {
     Byte(usize),
     Bool(usize),
     Generic(usize, usize),
-    Custom(&'static str, usize),
+    Custom(&'static str, Vec<GType>, usize),
 }
 
 impl fmt::Debug for GType {
@@ -26,53 +26,75 @@ impl fmt::Debug for GType {
             GType::Float(depth) => write!(f, "{}float", "*".repeat(*depth)),
             GType::Byte(depth) => write!(f, "{}byte", "*".repeat(*depth)),
             GType::Bool(depth) => write!(f, "{}bool", "*".repeat(*depth)),
-            GType::Generic(index, depth) => write!(f, "{}T{}", "*".repeat(*depth), index),
-            GType::Custom(name, depth) => write!(f, "{}{}", "*".repeat(*depth), name),
+            GType::Generic(index, depth) => write!(f, "{}T{index}", "*".repeat(*depth)),
+            GType::Custom(name, generics, depth) => {
+                if generics.is_empty() {
+                    write!(f, "{}{name}", "*".repeat(*depth))
+                } else {
+                    write!(f, "{}{name}{generics:?}", "*".repeat(*depth))
+                }
+            }
         }
     }
 }
 
 impl GType {
-    fn new(ty: PType, generics: &Option<Generics>) -> GType {
-        /*
-        let (name, depth) = match ty {
-            PType::Normal(name) => (name.name, 0),
-            PType::Pointer(stars, name) => (name.name, stars.name.len()),
-        };
-        */
-        let (name, depth) = todo!();
+    fn new(ty: &PType, generics: &[Name]) -> Result<GType, Error> {
+        let depth = ty.stars.map(|s| s.name.len()).unwrap_or(0);
+
+        macro_rules! prim {
+            ($name:ident) => {
+                if let Some(generics) = ty.generics {
+                    Err(Error::Type(
+                        generics.lbrack_span,
+                        format!(
+                            "primitive type '{}' cannot have generic parameters",
+                            ty.name.name
+                        ),
+                        vec![],
+                    ))
+                } else {
+                    Ok(GType::$name(depth))
+                }
+            };
+        }
+
+        let name = ty.name.name;
+
         match name {
-            "byte" => GType::Byte(depth),
-            "int" => GType::Int(depth),
-            "float" => GType::Float(depth),
-            "bool" => GType::Bool(depth),
+            "byte" => prim!(Byte),
+            "int" => prim!(Int),
+            "float" => prim!(Float),
+            "bool" => prim!(Bool),
             _ => {
-                if let Some(generics) = generics {
-                    if let Some(index) = generics.names.iter().position(|gen| gen.name == name) {
-                        GType::Generic(index, depth)
+                if let Some(index) = generics.iter().position(|gen| gen.name == name) {
+                    if let Some(generics) = ty.generics {
+                        Err(Error::Type(
+                            generics.lbrack_span,
+                            format!("primitive '{}' cannot have generic parameters", name),
+                            vec![],
+                        ))
                     } else {
-                        GType::Custom(name, depth)
+                        Ok(GType::Generic(index, depth))
                     }
                 } else {
-                    GType::Custom(name, depth)
+                    Ok(GType::Custom(
+                        name,
+                        ty.generics
+                            .map(|g| g.types)
+                            .unwrap_or(Vec::new())
+                            .iter()
+                            .map(|t| GType::new(t, generics))
+                            .collect::<Result<_, _>>()?,
+                        depth,
+                    ))
                 }
             }
         }
     }
 
     fn compatible(&self, other: &GType) -> bool {
-        match (self, other) {
-            (GType::Generic(_, depth), _) => other.depth() >= *depth,
-            (_, GType::Generic(_, depth)) => self.depth() >= *depth,
-            (GType::Custom(s_name, s_depth), GType::Custom(o_name, o_depth)) => {
-                s_name == o_name && s_depth == o_depth
-            }
-            (GType::Bool(s_depth), GType::Bool(o_depth)) => s_depth == o_depth,
-            (GType::Byte(s_depth), GType::Byte(o_depth)) => s_depth == o_depth,
-            (GType::Int(s_depth), GType::Int(o_depth)) => s_depth == o_depth,
-            (GType::Float(s_depth), GType::Float(o_depth)) => s_depth == o_depth,
-            _ => false,
-        }
+        self.bind(other).is_ok()
     }
 
     fn depth(&self) -> usize {
@@ -82,32 +104,35 @@ impl GType {
             GType::Byte(depth) => *depth,
             GType::Bool(depth) => *depth,
             GType::Generic(_, depth) => *depth,
-            GType::Custom(_, depth) => *depth,
+            GType::Custom(_, _, depth) => *depth,
         }
     }
 
-    fn bind(&self, other: &GType) -> Result<Option<(usize, GType)>, ()> {
+    fn bind(&self, other: &GType) -> Result<Vec<(usize, GType)>, ()> {
         match (self, other) {
             (GType::Int(s_depth), GType::Int(o_depth))
             | (GType::Float(s_depth), GType::Float(o_depth))
             | (GType::Byte(s_depth), GType::Byte(o_depth))
             | (GType::Bool(s_depth), GType::Bool(o_depth)) => {
                 if s_depth == o_depth {
-                    Ok(None)
+                    Ok(Vec::new())
                 } else {
                     Err(())
                 }
             }
             (GType::Generic(index, depth), other) => {
                 if let Some(ty) = other.deref_n(*depth) {
-                    Ok(Some((*index, ty)))
+                    Ok(vec![(*index, ty)])
                 } else {
                     Err(())
                 }
             }
-            (GType::Custom(s_name, s_depth), GType::Custom(o_name, o_depth)) => {
+            (
+                GType::Custom(s_name, s_generics, s_depth),
+                GType::Custom(o_name, o_generics, o_depth),
+            ) => {
                 if s_name == o_name && s_depth == o_depth {
-                    Ok(None)
+                    todo!()
                 } else {
                     Err(())
                 }
@@ -116,6 +141,7 @@ impl GType {
         }
     }
 
+    // TODO: consdier taking by value
     fn deref_n(&self, n: usize) -> Option<GType> {
         match self {
             GType::Int(depth) => Some(GType::Int(depth.checked_sub(n)?)),
@@ -123,10 +149,13 @@ impl GType {
             GType::Byte(depth) => Some(GType::Byte(depth.checked_sub(n)?)),
             GType::Bool(depth) => Some(GType::Bool(depth.checked_sub(n)?)),
             GType::Generic(index, depth) => Some(GType::Generic(*index, depth.checked_sub(n)?)),
-            GType::Custom(name, depth) => Some(GType::Custom(name, depth.checked_sub(n)?)),
+            GType::Custom(name, generics, depth) => {
+                Some(GType::Custom(name, generics.clone(), depth.checked_sub(n)?))
+            }
         }
     }
 
+    // TODO: consider taking by value
     fn ref_n(&self, n: usize) -> GType {
         match self {
             GType::Byte(depth) => GType::Byte(*depth + n),
@@ -134,66 +163,22 @@ impl GType {
             GType::Float(depth) => GType::Float(*depth + n),
             GType::Bool(depth) => GType::Bool(*depth + n),
             GType::Generic(index, depth) => GType::Generic(*index, *depth + n),
-            GType::Custom(name, depth) => GType::Custom(name, *depth + n),
+            GType::Custom(name, generics, depth) => {
+                GType::Custom(name, generics.clone(), *depth + n)
+            }
         }
     }
 
-    pub fn inc(self) -> GType {
-        match self {
-            GType::Byte(depth) => GType::Byte(depth + 1),
-            GType::Int(depth) => GType::Int(depth + 1),
-            GType::Float(depth) => GType::Float(depth + 1),
-            GType::Bool(depth) => GType::Bool(depth + 1),
-            GType::Generic(index, depth) => GType::Generic(index, depth + 1),
-            GType::Custom(name, depth) => GType::Custom(name, depth + 1),
-        }
-    }
-
-    pub fn bind_(&self, other: Type) -> Result<Option<(usize, Type)>, ()> {
-        match (self, other) {
-            (GType::Int(s_depth), Type::Int(o_depth))
-            | (GType::Float(s_depth), Type::Float(o_depth))
-            | (GType::Byte(s_depth), Type::Byte(o_depth))
-            | (GType::Bool(s_depth), Type::Bool(o_depth)) => {
-                if *s_depth == o_depth {
-                    Ok(None)
-                } else {
-                    Err(())
-                }
-            }
-            (GType::Generic(index, depth), other) => {
-                if let Some(ty) = other.deref_n(*depth) {
-                    Ok(Some((*index, ty)))
-                } else {
-                    Err(())
-                }
-            }
-            (GType::Custom(s_name, s_depth), Type::Custom(o_name, o_depth)) => {
-                if *s_name == o_name && *s_depth == o_depth {
-                    Ok(None)
-                } else {
-                    Err(())
-                }
-            }
-            _ => Err(()),
-        }
+    // TODO: consider taking by value
+    pub fn inc(&self) -> GType {
+        self.ref_n(1)
     }
 
     fn substitute(&self, bindings: &[GType]) -> GType {
         match self {
             GType::Generic(index, depth) => bindings[*index].clone().ref_n(*depth),
+            GType::Custom(name, generics, depth) => todo!(),
             other => other.clone(),
-        }
-    }
-
-    pub fn substitute_(&self, bindings: &[Type]) -> Type {
-        match self {
-            GType::Int(depth) => Type::Int(*depth),
-            GType::Float(depth) => Type::Float(*depth),
-            GType::Byte(depth) => Type::Byte(*depth),
-            GType::Bool(depth) => Type::Bool(*depth),
-            GType::Generic(index, depth) => bindings[*index].ref_n(*depth),
-            GType::Custom(name, depth) => Type::Custom(name, *depth),
         }
     }
 
@@ -202,6 +187,10 @@ impl GType {
             GType::Generic(index, _) => Some(*index),
             _ => None,
         }
+    }
+
+    fn generic_indices(&self) -> HashSet<usize> {
+        todo!()
     }
 }
 
@@ -505,13 +494,11 @@ impl Context {
                 Ok(())
             }
             Item::Struct { name, fields, .. } => {
-                self.struct_fields.insert(
-                    name.name,
-                    fields
-                        .iter()
-                        .map(|Field { ty, name, .. }| (GType::new(ty.clone(), &None), name.name))
-                        .collect(),
-                );
+                let mut struct_fields = Vec::new();
+                for Field { ty, name, .. } in fields {
+                    struct_fields.push((GType::new(ty, &[])?, name.name));
+                }
+                self.struct_fields.insert(name.name, struct_fields);
                 Ok(())
             }
             Item::Global {
@@ -520,8 +507,7 @@ impl Context {
                 definition,
                 ..
             } => {
-                self.globals
-                    .push((name.name, GType::new(ty.clone(), &None)));
+                self.globals.push((name.name, GType::new(ty, &[])?));
                 if let Some(Definition {
                     group, lbrace_span, ..
                 }) = definition
@@ -530,7 +516,7 @@ impl Context {
                     for op in group {
                         self.check_op(&mut stack, op)?;
                     }
-                    if stack.len() == 1 && stack[0] == GType::new(ty.clone(), &None) {
+                    if stack.len() == 1 && stack[0] == GType::new(ty, &[])? {
                         Ok(())
                     } else {
                         Err(Error::Type(
@@ -539,10 +525,7 @@ impl Context {
                             vec![
                                 Note::new(
                                     None,
-                                    format!(
-                                        "delcare type is [{:?}]",
-                                        GType::new(ty.clone(), &None)
-                                    ),
+                                    format!("delcared type is [{:?}]", GType::new(ty, &[])?),
                                 ),
                                 Note::new(
                                     None,
@@ -1064,26 +1047,24 @@ impl Context {
                 body,
                 ..
             } => {
+                let empty = Vec::new();
+                let generic_names = generics.map(|g| &g.names).unwrap_or(&empty);
                 let params: Vec<_> = params
                     .iter()
-                    .cloned()
-                    .map(|t| GType::new(t, generics))
-                    .collect();
+                    .map(|t| GType::new(t, generic_names))
+                    .collect::<Result<_, _>>()?;
                 let returns = returns
                     .iter()
-                    .cloned()
-                    .map(|t| GType::new(t, generics))
-                    .collect();
+                    .map(|t| GType::new(t, generic_names))
+                    .collect::<Result<_, _>>()?;
 
                 if let Some(generics) = generics {
-                    let mut seen = vec![false; generics.names.len()];
+                    let mut seen = HashSet::new();
                     for param in &params {
-                        if let Some(index) = param.generic_index() {
-                            seen[index] = true;
-                        }
+                        seen.extend(param.generic_indices());
                     }
-                    for (i, seen) in seen.into_iter().enumerate() {
-                        if !seen {
+                    for i in 0..generics.names.len() {
+                        if !seen.contains(&i) {
                             return Err(Error::Parse(
                                 generics.names[i].span,
                                 format!(
@@ -1102,7 +1083,12 @@ impl Context {
                     returns,
                 }])
             }
-            Item::Struct { name, fields, .. } => {
+            Item::Struct {
+                name,
+                fields,
+                generics,
+                ..
+            } => {
                 let span = name.span;
                 let leaked = leak(format!(
                     "to_{}_ptrzalloc_{}_arrsize_of_{}",
@@ -1114,59 +1100,66 @@ impl Context {
                 let alloc_name_arr = zalloc_name_arr.strip_prefix('z').unwrap();
                 let zalloc_name = zalloc_name_arr.strip_suffix("_arr").unwrap();
                 let alloc_name = zalloc_name.strip_prefix('z').unwrap();
-                let mut signatures = vec![
-                    GSignature::new(
-                        *name,
-                        Kind::Constructor(span),
-                        fields
-                            .iter()
-                            .map(|f| GType::new(f.ty.clone(), &None))
-                            .collect(),
-                        vec![GType::Custom(name.name, 0)],
-                    ),
-                    GSignature::new(
-                        Name::new(to_name_ptr),
-                        Kind::PtrCast(span),
-                        vec![GType::Generic(0, 1)],
-                        vec![GType::Custom(name.name, 1)],
-                    ),
-                    GSignature::new(
-                        Name::new(to_name_ptr),
-                        Kind::PtrCast(span),
-                        vec![GType::Int(0)],
-                        vec![GType::Custom(name.name, 1)],
-                    ),
-                    GSignature::new(
-                        Name::new(size_of_name),
-                        Kind::SizeOf(span),
-                        vec![],
-                        vec![GType::Int(0)],
-                    ),
-                    GSignature::new(
-                        Name::new(alloc_name),
-                        Kind::Alloc(span),
-                        vec![],
-                        vec![GType::Custom(name.name, 1)],
-                    ),
-                    GSignature::new(
-                        Name::new(zalloc_name),
-                        Kind::Alloc(span),
-                        vec![],
-                        vec![GType::Custom(name.name, 1)],
-                    ),
-                    GSignature::new(
-                        Name::new(alloc_name_arr),
-                        Kind::AllocArr(span),
-                        vec![GType::Int(0)],
-                        vec![GType::Custom(name.name, 1)],
-                    ),
-                    GSignature::new(
-                        Name::new(zalloc_name_arr),
-                        Kind::AllocArr(span),
-                        vec![GType::Int(0)],
-                        vec![GType::Custom(name.name, 1)],
-                    ),
-                ];
+                let generics = if let Some(generics) = generics {
+                    (0..generics.names.len())
+                        .into_iter()
+                        .map(|index| GType::Generic(index, 0))
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                let mut signatures = vec![GSignature::new(
+                    *name,
+                    Kind::Constructor(span),
+                    fields
+                        .iter()
+                        .map(|f| GType::new(&f.ty, &[]))
+                        .collect::<Result<_, _>>()?,
+                    vec![GType::Custom(name.name, generics.clone(), 0)],
+                )];
+                // TODO: generate these functions even for generic structs
+                // TODO: might have to parse size_of_list[int] and alloc_list[int]_arr
+                // TODO: also have to parse size_of_T, size_of_list[T], alloc_T, ...
+                if !generics.is_empty() {
+                    signatures.append(&mut vec![
+                        GSignature::new(
+                            Name::new(to_name_ptr),
+                            Kind::PtrCast(span),
+                            vec![GType::Generic(0, 1)],
+                            vec![GType::Custom(name.name, Vec::new(), 1)],
+                        ),
+                        GSignature::new(
+                            Name::new(size_of_name),
+                            Kind::SizeOf(span),
+                            vec![],
+                            vec![GType::Int(0)],
+                        ),
+                        GSignature::new(
+                            Name::new(alloc_name),
+                            Kind::Alloc(span),
+                            vec![],
+                            vec![GType::Custom(name.name, 1)],
+                        ),
+                        GSignature::new(
+                            Name::new(zalloc_name),
+                            Kind::Alloc(span),
+                            vec![],
+                            vec![GType::Custom(name.name, 1)],
+                        ),
+                        GSignature::new(
+                            Name::new(alloc_name_arr),
+                            Kind::AllocArr(span),
+                            vec![GType::Int(0)],
+                            vec![GType::Custom(name.name, 1)],
+                        ),
+                        GSignature::new(
+                            Name::new(zalloc_name_arr),
+                            Kind::AllocArr(span),
+                            vec![GType::Int(0)],
+                            vec![GType::Custom(name.name, 1)],
+                        ),
+                    ])
+                }
                 for Field {
                     name: fname, ty, ..
                 } in fields
