@@ -1,10 +1,10 @@
+use std::iter::Peekable;
+
 use crate::ast::Expr;
 use crate::ast::{Group, Name};
 use crate::error::Error;
 use crate::lex::{Span, Token, Tokens};
 use crate::parse::parse_group;
-
-use std::iter::Peekable;
 
 // TODO: parse <<, >> and * (deref)
 

@@ -6,7 +6,9 @@ mod expr;
 mod imports;
 mod lex;
 mod parse;
+mod program;
 mod typecheck;
+mod types;
 
 use std::env::args;
 use std::fs::File;
@@ -34,8 +36,9 @@ fn transpile(file_name: &str) -> Result<(), error::Error> {
     let main_unit = parse::parse_file(file_name)?;
     let unit = imports::resolve_imports(main_unit, PathBuf::from(file_name))?;
     println!("{:#?}", unit);
-    let info = typecheck::typecheck(&unit)?;
-    let code = codegen::generate(&info);
+    let program = typecheck::check(&unit)?;
+    println!("{:#?}", program);
+    let code = codegen::generate_c(&program);
     let mut file = File::create("out.c").unwrap();
     write!(file, "{}", code).unwrap();
     Ok(())

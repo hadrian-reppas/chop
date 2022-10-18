@@ -1,7 +1,7 @@
+use std::fmt;
+
 use crate::lex::{Span, Token};
 use std::hash::{Hash, Hasher};
-
-use std::fmt;
 
 #[derive(Clone, Copy)]
 pub struct Name {

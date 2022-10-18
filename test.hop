@@ -1,0 +1,14 @@
+global count: int { 0 }
+global flag: bool
+
+struct pair[T] {
+    fst: T
+    snd: T
+}
+
+fn main {
+    "hello" DEBUG_STACK putlns
+}
+
+fn f int -> int {}
+fn f bool -> bool {}

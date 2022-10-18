@@ -1,10 +1,11 @@
+use std::collections::HashSet;
+
+use lazy_static::lazy_static;
+
 use crate::ast::*;
 use crate::error::Error;
 use crate::expr;
 use crate::lex::{Span, Token, Tokens};
-
-use lazy_static::lazy_static;
-use std::collections::HashSet;
 
 lazy_static! {
     static ref RESERVED_TYPES: HashSet<&'static str> =
@@ -143,6 +144,12 @@ fn parse_struct(tokens: &mut Tokens) -> Result<Item, Error> {
         return Err(Error::Parse(
             name.span,
             "structs must have normal names".to_string(),
+        ));
+    }
+    if RESERVED_TYPES.contains(&name.name) {
+        return Err(Error::Parse(
+            name.span,
+            format!("'{}' is a reserved type name", name.name),
         ));
     }
     let generics = parse_generics(tokens)?;

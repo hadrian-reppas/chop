@@ -1,8 +1,9 @@
-use crate::error::Error;
+use std::{fmt, fs};
 
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::{fmt, fs};
+
+use crate::error::Error;
 
 // TODO: add byte literal (eg b'a')
 

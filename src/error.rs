@@ -1,7 +1,7 @@
-use crate::lex::Span;
-
 use lazy_static::lazy_static;
 use termion::{color, style};
+
+use crate::lex::Span;
 
 lazy_static! {
     pub static ref RED: String = format!("{}{}", color::Fg(color::Red), style::Bold);

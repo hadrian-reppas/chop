@@ -1,10 +1,10 @@
+use std::collections::HashMap;
+use std::path::PathBuf;
+
 use crate::ast::Item;
 use crate::error::Error;
 use crate::lex::{leak, Span, Tokens};
 use crate::parse::{parse, parse_file};
-
-use std::collections::HashMap;
-use std::path::PathBuf;
 
 const STRING: &str = include_str!("../std/string.hop");
 const PRELUDE: &str = include_str!("../std/prelude.hop");
