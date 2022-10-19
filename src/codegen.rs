@@ -1,5 +1,5 @@
-use crate::program::Program;
+use crate::typecheck::ProgramInfo;
 
-pub fn generate_c(context: &Program) -> String {
+pub fn generate_c(info: &ProgramInfo) -> String {
     todo!()
 }

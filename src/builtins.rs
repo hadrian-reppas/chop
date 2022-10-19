@@ -91,13 +91,13 @@ macro_rules! ptr {
 
 macro_rules! gen {
     ($index:expr) => {
-        GType::Generic($index, 0)
+        GType::Generic(0, $index)
     };
 }
 
 macro_rules! genp {
     ($index:expr) => {
-        GType::Generic($index, 1)
+        GType::Generic(1, $index)
     };
 }
 

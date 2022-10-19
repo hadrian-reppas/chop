@@ -1,22 +1,37 @@
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 
-// TODO: get rid of the Types struct, TypeId and GTypeId
+// TODO: consider getting rid of the Types struct, TypeId and GTypeId
 // they don't  avoid allocations so no point...
 
 use bimap::BiMap;
 
 use crate::ast::{Item, Name, PType};
-use crate::error::Error;
+use crate::error::{Error, Note};
 use crate::lex::Span;
 
 #[repr(transparent)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)] // TODO: this really shouldn't be Debug
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TypeId(usize);
 
+// TODO: REMOVE THIS
+impl fmt::Debug for TypeId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "TypeId")
+    }
+}
+
 #[repr(transparent)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)] // TODO: this really shouldn't be Debug
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct GTypeId(usize);
+
+// TODO: REMOVE THIS
+impl fmt::Debug for GTypeId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "GTypeId")
+    }
+}
 
 #[derive(Clone, Copy)]
 pub enum Kind {
@@ -30,16 +45,20 @@ pub enum Kind {
 }
 
 impl Kind {
-    pub fn span(self) -> Span {
+    pub fn span(self) -> Option<Span> {
         match self {
-            Kind::Builtin => panic!(),
-            Kind::Custom(span) => span,
-            Kind::Constructor(span) => span,
-            Kind::Member(span) => span,
-            Kind::Global(span) => span,
-            Kind::GlobalWrite(span) => span,
-            Kind::GlobalPtr(span) => span,
+            Kind::Builtin => None,
+            Kind::Custom(span)
+            | Kind::Constructor(span)
+            | Kind::Member(span)
+            | Kind::Global(span)
+            | Kind::GlobalWrite(span)
+            | Kind::GlobalPtr(span) => Some(span),
         }
+    }
+
+    pub fn is_auto(self) -> bool {
+        !matches!(self, Kind::Builtin | Kind::Custom(_))
     }
 }
 
@@ -147,13 +166,22 @@ impl Types {
     }
 
     pub fn init_generic_counts(&mut self, unit: &[Item]) -> Result<(), Error> {
+        let mut struct_spans = HashMap::new();
         for item in unit {
             if let Item::Struct { name, generics, .. } = item {
                 if self.generic_counts.contains_key(name.name) {
+                    let prev_span: Span = struct_spans[name.name];
+                    let note = if prev_span.is_std {
+                        let split_path: Vec<_> = prev_span.file.split('/').collect();
+                        let path = split_path.join(":");
+                        Note::new(None, format!("'{}' is defined in {}", name.name, path))
+                    } else {
+                        Note::new(Some(prev_span), "previous definition is here".to_string())
+                    };
                     return Err(Error::Type(
                         name.span,
                         format!("type '{}' is already defined", name.name),
-                        vec![], // TODO: include Note with previous definition's Span
+                        vec![note],
                     ));
                 } else {
                     let count = match generics {
@@ -161,6 +189,7 @@ impl Types {
                         None => 0,
                     };
                     self.generic_counts.insert(name.name, count);
+                    struct_spans.insert(name.name, name.span);
                 }
             }
         }
@@ -190,7 +219,7 @@ impl Types {
     pub fn convert(&mut self, ty: &PType, generics: &[Name]) -> Result<GTypeId, Error> {
         let (name, span) = (ty.name.name, ty.name.span);
         let depth = ty.stars.map(|s| s.name.len()).unwrap_or(0);
-        let generic_params = if let Some(index) = generics.iter().position(|g| g.name == name) {
+        let generic_params = if generics.iter().any(|g| g.name == name) {
             if ty.generics.is_some() {
                 return Err(Error::Type(
                     span,
@@ -386,6 +415,10 @@ impl Types {
 
     pub fn byte_ptr(&mut self) -> GTypeId {
         self.get_or_insert(GType::Byte(1))
+    }
+
+    pub fn byte_ptr_ptr(&mut self) -> GTypeId {
+        self.get_or_insert(GType::Byte(2))
     }
 
     pub fn overlap(&mut self, a: GTypeId, b: GTypeId) -> bool {

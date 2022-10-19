@@ -4,15 +4,20 @@ use std::mem;
 
 use crate::ast::*;
 use crate::builtins::{Builtins, BUILTINS};
-use crate::error::{Error, Note, BLUE, GREEN, RESET};
+use crate::error::{Error, Note};
 use crate::lex::Span;
 use crate::program::*;
 use crate::types::*;
+use crate::{color, reset};
 
-pub fn check(unit: &[Item]) -> Result<Program, Error> {
+pub fn check(unit: &[Item]) -> Result<ProgramInfo, Error> {
     let mut context = Context::new(&BUILTINS);
     context.check_unit(unit)?;
-    Ok(context.program_context.program)
+    Ok(ProgramInfo {
+        program: context.program_context.program,
+        call_graph: context.call_graph,
+        types: context.types,
+    })
 }
 
 pub struct Context {
@@ -21,6 +26,7 @@ pub struct Context {
     struct_fields: HashMap<&'static str, Vec<(&'static str, GTypeId)>>,
     let_binds: Vec<HashMap<&'static str, (usize, GTypeId)>>,
     call_graph: CallGraph,
+    globals: HashMap<&'static str, GTypeId>,
     program_context: ProgramContext,
 }
 
@@ -56,6 +62,7 @@ impl Context {
             struct_fields: HashMap::new(),
             let_binds: Vec::new(),
             call_graph: CallGraph::new(),
+            globals: HashMap::new(),
             program_context: ProgramContext::new(),
         }
     }
@@ -66,7 +73,76 @@ impl Context {
                 self.insert_signature(name, signature)?;
             }
         }
-        Ok(())
+        if let Some(mains) = self.signatures.get("main") {
+            if mains.len() == 1 {
+                let GSignature {
+                    params,
+                    returns,
+                    kind,
+                } = mains[0].clone();
+
+                if !params.is_empty() && params != [self.types.int(), self.types.byte_ptr_ptr()] {
+                    Err(Error::Type(
+                        kind.span().unwrap(),
+                        format!(
+                            "'main' must have parameters {}[]{} or {}[int, **byte]{}",
+                            color!(Blue),
+                            reset!(),
+                            color!(Blue),
+                            reset!(),
+                        ),
+                        vec![Note::new(
+                            None,
+                            format!(
+                                "'main' has signature {}{} -> {}{}",
+                                color!(Blue),
+                                self.types.format_types(&params),
+                                self.types.format_types(&returns),
+                                reset!(),
+                            ),
+                        )],
+                    ))
+                } else if !returns.is_empty() && returns != [self.types.int()] {
+                    Err(Error::Type(
+                        kind.span().unwrap(),
+                        format!(
+                            "'main' must return {}[]{} or {}[int]{}",
+                            color!(Blue),
+                            reset!(),
+                            color!(Blue),
+                            reset!(),
+                        ),
+                        vec![Note::new(
+                            None,
+                            format!(
+                                "'main' has signature {}{} -> {}{}",
+                                color!(Blue),
+                                self.types.format_types(&params),
+                                self.types.format_types(&returns),
+                                reset!(),
+                            ),
+                        )],
+                    ))
+                } else {
+                    Ok(())
+                }
+            } else {
+                Err(Error::Main(
+                    "multiple functions named 'main'".to_string(),
+                    mains
+                        .iter()
+                        .map(|s| {
+                            Note::new(
+                                Some(s.kind.span().unwrap()),
+                                "'main' defined here".to_string(),
+                            )
+                        })
+                        .collect(),
+                ))
+            }
+        } else {
+            Err(Error::Main("no function named 'main'".to_string(), vec![]))
+        }
     }
 
     fn check_unit(&mut self, unit: &[Item]) -> Result<(), Error> {
@@ -108,13 +184,19 @@ impl Context {
                     .unwrap();
                 self.call_graph.set_active(name.name, index);
                 let mut stack: Vec<_> = params.iter().copied().enumerate().collect();
-                self.begin_fn(name.name, generic_names.len(), params);
+                self.program_context.begin_fn(&params);
                 for stmt in body {
                     self.check_stmt(&mut stack, stmt)?;
                 }
                 let stack_types: Vec<_> = stack.iter().map(|(_, ty)| *ty).collect();
                 if stack_types == returns {
-                    self.end_fn(stack);
+                    self.program_context.end_fn(
+                        &stack,
+                        name.name,
+                        generic_names.len(),
+                        params,
+                        returns,
+                    );
                     Ok(())
                 } else {
                     Err(Error::Type(
@@ -124,19 +206,19 @@ impl Context {
                             Note::new(
                                 None,
                                 format!(
-                                    "expected {}{:?}{}",
-                                    BLUE.as_str(),
+                                    "expected {}{}{}",
+                                    color!(Blue),
                                     self.types.format_types(&returns),
-                                    RESET.as_str(),
+                                    reset!(),
                                 ),
                             ),
                             Note::new(
                                 None,
                                 format!(
-                                    "found {}{:?}{}",
-                                    BLUE.as_str(),
+                                    "found {}{}{}",
+                                    color!(Blue),
                                     self.types.format_types(&stack_types),
-                                    RESET.as_str(),
+                                    reset!(),
                                 ),
                             ),
                         ],
@@ -166,18 +248,18 @@ impl Context {
             } => {
                 let ty = self.types.convert(ty, &[])?;
                 let substituted = self.types.substitute_concrete(ty, &[]);
-                self.begin_global(name.name, substituted);
+                self.program_context.begin_global();
                 if let Some(definition) = definition {
-                    self.begin_global_init();
+                    self.call_graph.set_active("main", 0);
                     let mut stack = Vec::new();
                     for op in &definition.group {
                         self.check_op(&mut stack, op)?;
                     }
                     if stack.len() == 1 && stack[0].1 == ty {
-                        self.end_global(Some(stack[0].0));
+                        self.program_context
+                            .end_global_init(name.name, substituted, stack[0].0);
                         Ok(())
                     } else {
-                        let stack_types: Vec<_> = stack.iter().map(|(_, ty)| *ty).collect();
                         Err(Error::Type(
                             definition.rbrace_span,
                             "stack does not match declared type".to_string(),
@@ -186,25 +268,25 @@ impl Context {
                                     None,
                                     format!(
                                         "declared type is {}{}{}",
-                                        BLUE.as_str(),
+                                        color!(Blue),
                                         self.types.format(ty),
-                                        RESET.as_str(),
+                                        reset!(),
                                     ),
                                 ),
                                 Note::new(
                                     None,
                                     format!(
                                         "stack is {}{}{}",
-                                        BLUE.as_str(),
-                                        self.types.format_types(&stack_types),
-                                        RESET.as_str(),
+                                        color!(Blue),
+                                        self.types.format_stack(&stack),
+                                        reset!(),
                                     ),
                                 ),
                             ],
                         ))
                     }
                 } else {
-                    self.end_global(None);
+                    self.program_context.end_global(name.name, substituted);
                     Ok(())
                 }
             }
@@ -223,28 +305,36 @@ impl Context {
             Stmt::If {
                 test,
                 body,
-                if_span,
                 lbrace_span,
                 rbrace_span,
                 else_part,
                 is_else_if,
-            } => todo!(),
+                ..
+            } => self.check_if(
+                stack,
+                test,
+                body,
+                *lbrace_span,
+                *rbrace_span,
+                else_part,
+                *is_else_if,
+            ),
             Stmt::While {
                 test,
                 body,
-                while_span,
                 lbrace_span,
                 rbrace_span,
-            } => todo!(),
+                ..
+            } => self.check_while(stack, test, body, *lbrace_span, *rbrace_span),
             Stmt::For {
                 low,
                 high,
                 body,
-                for_span,
                 to_span,
                 lbrace_span,
                 rbrace_span,
-            } => todo!(),
+                ..
+            } => self.check_for(stack, low, high, body, *to_span, *lbrace_span, *rbrace_span),
             Stmt::Let {
                 names,
                 body,
@@ -252,6 +342,467 @@ impl Context {
                 ..
             } => self.check_let(stack, names, body, *let_span),
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn check_if(
+        &mut self,
+        stack: &mut Vec<(usize, GTypeId)>,
+        test: &[Op],
+        body: &[Stmt],
+        lbrace_span: Span,
+        rbrace_span: Span,
+        else_part: &Option<ElsePart>,
+        is_else_if: bool,
+    ) -> Result<(), Error> {
+        for op in test {
+            self.check_op(stack, op)?;
+        }
+
+        let bool_id = self.types.bool();
+        if stack.is_empty() || stack.last().unwrap().1 != bool_id {
+            return Err(Error::Type(
+                lbrace_span,
+                "expected a 'bool' for if test".to_string(),
+                vec![Note::new(
+                    None,
+                    format!(
+                        "stack is {}{}{}",
+                        color!(Blue),
+                        self.types.format_stack(stack),
+                        reset!(),
+                    ),
+                )],
+            ));
+        }
+
+        let test_var = stack.pop().unwrap().0;
+
+        let stack_before = if is_else_if {
+            format!(
+                "before else if block, stack is {}{}{} ({})",
+                color!(Blue),
+                self.types.format_stack(stack),
+                reset!(),
+                lbrace_span.location(),
+            )
+        } else {
+            format!(
+                "before if block, stack is {}{}{} ({})",
+                color!(Blue),
+                self.types.format_stack(stack),
+                reset!(),
+                lbrace_span.location()
+            )
+        };
+
+        let mut else_stack = stack.clone();
+
+        self.program_context.begin_if();
+        for stmt in body {
+            self.check_stmt(stack, stmt)?;
+        }
+
+        self.program_context.begin_else(stack, &else_stack);
+        if let Some(else_part) = else_part {
+            for stmt in &else_part.body {
+                self.check_stmt(&mut else_stack, stmt)?;
+            }
+        }
+
+        if stack.len() != else_stack.len()
+            || stack
+                .iter()
+                .zip(else_stack.iter())
+                .any(|((_, s), (_, e))| s != e)
+        {
+            if let Some(else_part) = else_part {
+                return Err(Error::Type(
+                    else_part.rbrace_span,
+                    if is_else_if {
+                        "else if and else blocks have mismatched stacks".to_string()
+                    } else {
+                        "if and else blocks have mismatched stacks".to_string()
+                    },
+                    vec![
+                        Note::new(None, stack_before),
+                        if is_else_if {
+                            Note::new(
+                                None,
+                                format!(
+                                    "after else if block, stack is {}{}{} ({})",
+                                    color!(Blue),
+                                    self.types.format_stack(stack),
+                                    reset!(),
+                                    rbrace_span.location(),
+                                ),
+                            )
+                        } else {
+                            Note::new(
+                                None,
+                                format!(
+                                    "after if block, stack is {}{}{} ({})",
+                                    color!(Blue),
+                                    self.types.format_stack(stack),
+                                    reset!(),
+                                    rbrace_span.location(),
+                                ),
+                            )
+                        },
+                        Note::new(
+                            None,
+                            format!(
+                                "after else block, stack is {}{}{} ({})",
+                                color!(Blue),
+                                self.types.format_stack(&else_stack),
+                                reset!(),
+                                else_part.rbrace_span.location(),
+                            ),
+                        ),
+                    ],
+                ));
+            } else {
+                return Err(Error::Type(
+                    rbrace_span,
+                    if is_else_if {
+                        "stack does not match the stack before else if block".to_string()
+                    } else {
+                        "stack does not match the stack before if block".to_string()
+                    },
+                    vec![
+                        Note::new(None, stack_before),
+                        if is_else_if {
+                            Note::new(
+                                None,
+                                format!(
+                                    "after else if block, stack is {}{}{} ({})",
+                                    color!(Blue),
+                                    self.types.format_stack(stack),
+                                    reset!(),
+                                    rbrace_span.location(),
+                                ),
+                            )
+                        } else {
+                            Note::new(
+                                None,
+                                format!(
+                                    "after if block, stack is {}{}{} ({})",
+                                    color!(Blue),
+                                    self.types.format_stack(stack),
+                                    reset!(),
+                                    rbrace_span.location(),
+                                ),
+                            )
+                        },
+                    ],
+                ));
+            }
+        }
+
+        let mut resolve = Vec::new();
+        for ((var, _), (else_var, _)) in stack.iter().copied().zip(else_stack) {
+            if var != else_var {
+                resolve.push((var, else_var));
+            }
+        }
+        self.program_context.end_if_else(test_var, resolve);
+
+        Ok(())
+    }
+
+    fn check_while(
+        &mut self,
+        stack: &mut Vec<(usize, GTypeId)>,
+        test: &[Op],
+        body: &[Stmt],
+        lbrace_span: Span,
+        rbrace_span: Span,
+    ) -> Result<(), Error> {
+        let mut stack_before = stack.clone();
+
+        for op in test {
+            self.check_op(stack, op)?;
+        }
+
+        let bool_id = self.types.bool();
+        if stack.is_empty() || stack.last().unwrap().1 != bool_id {
+            return Err(Error::Type(
+                lbrace_span,
+                "expected a 'bool' for while test".to_string(),
+                vec![Note::new(
+                    None,
+                    format!(
+                        "stack is {}{}{}",
+                        color!(Blue),
+                        self.types.format_stack(stack),
+                        reset!(),
+                    ),
+                )],
+            ));
+        }
+        if stack.len() != stack_before.len() + 1
+            || stack
+                .iter()
+                .zip(stack_before.iter())
+                .any(|((_, s), (_, b))| s != b)
+        {
+            return Err(Error::Type(
+                lbrace_span,
+                "while test should add a single 'bool' to the stack".to_string(),
+                vec![
+                    Note::new(
+                        None,
+                        format!(
+                            "before test, stack is {}{}{}",
+                            color!(Blue),
+                            self.types.format_stack(&stack_before),
+                            reset!(),
+                        ),
+                    ),
+                    Note::new(
+                        None,
+                        format!(
+                            "after test, stack is {}{}{}",
+                            color!(Blue),
+                            self.types.format_stack(stack),
+                            reset!(),
+                        ),
+                    ),
+                ],
+            ));
+        }
+
+        let test_var = stack.pop().unwrap().0;
+
+        self.program_context.begin_while();
+        for stmt in body {
+            self.check_stmt(stack, stmt)?;
+        }
+
+        if stack.len() != stack_before.len()
+            || stack
+                .iter()
+                .zip(stack_before.iter())
+                .any(|((_, s), (_, b))| s != b)
+        {
+            return Err(Error::Type(
+                rbrace_span,
+                "stack does not match the stack before while block".to_string(),
+                vec![
+                    Note::new(
+                        None,
+                        format!(
+                            "before while block, stack is {}{}{}",
+                            color!(Blue),
+                            self.types.format_stack(&stack_before),
+                            reset!(),
+                        ),
+                    ),
+                    Note::new(
+                        None,
+                        format!(
+                            "after while block, stack is {}{}{}",
+                            color!(Blue),
+                            self.types.format_stack(stack),
+                            reset!(),
+                        ),
+                    ),
+                ],
+            ));
+        }
+
+        for op in test {
+            self.check_op(stack, op).unwrap();
+        }
+
+        let mut resolve = Vec::new();
+        let t_var = stack.pop().unwrap().0;
+        if t_var != test_var {
+            resolve.push((test_var, t_var));
+        }
+        for ((var_before, _), (var, _)) in stack_before.iter().copied().zip(stack.iter().copied()) {
+            if var_before != var {
+                resolve.push((var_before, var));
+            }
+        }
+        self.program_context.end_while(test_var, resolve);
+
+        mem::swap(stack, &mut stack_before);
+
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn check_for(
+        &mut self,
+        stack: &mut Vec<(usize, GTypeId)>,
+        low: &[Op],
+        high: &[Op],
+        body: &[Stmt],
+        to_span: Span,
+        lbrace_span: Span,
+        rbrace_span: Span,
+    ) -> Result<(), Error> {
+        let mut stack_before = stack.clone();
+
+        for op in low {
+            self.check_op(stack, op)?;
+        }
+
+        let int_id = self.types.int();
+        if stack.is_empty() || stack.last().unwrap().1 != int_id {
+            return Err(Error::Type(
+                to_span,
+                "expected a 'int' in for lower bound".to_string(),
+                vec![Note::new(
+                    None,
+                    format!(
+                        "stack is {}{}{}",
+                        color!(Blue),
+                        self.types.format_stack(stack),
+                        reset!(),
+                    ),
+                )],
+            ));
+        }
+        if stack.len() != stack_before.len() + 1
+            || stack
+                .iter()
+                .zip(stack_before.iter())
+                .any(|((_, s), (_, b))| s != b)
+        {
+            return Err(Error::Type(
+                to_span,
+                "lower bound should add a single 'int' to the stack".to_string(),
+                vec![
+                    Note::new(
+                        None,
+                        format!(
+                            "before bound, stack is {}{}{}",
+                            color!(Blue),
+                            self.types.format_stack(&stack_before),
+                            reset!(),
+                        ),
+                    ),
+                    Note::new(
+                        None,
+                        format!(
+                            "after bound, stack is {}{}{}",
+                            color!(Blue),
+                            self.types.format_stack(stack),
+                            reset!(),
+                        ),
+                    ),
+                ],
+            ));
+        }
+
+        let low_var = stack.pop().unwrap().0;
+
+        for op in high {
+            self.check_op(stack, op)?;
+        }
+
+        if stack.is_empty() || stack.last().unwrap().1 != int_id {
+            return Err(Error::Type(
+                lbrace_span,
+                "expected a 'int' in for upper bound".to_string(),
+                vec![Note::new(
+                    None,
+                    format!(
+                        "stack is {}{}{}",
+                        color!(Blue),
+                        self.types.format_stack(stack),
+                        reset!(),
+                    ),
+                )],
+            ));
+        }
+        if stack.len() != stack_before.len() + 1
+            || stack
+                .iter()
+                .zip(stack_before.iter())
+                .any(|((_, s), (_, b))| s != b)
+        {
+            return Err(Error::Type(
+                lbrace_span,
+                "upper bound should add a single 'int' to the stack".to_string(),
+                vec![
+                    Note::new(
+                        None,
+                        format!(
+                            "before bound, stack is {}{}{}",
+                            color!(Blue),
+                            self.types.format_stack(&stack_before),
+                            reset!(),
+                        ),
+                    ),
+                    Note::new(
+                        None,
+                        format!(
+                            "after bound, stack is {}{}{}",
+                            color!(Blue),
+                            self.types.format_stack(stack),
+                            reset!(),
+                        ),
+                    ),
+                ],
+            ));
+        }
+
+        let high_var = stack.pop().unwrap().0;
+        let iter_var = self.program_context.alloc(int_id);
+        stack.push((iter_var, int_id));
+
+        self.program_context.begin_for();
+        for stmt in body {
+            self.check_stmt(stack, stmt)?;
+        }
+
+        if stack.len() != stack_before.len()
+            || stack
+                .iter()
+                .zip(stack_before.iter())
+                .any(|((_, s), (_, b))| s != b)
+        {
+            return Err(Error::Type(
+                rbrace_span,
+                "stack does not match the stack before for block".to_string(),
+                vec![
+                    Note::new(
+                        None,
+                        format!(
+                            "before for block, stack is {}{}{}",
+                            color!(Blue),
+                            self.types.format_stack(&stack_before),
+                            reset!(),
+                        ),
+                    ),
+                    Note::new(
+                        None,
+                        format!(
+                            "after for block, stack is {}{}{}",
+                            color!(Blue),
+                            self.types.format_stack(stack),
+                            reset!(),
+                        ),
+                    ),
+                ],
+            ));
+        }
+
+        let mut resolve = Vec::new();
+        for ((var_before, _), (var, _)) in stack_before.iter().copied().zip(stack.iter().copied()) {
+            if var_before != var {
+                resolve.push((var_before, var));
+            }
+        }
+        self.program_context
+            .end_for(iter_var, low_var, high_var, resolve);
+
+        mem::swap(stack, &mut stack_before);
+
+        Ok(())
     }
 
     fn check_let(
@@ -275,9 +826,9 @@ impl Context {
                     None,
                     format!(
                         "stack is {}{}{}",
-                        BLUE.as_str(),
+                        color!(Blue),
                         self.types.format_stack(stack),
-                        RESET.as_str(),
+                        reset!(),
                     ),
                 )],
             ));
@@ -306,11 +857,12 @@ impl Context {
             ($val:expr, $ty:ident, $name:ident) => {{
                 let ty = self.types.$ty();
                 let var = self.program_context.alloc(ty);
-                self.push_op(ProgramOp::$name(var, $val));
+                self.program_context.push_op(ProgramOp::$name(var, $val));
                 stack.push((var, ty));
                 Ok(())
             }};
         }
+
         match op {
             Op::Int(val, _) => prim!(*val, int, Int),
             Op::Float(val, _) => prim!(*val, float, Float),
@@ -319,8 +871,11 @@ impl Context {
             Op::String(val, _) => prim!(val.clone(), byte_ptr, String),
             Op::Name(name) => self.check_name(stack, name),
             Op::Expr(expr, _) => {
+                self.program_context.pause();
                 self.check_expr(expr)?;
-                let ops = flatten_expr(expr);
+                self.program_context.resume();
+                let mut ops = Vec::new();
+                flatten_expr(expr, &mut ops);
                 for op in &ops {
                     self.check_op(stack, op)?;
                 }
@@ -333,11 +888,11 @@ impl Context {
         if name.name == "DEBUG_STACK" {
             println!(
                 "{}DEBUG_STACK{} {}{}{} ({})",
-                GREEN.as_str(),
-                RESET.as_str(),
-                BLUE.as_str(),
+                color!(Green),
+                reset!(),
+                color!(Blue),
                 self.types.format_stack(stack),
-                RESET.as_str(),
+                reset!(),
                 name.span.location(),
             );
         }
@@ -361,7 +916,8 @@ impl Context {
             stack.push((var, ty));
             return_vars.push(var);
         }
-        self.push_op(ProgramOp::Call(name.name, index, param_vars, return_vars));
+        self.program_context
+            .push_op(ProgramOp::Call(name.name, index, param_vars, return_vars));
         Ok(())
     }
 
@@ -390,18 +946,20 @@ impl Context {
                 None,
                 format!(
                     "stack is {}{}{}",
-                    BLUE.as_str(),
+                    color!(Blue),
                     self.types.format_stack(stack),
-                    RESET.as_str()
+                    reset!()
                 ),
             )];
             for signature in signatures {
                 notes.push(Note::new(
                     None,
                     format!(
-                        "'{}' has signature {}",
+                        "'{}' has signature {}{}{}",
                         name.name,
-                        self.types.format_signature(signature)
+                        color!(Blue),
+                        self.types.format_signature(signature),
+                        reset!(),
                     ),
                 ));
             }
@@ -419,67 +977,180 @@ impl Context {
         }
     }
 
-    fn push_op(&mut self, op: ProgramOp) {
-        if let Some(fn_wip) = &mut self.program_context.wip_fn {
-            fn_wip.body.push(ProgramStmt::Op(op));
-        } else {
-            let global_wip = self.program_context.wip_global.as_mut().unwrap();
-            global_wip.init.as_mut().unwrap().ops.push(op);
+    fn check_expr(&mut self, expr: &Expr) -> Result<GTypeId, Error> {
+        macro_rules! binop {
+            ($op:expr, $left:ident, $right:ident, $span:expr) => {{
+                let stack = vec![(0, self.check_expr($left)?), (0, self.check_expr($right)?)];
+                let (signature, binds, _) = self.get_sbi(&stack, &$span.into())?;
+                if signature.returns.len() == 1 {
+                    Ok(self.types.substitute(signature.returns[0], &binds))
+                } else {
+                    Err(Error::Type(
+                        $span,
+                        "expression operators must return a single value".to_string(),
+                        vec![
+                            Note::new(
+                                None,
+                                format!("'{}' returns {} values", $op, signature.returns.len()),
+                            ),
+                            Note::new(
+                                None,
+                                format!(
+                                    "'{}' has signature {}{}{}",
+                                    $op,
+                                    color!(Blue),
+                                    self.types.format_signature(&signature),
+                                    reset!(),
+                                ),
+                            ),
+                        ],
+                    ))
+                }
+            }};
         }
-    }
 
-    fn check_expr(&mut self, expr: &Expr) -> Result<(), Error> {
-        todo!()
-    }
-
-    fn begin_fn(&mut self, name: &'static str, generic_count: usize, params: Vec<GTypeId>) {
-        self.program_context.init_vars(&params);
-        self.program_context.wip_fn = Some(ProgramFn {
-            name,
-            generic_count,
-            params,
-            returns: Vec::new(),
-            body: Vec::new(),
-            vars: HashMap::new(),
-            return_vars: Vec::new(),
-        });
-    }
-
-    fn end_fn(&mut self, stack: Vec<(usize, GTypeId)>) {
-        let mut function = self.program_context.wip_fn.take().unwrap();
-        function.vars = mem::take(&mut self.program_context.vars);
-        for (var, id) in stack {
-            function.return_vars.push(var);
-            function.returns.push(id);
+        macro_rules! uop {
+            ($op:expr, $expr:ident, $span:expr) => {{
+                let stack = vec![(0, self.check_expr($expr)?)];
+                let (signature, binds, _) = self.get_sbi(&stack, &$span.into())?;
+                if signature.returns.len() == 1 {
+                    Ok(self.types.substitute(signature.returns[0], &binds))
+                } else {
+                    Err(Error::Type(
+                        $span,
+                        "expression operators must return a single value".to_string(),
+                        vec![
+                            Note::new(
+                                None,
+                                format!("'{}' returns {} values", $op, signature.returns.len()),
+                            ),
+                            Note::new(
+                                None,
+                                format!(
+                                    "'{}' has signature {}{}{}",
+                                    $op,
+                                    color!(Blue),
+                                    self.types.format_signature(&signature),
+                                    reset!(),
+                                ),
+                            ),
+                        ],
+                    ))
+                }
+            }};
         }
-        self.program_context.program.functions.push(function);
-    }
 
-    fn begin_global(&mut self, name: &'static str, type_id: TypeId) {
-        self.call_graph.set_active("main", 0);
-        self.program_context.wip_global = Some(ProgramGlobal {
-            name,
-            type_id,
-            init: None,
-        })
-    }
-
-    fn begin_global_init(&mut self) {
-        self.program_context.init_vars(&[]);
-        self.program_context.wip_global.as_mut().unwrap().init = Some(ProgramGlobalInit {
-            ops: Vec::new(),
-            var: 0,
-            vars: HashMap::new(),
-        });
-    }
-
-    fn end_global(&mut self, var: Option<usize>) {
-        let mut global = self.program_context.wip_global.take().unwrap();
-        if let Some(init) = &mut global.init {
-            init.var = var.unwrap();
-            init.vars = mem::take(&mut self.program_context.vars);
+        match expr {
+            Expr::Int(_, _) => Ok(self.types.int()),
+            Expr::Float(_, _) => Ok(self.types.float()),
+            Expr::Bool(_, _) => Ok(self.types.bool()),
+            Expr::Char(_, _) => Ok(self.types.int()),
+            Expr::Name(name) => {
+                if let Some((_, ty)) = self.get_let_bind(name.name) {
+                    Ok(ty)
+                } else if let Some(ty) = self.globals.get(name.name) {
+                    Ok(*ty)
+                } else {
+                    Err(Error::Type(
+                        name.span,
+                        format!("variable '{}' does not exist", name.name),
+                        vec![Note::new(
+                            None,
+                            "names in expressions must be let or global variables".to_string(),
+                        )],
+                    ))
+                }
+            }
+            Expr::Add(left, right, span) => binop!("+", left, right, *span),
+            Expr::And(left, right, span) => binop!("&", left, right, *span),
+            Expr::Divide(left, right, span) => binop!("/", left, right, *span),
+            Expr::Equal(left, right, span) => binop!("==", left, right, *span),
+            Expr::GreaterEqual(left, right, span) => binop!(">=", left, right, *span),
+            Expr::GreaterThan(left, right, span) => binop!(">", left, right, *span),
+            Expr::LessEqual(left, right, span) => binop!("<=", left, right, *span),
+            Expr::LessThan(left, right, span) => binop!("<", left, right, *span),
+            Expr::Modulo(left, right, span) => binop!("%", left, right, *span),
+            Expr::Multiply(left, right, span) => binop!("*", left, right, *span),
+            Expr::NotEqual(left, right, span) => binop!("!=", left, right, *span),
+            Expr::Or(left, right, span) => binop!("|", left, right, *span),
+            Expr::Subtract(left, right, span) => binop!("-", left, right, *span),
+            Expr::Xor(left, right, span) => binop!("^", left, right, *span),
+            Expr::LShift(left, right, span) => binop!("<<", left, right, *span),
+            Expr::RShift(left, right, span) => binop!(">>", left, right, *span),
+            Expr::Not(expr, span) => uop!("!", expr, *span),
+            Expr::Negate(expr, span) => {
+                let stack = vec![(0, self.check_expr(expr)?)];
+                let name = Name {
+                    name: "neg",
+                    span: *span,
+                };
+                let (signature, binds) = match self.get_sbi(&stack, &name) {
+                    Ok((s, b, _)) => (s, b),
+                    Err(mut err) => {
+                        err.insert_note(Note::new(
+                            None,
+                            "unary operator '-' is translated to 'neg'".to_string(),
+                        ));
+                        return Err(err);
+                    }
+                };
+                if signature.returns.len() == 1 {
+                    Ok(self.types.substitute(signature.returns[0], &binds))
+                } else {
+                    Err(Error::Type(
+                        *span,
+                        "expression operators must return a single value".to_string(),
+                        vec![
+                            Note::new(
+                                None,
+                                "unary operator '-' is translated to 'neg'".to_string(),
+                            ),
+                            Note::new(
+                                None,
+                                format!("'neg' returns {} values", signature.returns.len()),
+                            ),
+                            Note::new(
+                                None,
+                                format!(
+                                    "'neg' has signature {}{}{}",
+                                    color!(Blue),
+                                    self.types.format_signature(&signature),
+                                    reset!(),
+                                ),
+                            ),
+                        ],
+                    ))
+                }
+            }
+            Expr::Deref(expr, span) => uop!("*", expr, *span),
+            Expr::Group(ops, span) => {
+                let mut stack = Vec::new();
+                for op in ops {
+                    self.check_op(&mut stack, op)?;
+                }
+                match stack.len() {
+                    1 => Ok(stack.pop().unwrap().1),
+                    0 => Err(Error::Type(
+                        *span,
+                        "expression group yields no values".to_string(),
+                        vec![],
+                    )),
+                    _ => Err(Error::Type(
+                        *span,
+                        "expression group yields multiple values".to_string(),
+                        vec![Note::new(
+                            None,
+                            format!(
+                                "stack is {}{}{}",
+                                color!(Blue),
+                                self.types.format_stack(&stack),
+                                reset!()
+                            ),
+                        )],
+                    )),
+                }
+            }
         }
-        self.program_context.program.globals.push(global);
     }
 
     fn get_signatures(&mut self, item: &Item) -> Result<Vec<(&'static str, GSignature)>, Error> {
@@ -616,6 +1287,7 @@ impl Context {
             }
             Item::Global { name, ty, .. } => {
                 let ty = self.types.convert(ty, &[])?;
+                self.globals.insert(name.name, ty);
                 let write_name_ptr = leak(format!("write_{}_ptr", name.name));
                 let write_name = write_name_ptr.strip_suffix("_ptr").unwrap();
                 let name_ptr = write_name_ptr.strip_prefix("write_").unwrap();
@@ -660,9 +1332,9 @@ impl Context {
 pub type FnInfo = (&'static str, usize);
 pub type CallInfo = (&'static str, usize, Vec<GTypeId>);
 
-struct CallGraph {
-    active: FnInfo,
-    graph: HashMap<FnInfo, HashSet<CallInfo>>,
+pub struct CallGraph {
+    pub active: FnInfo,
+    pub graph: HashMap<FnInfo, HashSet<CallInfo>>,
 }
 
 impl CallGraph {
@@ -716,8 +1388,54 @@ fn get_binds(
     }
 }
 
-fn flatten_expr(expr: &Expr) -> Vec<Op> {
-    todo!()
+fn flatten_expr(expr: &Expr, ops: &mut Vec<Op>) {
+    match expr {
+        Expr::Int(val, span) => ops.push(Op::Int(*val, *span)),
+        Expr::Float(val, span) => ops.push(Op::Float(*val, *span)),
+        Expr::Bool(val, span) => ops.push(Op::Bool(*val, *span)),
+        Expr::Char(val, span) => ops.push(Op::Char(*val, *span)),
+        Expr::Name(name) => ops.push(Op::Name(*name)),
+        Expr::Add(left, right, span)
+        | Expr::And(left, right, span)
+        | Expr::Divide(left, right, span)
+        | Expr::Equal(left, right, span)
+        | Expr::GreaterEqual(left, right, span)
+        | Expr::GreaterThan(left, right, span)
+        | Expr::LessEqual(left, right, span)
+        | Expr::LessThan(left, right, span)
+        | Expr::Modulo(left, right, span)
+        | Expr::Multiply(left, right, span)
+        | Expr::NotEqual(left, right, span)
+        | Expr::Or(left, right, span)
+        | Expr::Subtract(left, right, span)
+        | Expr::Xor(left, right, span)
+        | Expr::LShift(left, right, span)
+        | Expr::RShift(left, right, span) => {
+            flatten_expr(left, ops);
+            flatten_expr(right, ops);
+            ops.push(Op::Name((*span).into()));
+        }
+        Expr::Not(expr, span) | Expr::Deref(expr, span) => {
+            flatten_expr(expr, ops);
+            ops.push(Op::Name((*span).into()));
+        }
+        Expr::Negate(expr, span) => {
+            flatten_expr(expr, ops);
+            let name = Name {
+                name: "neg",
+                span: *span,
+            };
+            ops.push(Op::Name(name));
+        }
+        Expr::Group(group, _) => {
+            for op in group {
+                match op {
+                    Op::Expr(expr, _) => flatten_expr(expr, ops),
+                    op => ops.push(op.clone()),
+                }
+            }
+        }
+    }
 }
 
 fn leak(s: String) -> &'static str {
@@ -729,14 +1447,42 @@ fn check_for_conflicts(
     existing_signatures: &[GSignature],
     new_signature: &GSignature,
 ) -> Result<(), Error> {
+    let span = new_signature.kind.span().unwrap();
     for existing in existing_signatures {
         if params_overlap(types, &existing.params, &new_signature.params) {
+            let previous_def = if let Some(existing_span) = existing.kind.span() {
+                if existing_span.is_std {
+                    let split_path: Vec<_> = existing_span.file.split('/').collect();
+                    let path = split_path.join(":");
+                    Note::new(None, format!("'{}' is defined in {}", span.text, path))
+                } else if existing.kind.is_auto() {
+                    Note::new(
+                        Some(existing_span),
+                        format!("'{}' was autogenerated here", span.text),
+                    )
+                } else {
+                    Note::new(
+                        Some(existing_span),
+                        "previous definition is here".to_string(),
+                    )
+                }
+            } else {
+                Note::new(None, format!("'{}' is a builtin function", span.text))
+            };
+            let previous_signature = Note::new(
+                None,
+                format!(
+                    "'{}' has signature {}{}{}",
+                    span.text,
+                    color!(Blue),
+                    types.format_signature(existing),
+                    reset!(),
+                ),
+            );
             return Err(Error::Type(
-                new_signature.kind.span(),
+                span,
                 "signature conflicts with a previous definition".to_string(),
-                vec![],
-                // TODO: include Note with existing_signature's span
-                // TOOD: include Note with existing_signature and new_signature
+                vec![previous_def, previous_signature],
             ));
         }
     }
@@ -750,7 +1496,7 @@ fn params_overlap(types: &mut Types, params_a: &[GTypeId], params_b: &[GTypeId])
 }
 
 pub struct ProgramInfo {
-    program: Program,
-    call_graph: CallGraph,
-    types: Types,
+    pub program: Program,
+    pub call_graph: CallGraph,
+    pub types: Types,
 }

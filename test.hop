@@ -1,3 +1,5 @@
+import std : prelude
+
 global count: int { 0 }
 global flag: bool
 
@@ -6,8 +8,60 @@ struct pair[T] {
     snd: T
 }
 
-fn main {
-    "hello" DEBUG_STACK putlns
+struct test [T] {
+    value: int
+}
+
+fn test_if {
+    if 1 ~ true {
+        1
+    } else if false {
+        2
+    } else {
+        3 4
+        let three four {
+            four
+        }
+    }
+    put
+}
+
+fn test_while {
+    1 2 3 
+    while true { ~ 2 }
+    while ~ 1 false { ! ! }
+    ~ ~ ~
+}
+
+fn test_for -> float float {
+    1.0 2.0
+    for 1 to 10 {
+        let a b _ {
+            b a
+        }
+    }
+}
+
+fn main -> int {
+    "hello" putlns
+
+    test test
+    let a b {
+        (a + -b)
+    }
+    putln
+
+    1 2 + 3 == assert
+
+    0
+}
+
+fn + test int -> int {
+    ~ ~ 1
+}
+
+fn neg test -> int {
+   ~ 1
 }
 
 fn f int -> int {}

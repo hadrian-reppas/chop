@@ -1,25 +1,32 @@
-use std::collections::{hash_map::Entry, HashMap};
+use std::{
+    collections::{hash_map::Entry, HashMap, HashSet},
+    mem,
+};
 
 use crate::types::{GTypeId, TypeId};
 
 pub struct ProgramContext {
     pub program: Program,
-    pub wip_fn: Option<ProgramFn>,
-    pub wip_global: Option<ProgramGlobal>,
+    pub wip_init: Vec<ProgramOp>,
+    pub wip_bodies: Vec<Vec<ProgramStmt>>,
     pub vars: HashMap<GTypeId, Vec<usize>>,
     free_vars: HashMap<GTypeId, Vec<usize>>,
+    if_bodies: Vec<Vec<ProgramStmt>>,
     counter: usize,
+    state: State,
 }
 
 impl ProgramContext {
     pub fn new() -> ProgramContext {
         ProgramContext {
             program: Program::new(),
-            wip_fn: None,
-            wip_global: None,
+            wip_init: Vec::new(),
+            wip_bodies: Vec::new(),
             vars: HashMap::new(),
             free_vars: HashMap::new(),
+            if_bodies: Vec::new(),
             counter: 0,
+            state: State::Paused,
         }
     }
 
@@ -57,6 +64,142 @@ impl ProgramContext {
     pub fn free(&mut self, var: usize, ty: GTypeId) {
         self.free_vars.get_mut(&ty).unwrap().push(var);
     }
+
+    pub fn pause(&mut self) {
+        self.state = State::Paused;
+    }
+
+    pub fn resume(&mut self) {
+        self.state = State::Fn;
+    }
+
+    pub fn push_op(&mut self, op: ProgramOp) {
+        match self.state {
+            State::Global => self.wip_init.push(op),
+            State::Fn => self
+                .wip_bodies
+                .last_mut()
+                .unwrap()
+                .push(ProgramStmt::Op(op)),
+            State::Paused => {}
+        }
+    }
+
+    pub fn begin_if(&mut self) {
+        self.begin_body();
+    }
+
+    pub fn begin_else(&mut self, stack: &[(usize, GTypeId)], else_stack: &[(usize, GTypeId)]) {
+        self.if_bodies
+            .push(mem::take(self.wip_bodies.last_mut().unwrap()));
+        let on_stack: HashSet<_> = else_stack.iter().map(|(var, _)| *var).collect();
+        for (var, ty) in stack {
+            if !on_stack.contains(var) {
+                self.free(*var, *ty);
+            }
+        }
+    }
+
+    pub fn end_if_else(&mut self, test_var: usize, resolve: Vec<(usize, usize)>) {
+        let else_body = self.wip_bodies.pop().unwrap();
+        self.wip_bodies.last_mut().unwrap().push(ProgramStmt::If(
+            test_var,
+            self.if_bodies.pop().unwrap(),
+            else_body,
+            resolve,
+        ))
+    }
+
+    pub fn begin_for(&mut self) {
+        self.begin_body();
+    }
+
+    pub fn end_for(
+        &mut self,
+        iter_var: usize,
+        low_var: usize,
+        high_var: usize,
+        resolve: Vec<(usize, usize)>,
+    ) {
+        let body = self.wip_bodies.pop().unwrap();
+        self.wip_bodies
+            .last_mut()
+            .unwrap()
+            .push(ProgramStmt::For(iter_var, low_var, high_var, body, resolve));
+    }
+
+    pub fn begin_while(&mut self) {
+        self.begin_body();
+    }
+
+    pub fn end_while(&mut self, test_var: usize, resolve: Vec<(usize, usize)>) {
+        let body = self.wip_bodies.pop().unwrap();
+        self.wip_bodies
+            .last_mut()
+            .unwrap()
+            .push(ProgramStmt::While(test_var, body, resolve));
+    }
+
+    pub fn begin_body(&mut self) {
+        self.wip_bodies.push(Vec::new());
+    }
+
+    pub fn begin_fn(&mut self, params: &[GTypeId]) {
+        self.state = State::Fn;
+        self.init_vars(params);
+        self.begin_body();
+    }
+
+    pub fn end_fn(
+        &mut self,
+        stack: &[(usize, GTypeId)],
+        name: &'static str,
+        generic_count: usize,
+        params: Vec<GTypeId>,
+        returns: Vec<GTypeId>,
+    ) {
+        let body = self.wip_bodies.pop().unwrap();
+        self.program.functions.push(ProgramFn {
+            name,
+            generic_count,
+            params,
+            returns,
+            body,
+            vars: mem::take(&mut self.vars),
+            return_vars: stack.iter().map(|(var, _)| *var).collect(),
+        });
+    }
+
+    pub fn begin_global(&mut self) {
+        self.state = State::Global;
+        self.init_vars(&[]);
+    }
+
+    pub fn end_global(&mut self, name: &'static str, type_id: TypeId) {
+        self.program.globals.push(ProgramGlobal {
+            name,
+            type_id,
+            init: None,
+        })
+    }
+
+    pub fn end_global_init(&mut self, name: &'static str, type_id: TypeId, var: usize) {
+        self.program.globals.push(ProgramGlobal {
+            name,
+            type_id,
+            init: Some(ProgramGlobalInit {
+                ops: mem::take(&mut self.wip_init),
+                var,
+                vars: mem::take(&mut self.vars),
+            }),
+        })
+    }
+}
+
+enum State {
+    Global,
+    Fn,
+    Paused,
 }
 
 #[derive(Debug)]
@@ -126,5 +269,12 @@ pub enum ProgramOp {
 #[derive(Debug)]
 pub enum ProgramStmt {
     Op(ProgramOp),
-    // TODO
+    If(
+        usize,
+        Vec<ProgramStmt>,
+        Vec<ProgramStmt>,
+        Vec<(usize, usize)>,
+    ),
+    For(usize, usize, usize, Vec<ProgramStmt>, Vec<(usize, usize)>),
+    While(usize, Vec<ProgramStmt>, Vec<(usize, usize)>),
 }

@@ -6,8 +6,6 @@ use crate::error::Error;
 use crate::lex::{Span, Token, Tokens};
 use crate::parse::parse_group;
 
-// TODO: parse <<, >> and * (deref)
-
 enum Tok {
     Int(i64, Span),
     Float(f64, Span),
@@ -33,6 +31,8 @@ enum Tok {
     Or(Span),
     Subtract(Span),
     Xor(Span),
+    LShift(Span),
+    RShift(Span),
 
     Not(Span),
 }
@@ -61,6 +61,8 @@ impl Tok {
             Tok::Or(span) => *span,
             Tok::Subtract(span) => *span,
             Tok::Xor(span) => *span,
+            Tok::LShift(span) => *span,
+            Tok::RShift(span) => *span,
             Tok::Not(span) => *span,
             Tok::Group(_, span) => *span,
         }
@@ -75,6 +77,7 @@ pub fn parse(tokens: &mut Tokens) -> Result<(Expr, Span), Error> {
     Ok((pratt_parse(&mut tokens, 0)?, rparen.span()))
 }
 
+// TODO: allow Strings in expressions
 fn convert(tokens: &mut Tokens) -> Result<Vec<Tok>, Error> {
     let mut toks = vec![Tok::LParen(tokens.next()?.span())];
     let mut depth = 1;
@@ -101,6 +104,8 @@ fn convert(tokens: &mut Tokens) -> Result<Vec<Tok>, Error> {
                     "-" => Tok::Subtract(span),
                     "^" => Tok::Xor(span),
                     "!" => Tok::Not(span),
+                    "<<" => Tok::LShift(span),
+                    ">>" => Tok::RShift(span),
                     name => Tok::Var(Name { name, span }),
                 });
             }
@@ -143,6 +148,7 @@ const GREATER_EQUAL_BP: usize = 16;
 const GREATER_THAN_BP: usize = 16;
 const LESS_EQUAL_BP: usize = 16;
 const LESS_THAN_BP: usize = 16;
+const SHIFT_BP: usize = 18;
 const ADD_BP: usize = 24;
 const SUBTRACT_BP: usize = 24;
 const DIVIDE_BP: usize = 30;
@@ -150,6 +156,7 @@ const MODULO_BP: usize = 30;
 const MULTIPLY_BP: usize = 30;
 const NEGATE_BP: usize = 40;
 const NOT_BP: usize = 40;
+const DEREF_BP: usize = 40;
 
 fn pratt_parse(tokens: &mut Peekable<impl Iterator<Item = Tok>>, bp: usize) -> Result<Expr, Error> {
     let mut lhs = match tokens.next().unwrap() {
@@ -161,6 +168,7 @@ fn pratt_parse(tokens: &mut Peekable<impl Iterator<Item = Tok>>, bp: usize) -> R
         Tok::Group(group, span) => Expr::Group(group, span),
         Tok::Subtract(span) => Expr::Negate(Box::new(pratt_parse(tokens, NEGATE_BP)?), span),
         Tok::Not(span) => Expr::Not(Box::new(pratt_parse(tokens, NOT_BP)?), span),
+        Tok::Multiply(span) => Expr::Deref(Box::new(pratt_parse(tokens, DEREF_BP)?), span),
         Tok::LParen(span) => {
             let lhs = pratt_parse(tokens, 0)?;
             if !matches!(tokens.peek(), Some(Tok::RParen(_))) {
@@ -198,6 +206,8 @@ fn pratt_parse(tokens: &mut Peekable<impl Iterator<Item = Tok>>, bp: usize) -> R
             Some(Tok::Or(token)) => expr!(Or, OR_BP, token),
             Some(Tok::Subtract(token)) => expr!(Subtract, SUBTRACT_BP, token),
             Some(Tok::Xor(token)) => expr!(Xor, XOR_BP, token),
+            Some(Tok::LShift(token)) => expr!(LShift, SHIFT_BP, token),
+            Some(Tok::RShift(token)) => expr!(RShift, SHIFT_BP, token),
             Some(Tok::RParen(_)) => break,
             Some(token) => return Err(Error::Parse(token.span(), "unexpected token".to_string())),
             None => break,

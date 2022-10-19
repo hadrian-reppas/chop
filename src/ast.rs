@@ -360,8 +360,11 @@ pub enum Expr {
     Or(Box<Expr>, Box<Expr>, Span),
     Subtract(Box<Expr>, Box<Expr>, Span),
     Xor(Box<Expr>, Box<Expr>, Span),
+    LShift(Box<Expr>, Box<Expr>, Span),
+    RShift(Box<Expr>, Box<Expr>, Span),
     Not(Box<Expr>, Span),
     Negate(Box<Expr>, Span),
+    Deref(Box<Expr>, Span),
     Group(Vec<Op>, Span),
 }
 
@@ -387,8 +390,11 @@ impl fmt::Debug for Expr {
             Expr::Or(left, right, _) => write!(f, "Or({left:?}, {right:?})"),
             Expr::Subtract(left, right, _) => write!(f, "Subtract({left:?}, {right:?})"),
             Expr::Xor(left, right, _) => write!(f, "Xor({left:?}, {right:?})"),
+            Expr::LShift(left, right, _) => write!(f, "LShift({left:?}, {right:?})"),
+            Expr::RShift(left, right, _) => write!(f, "RShift({left:?}, {right:?})"),
             Expr::Not(expr, _) => write!(f, "Not({expr:?})"),
             Expr::Negate(expr, _) => write!(f, "Negate({expr:?})"),
+            Expr::Deref(expr, _) => write!(f, "Deref({expr:?})"),
             Expr::Group(group, _) => write!(f, "Group({group:?})"),
         }
     }

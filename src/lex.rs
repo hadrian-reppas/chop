@@ -3,7 +3,7 @@ use std::{fmt, fs};
 use lazy_static::lazy_static;
 use regex::Regex;
 
-use crate::error::Error;
+use crate::{ast::Name, error::Error};
 
 // TODO: add byte literal (eg b'a')
 
@@ -49,6 +49,15 @@ impl Span {
 
     pub fn location(self) -> String {
         format!("{}:{}:{}", self.file, self.line + 1, self.column + 1)
+    }
+}
+
+impl Into<Name> for Span {
+    fn into(self) -> Name {
+        Name {
+            name: self.text,
+            span: self,
+        }
     }
 }
 

@@ -1,13 +1,25 @@
-use lazy_static::lazy_static;
-use termion::{color, style};
-
 use crate::lex::Span;
 
-lazy_static! {
-    pub static ref RED: String = format!("{}{}", color::Fg(color::Red), style::Bold);
-    pub static ref GREEN: String = format!("{}{}", color::Fg(color::Green), style::Bold);
-    pub static ref BLUE: String = format!("{}{}", color::Fg(color::Blue), style::Bold);
-    pub static ref RESET: String = format!("{}{}", color::Fg(color::Reset), style::Reset);
+#[macro_export]
+macro_rules! color {
+    ($color:ident) => {
+        format!(
+            "{}{}",
+            termion::color::Fg(termion::color::$color),
+            termion::style::Bold,
+        )
+    };
+}
+
+#[macro_export]
+macro_rules! reset {
+    () => {
+        format!(
+            "{}{}",
+            termion::color::Fg(termion::color::Reset),
+            termion::style::Reset,
+        )
+    };
 }
 
 #[derive(Debug)]
@@ -36,41 +48,41 @@ impl Error {
     pub fn print(&self) {
         match self {
             Error::Io(msg) => {
-                print!("{}io error:{} {}", RED.as_str(), RESET.as_str(), msg);
+                print!("{}io error:{} {}", color!(Red), reset!(), msg);
             }
             Error::Lex(span, msg) => {
-                println!("{}lex error:{} {msg}", RED.as_str(), RESET.as_str());
+                println!("{}lex error:{} {msg}", color!(Red), reset!());
                 print_span(*span);
             }
             Error::Parse(span, msg) => {
-                println!("{}parse error:{} {msg}", RED.as_str(), RESET.as_str());
+                println!("{}parse error:{} {msg}", color!(Red), reset!());
                 print_span(*span);
             }
             Error::Type(span, msg, notes) => {
-                println!("{}type error:{} {msg}", RED.as_str(), RESET.as_str());
+                println!("{}type error:{} {msg}", color!(Red), reset!());
                 print_span(*span);
                 for Note { span, msg } in notes {
                     if let Some(span) = span {
-                        println!("\n{}note:{} {msg}", BLUE.as_str(), RESET.as_str());
+                        println!("\n{}note:{} {msg}", color!(Blue), reset!());
                         print_span(*span);
                     } else {
-                        print!("\n{}note:{} {msg}", BLUE.as_str(), RESET.as_str());
+                        print!("\n{}note:{} {msg}", color!(Blue), reset!());
                     }
                 }
             }
             Error::Main(msg, notes) => {
-                print!("{}entry error:{} {msg}", RED.as_str(), RESET.as_str());
+                print!("{}entry error:{} {msg}", color!(Red), reset!());
                 for Note { span, msg } in notes {
                     if let Some(span) = span {
-                        println!("\n{}note:{} {msg}", BLUE.as_str(), RESET.as_str());
+                        println!("\n{}note:{} {msg}", color!(Blue), reset!());
                         print_span(*span);
                     } else {
-                        print!("\n{}note:{} {msg}", BLUE.as_str(), RESET.as_str());
+                        print!("\n{}note:{} {msg}", color!(Blue), reset!());
                     }
                 }
             }
             Error::Import(span, msg) => {
-                println!("{}import error:{} {msg}", RED.as_str(), RESET.as_str());
+                println!("{}import error:{} {msg}", color!(Red), reset!());
                 print_span(*span);
             }
         }
@@ -80,6 +92,13 @@ impl Error {
         self.print();
         println!();
     }
+
+    pub fn insert_note(&mut self, note: Note) {
+        match self {
+            Error::Type(_, _, notes) => notes.insert(0, note),
+            _ => panic!(),
+        }
+    }
 }
 
 fn print_span(span: Span) {
@@ -88,17 +107,17 @@ fn print_span(span: Span) {
     println!(
         "{}{}-->{} {}",
         space,
-        BLUE.as_str(),
-        RESET.as_str(),
+        color!(Blue),
+        reset!(),
         span.location()
     );
 
-    println!("{} {}|", space, BLUE.as_str());
-    println!("{} | {}{}", line_num, RESET.as_str(), span.line());
+    println!("{} {}|", space, color!(Blue));
+    println!("{} | {}{}", line_num, reset!(), span.line());
     print!(
         "{} {}| {}",
         space,
-        BLUE.as_str(),
+        color!(Blue),
         get_carets(span.line_prefix(), span.text)
     );
 }
@@ -109,8 +128,8 @@ fn get_carets(prefix: &str, text: &str) -> String {
     format!(
         "{}{}{}{}",
         " ".repeat(white_len),
-        RED.as_str(),
+        color!(Red),
         "^".repeat(caret_len),
-        RESET.as_str()
+        reset!()
     )
 }
