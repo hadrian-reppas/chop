@@ -118,14 +118,7 @@ fn parse_generics(tokens: &mut Tokens) -> Result<Option<Generics>, Error> {
             names.push(generic);
         }
 
-        if !tokens.peek().is_rbrack() {
-            return Err(Error::Parse(
-                tokens.peek().span(),
-                "expected ']'".to_string(),
-            ));
-        }
-
-        let rbrack_span = tokens.next()?.span();
+        let rbrack_span = parse_rbrack(tokens)?;
 
         Ok(Some(Generics {
             names,
@@ -310,7 +303,7 @@ fn parse_body(tokens: &mut Tokens) -> Result<(Vec<Stmt>, Span), Error> {
 }
 
 fn parse_stmt(tokens: &mut Tokens) -> Result<Stmt, Error> {
-    if tokens.peek().is_standalone() || tokens.peek().is_lparen() {
+    if tokens.peek().is_standalone() || tokens.peek().is_lparen() || tokens.peek().is_special_kw() {
         let group = parse_group(tokens)?;
         let span = group[0].span();
         Ok(Stmt::Group(group, span))
@@ -332,12 +325,33 @@ fn parse_stmt(tokens: &mut Tokens) -> Result<Stmt, Error> {
 
 pub fn parse_group(tokens: &mut Tokens) -> Result<Vec<Op>, Error> {
     let mut group = Vec::new();
-    while tokens.peek().is_standalone() || tokens.peek().is_lparen() {
+    while tokens.peek().is_standalone()
+        || tokens.peek().is_lparen()
+        || tokens.peek().is_special_kw()
+    {
         if tokens.peek().is_standalone() {
             group.push(Op::from_token(tokens.next()?));
-        } else {
+        } else if tokens.peek().is_lparen() {
             let (expr, span) = expr::parse(tokens)?;
             group.push(Op::Expr(expr, span));
+        } else {
+            macro_rules! kw {
+                ($name:ident, $span:expr) => {{
+                    let lbrack_span = parse_lbrack(tokens)?;
+                    let ty = parse_type(tokens)?;
+                    let rbrack_span = parse_rbrack(tokens)?;
+                    group.push(Op::$name(ty, $span, lbrack_span, rbrack_span))
+                }};
+            }
+            match tokens.next()? {
+                Token::SizeOf(span) => kw!(SizeOf, span),
+                Token::Alloc(span) => kw!(Alloc, span),
+                Token::Zalloc(span) => kw!(Zalloc, span),
+                Token::AllocArr(span) => kw!(AllocArr, span),
+                Token::ZallocArr(span) => kw!(ZallocArr, span),
+                Token::CastTo(span) => kw!(CastTo, span),
+                _ => unreachable!(),
+            }
         }
     }
 
@@ -349,6 +363,26 @@ pub fn parse_group(tokens: &mut Tokens) -> Result<Vec<Op>, Error> {
     } else {
         Ok(group)
     }
+}
+
+fn parse_lbrack(tokens: &mut Tokens) -> Result<Span, Error> {
+    if !tokens.peek().is_lbrack() {
+        return Err(Error::Parse(
+            tokens.peek().span(),
+            "expected '['".to_string(),
+        ));
+    }
+    Ok(tokens.next()?.span())
+}
+
+fn parse_rbrack(tokens: &mut Tokens) -> Result<Span, Error> {
+    if !tokens.peek().is_rbrack() {
+        return Err(Error::Parse(
+            tokens.peek().span(),
+            "expected ']'".to_string(),
+        ));
+    }
+    Ok(tokens.next()?.span())
 }
 
 fn parse_test(tokens: &mut Tokens) -> Result<(Vec<Op>, Span), Error> {

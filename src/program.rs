@@ -264,6 +264,12 @@ pub enum ProgramOp {
     Bool(usize, bool),
     String(usize, String),
     Call(&'static str, usize, Vec<usize>, Vec<usize>),
+    SizeOf(usize, GTypeId),
+    Alloc(usize, GTypeId),
+    Zalloc(usize, GTypeId),
+    AllocArr(usize, usize, GTypeId),
+    ZallocArr(usize, usize, GTypeId),
+    CastTo(usize, usize, GTypeId),
 }
 
 #[derive(Debug)]

@@ -293,6 +293,12 @@ pub enum Op {
     Char(char, Span),
     String(String, Span),
     Name(Name),
+    SizeOf(PType, Span, Span, Span),
+    Alloc(PType, Span, Span, Span),
+    Zalloc(PType, Span, Span, Span),
+    AllocArr(PType, Span, Span, Span),
+    ZallocArr(PType, Span, Span, Span),
+    CastTo(PType, Span, Span, Span),
     Expr(Expr, Span),
 }
 
@@ -305,6 +311,12 @@ impl fmt::Debug for Op {
             Op::Char(c, _) => write!(f, "Char({c:?})"),
             Op::String(s, _) => write!(f, "String({s:?})"),
             Op::Name(n) => write!(f, "Name({n:?})"),
+            Op::SizeOf(ty, _, _, _) => write!(f, "SizeOf({ty:?})"),
+            Op::Alloc(ty, _, _, _) => write!(f, "Alloc({ty:?})"),
+            Op::Zalloc(ty, _, _, _) => write!(f, "Zalloc({ty:?})"),
+            Op::AllocArr(ty, _, _, _) => write!(f, "AllocArr({ty:?})"),
+            Op::ZallocArr(ty, _, _, _) => write!(f, "ZallocArr({ty:?})"),
+            Op::CastTo(ty, _, _, _) => write!(f, "CastTo({ty:?})"),
             Op::Expr(e, _) => write!(f, "{e:?}"),
         }
     }
@@ -334,6 +346,12 @@ impl Op {
             Op::Char(_, span) => *span,
             Op::String(_, span) => *span,
             Op::Name(name) => name.span,
+            Op::SizeOf(_, span, _, _) => *span,
+            Op::Alloc(_, span, _, _) => *span,
+            Op::Zalloc(_, span, _, _) => *span,
+            Op::AllocArr(_, span, _, _) => *span,
+            Op::ZallocArr(_, span, _, _) => *span,
+            Op::CastTo(_, span, _, _) => *span,
             Op::Expr(_, span) => *span,
         }
     }

@@ -27,6 +27,7 @@ pub struct Context {
     let_binds: Vec<HashMap<&'static str, (usize, GTypeId)>>,
     call_graph: CallGraph,
     globals: HashMap<&'static str, GTypeId>,
+    generic_names: Vec<Name>,
     program_context: ProgramContext,
 }
 
@@ -63,6 +64,7 @@ impl Context {
             let_binds: Vec::new(),
             call_graph: CallGraph::new(),
             globals: HashMap::new(),
+            generic_names: Vec::new(),
             program_context: ProgramContext::new(),
         }
     }
@@ -165,15 +167,17 @@ impl Context {
                 rbrace_span,
                 ..
             } => {
-                let empty = Vec::new();
-                let generic_names = generics.as_ref().map(|g| &g.names).unwrap_or(&empty);
+                self.generic_names = generics
+                    .as_ref()
+                    .map(|g| g.names.clone())
+                    .unwrap_or_default();
                 let params = params
                     .iter()
-                    .map(|ty| self.types.convert(ty, generic_names))
+                    .map(|ty| self.types.convert(ty, &self.generic_names))
                     .collect::<Result<Vec<_>, _>>()?;
                 let returns = returns
                     .iter()
-                    .map(|ty| self.types.convert(ty, generic_names))
+                    .map(|ty| self.types.convert(ty, &self.generic_names))
                     .collect::<Result<Vec<_>, _>>()?;
                 let index = self
                     .signatures
@@ -193,7 +197,7 @@ impl Context {
                     self.program_context.end_fn(
                         &stack,
                         name.name,
-                        generic_names.len(),
+                        self.generic_names.len(),
                         params,
                         returns,
                     );
@@ -879,6 +883,107 @@ impl Context {
                 for op in &ops {
                     self.check_op(stack, op)?;
                 }
+                Ok(())
+            }
+            Op::SizeOf(ptype, _, _, _) => {
+                let ty = self.types.convert(ptype, &self.generic_names)?;
+                let int_id = self.types.int();
+                let var = self.program_context.alloc(int_id);
+                stack.push((var, int_id));
+                self.program_context.push_op(ProgramOp::SizeOf(var, ty));
+                Ok(())
+            }
+            Op::Alloc(ptype, _, _, _) => {
+                let ty = self.types.convert(ptype, &self.generic_names)?;
+                let ty_ptr = self.types.ref_n(ty, 1);
+                let var = self.program_context.alloc(ty_ptr);
+                stack.push((var, ty_ptr));
+                self.program_context.push_op(ProgramOp::Alloc(var, ty));
+                Ok(())
+            }
+            Op::Zalloc(ptype, _, _, _) => {
+                let ty = self.types.convert(ptype, &self.generic_names)?;
+                let ty_ptr = self.types.ref_n(ty, 1);
+                let var = self.program_context.alloc(ty_ptr);
+                stack.push((var, ty_ptr));
+                self.program_context.push_op(ProgramOp::Zalloc(var, ty));
+                Ok(())
+            }
+            Op::AllocArr(ptype, span, _, _) => {
+                if stack.is_empty() || stack.last().unwrap().1 != self.types.int() {
+                    return Err(Error::Type(
+                        *span,
+                        "'alloc_arr' expects an 'int'".to_string(),
+                        vec![Note::new(
+                            None,
+                            format!(
+                                "stack is {}{}{}",
+                                color!(Blue),
+                                self.types.format_stack(stack),
+                                reset!(),
+                            ),
+                        )],
+                    ));
+                }
+                let len_var = stack.pop().unwrap().0;
+                let ty = self.types.convert(ptype, &self.generic_names)?;
+                let ty_ptr = self.types.ref_n(ty, 1);
+                let var = self.program_context.alloc(ty_ptr);
+                stack.push((var, ty_ptr));
+                self.program_context
+                    .push_op(ProgramOp::AllocArr(var, len_var, ty));
+                Ok(())
+            }
+            Op::ZallocArr(ptype, span, _, _) => {
+                if stack.is_empty() || stack.last().unwrap().1 != self.types.int() {
+                    return Err(Error::Type(
+                        *span,
+                        "'zalloc_arr' expects an 'int'".to_string(),
+                        vec![Note::new(
+                            None,
+                            format!(
+                                "stack is {}{}{}",
+                                color!(Blue),
+                                self.types.format_stack(stack),
+                                reset!(),
+                            ),
+                        )],
+                    ));
+                }
+                let len_var = stack.pop().unwrap().0;
+                let ty = self.types.convert(ptype, &self.generic_names)?;
+                let ty_ptr = self.types.ref_n(ty, 1);
+                let var = self.program_context.alloc(ty_ptr);
+                stack.push((var, ty_ptr));
+                self.program_context
+                    .push_op(ProgramOp::ZallocArr(var, len_var, ty));
+                Ok(())
+            }
+            Op::CastTo(ptype, span, _, _) => {
+                if stack.is_empty()
+                    || (self.types.depth(stack.last().unwrap().1) == 0
+                        && stack.last().unwrap().1 != self.types.int())
+                {
+                    return Err(Error::Type(
+                        *span,
+                        "'cast_to' expects a pointer or 'int'".to_string(),
+                        vec![Note::new(
+                            None,
+                            format!(
+                                "stack is {}{}{}",
+                                color!(Blue),
+                                self.types.format_stack(stack),
+                                reset!(),
+                            ),
+                        )],
+                    ));
+                }
+                let arg_var = stack.pop().unwrap().0;
+                let ty = self.types.convert(ptype, &self.generic_names)?;
+                let var = self.program_context.alloc(ty);
+                stack.push((var, ty));
+                self.program_context
+                    .push_op(ProgramOp::CastTo(var, arg_var, ty));
                 Ok(())
             }
         }

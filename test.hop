@@ -8,8 +8,16 @@ struct pair[T] {
     snd: T
 }
 
-struct test [T] {
-    value: int
+struct single [T] {
+    value: T
+}
+
+fn cast_to_int_ptr_ptr[T] *T -> **int {
+    cast_to[**int]
+}
+
+fn cast_to_byte_ptr_ptr *byte -> **byte {
+    cast_to[**byte]
 }
 
 fn test_if {
@@ -42,6 +50,10 @@ fn test_for -> float float {
     }
 }
 
+fn size_of_test[T] T -> int {
+    ~ size_of[T]
+}
+
 fn main -> int {
     "hello" putlns
 
@@ -55,6 +67,8 @@ fn main -> int {
 
     0
 }
+
+struct test {}
 
 fn + test int -> int {
     ~ ~ 1

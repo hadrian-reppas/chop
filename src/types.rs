@@ -89,6 +89,7 @@ pub enum GType {
     Generic(usize, usize),
 }
 
+// TODO: REMOVE
 impl GType {
     pub fn ref_n(mut self, n: usize) -> GType {
         match &mut self {
@@ -135,6 +136,7 @@ pub enum Type {
     Custom(usize, &'static str, Vec<TypeId>),
 }
 
+// TODO: REMOVE
 impl Type {
     pub fn ref_n(mut self, n: usize) -> Type {
         match &mut self {
@@ -428,6 +430,10 @@ impl Types {
     pub fn ref_n(&mut self, id: GTypeId, n: usize) -> GTypeId {
         let ty = self.gtypes.get_by_right(&id).unwrap().clone().ref_n(n);
         self.get_or_insert(ty)
+    }
+
+    pub fn depth(&self, id: GTypeId) -> usize {
+        self.gtypes.get_by_right(&id).unwrap().depth()
     }
 
     pub fn generic_indices(&self, id: GTypeId) -> HashSet<usize> {

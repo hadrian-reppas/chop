@@ -90,6 +90,12 @@ pub enum Token {
     Struct(Span),
     Global(Span),
     Import(Span),
+    SizeOf(Span),
+    Alloc(Span),
+    Zalloc(Span),
+    AllocArr(Span),
+    ZallocArr(Span),
+    CastTo(Span),
 
     Eof(Span),
 }
@@ -121,6 +127,12 @@ impl Token {
             Token::Struct(span) => *span,
             Token::Global(span) => *span,
             Token::Import(span) => *span,
+            Token::SizeOf(span) => *span,
+            Token::Alloc(span) => *span,
+            Token::Zalloc(span) => *span,
+            Token::AllocArr(span) => *span,
+            Token::ZallocArr(span) => *span,
+            Token::CastTo(span) => *span,
             Token::Eof(span) => *span,
         }
     }
@@ -190,6 +202,18 @@ impl Token {
                 | Token::Bool(_, _)
                 | Token::Char(_, _)
                 | Token::String(_, _)
+        )
+    }
+
+    pub fn is_special_kw(&self) -> bool {
+        matches!(
+            self,
+            Token::SizeOf(_)
+                | Token::Alloc(_)
+                | Token::Zalloc(_)
+                | Token::AllocArr(_)
+                | Token::ZallocArr(_)
+                | Token::CastTo(_)
         )
     }
 }
@@ -388,6 +412,12 @@ impl TokenIter {
             "struct" => Token::Struct(span),
             "global" => Token::Global(span),
             "import" => Token::Import(span),
+            "size_of" => Token::SizeOf(span),
+            "cast_to" => Token::CastTo(span),
+            "alloc" => Token::Alloc(span),
+            "zalloc" => Token::Zalloc(span),
+            "alloc_arr" => Token::AllocArr(span),
+            "zalloc_arr" => Token::ZallocArr(span),
             "true" => Token::Bool(true, span),
             "false" => Token::Bool(false, span),
             _ => Token::Name(span),
