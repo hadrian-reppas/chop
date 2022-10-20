@@ -10,12 +10,19 @@ use crate::program::*;
 use crate::types::*;
 use crate::{color, reset};
 
+// TODO: check for recursive structs (with graph cycles)
+// TODO: dissalow globals in global inits? or maybe to a topological sort? or maybe UB?
+// TODO: reconsider 1.0 + 1 is allowed but 1.0 == 1 is not...
+// TODO: if tests should add a single bool to the stack
+// TODO: remove _ no-op (dissalow _ maybe?)
+
 pub fn check(unit: &[Item]) -> Result<ProgramInfo, Error> {
     let mut context = Context::new(&BUILTINS);
     context.check_unit(unit)?;
     Ok(ProgramInfo {
         program: context.program_context.program,
-        call_graph: context.call_graph,
+        call_graph: context.call_graph.graph,
+        signatures: context.signatures,
         types: context.types,
     })
 }
@@ -197,6 +204,7 @@ impl Context {
                     self.program_context.end_fn(
                         &stack,
                         name.name,
+                        index,
                         self.generic_names.len(),
                         params,
                         returns,
@@ -510,6 +518,7 @@ impl Context {
             }
         }
         self.program_context.end_if_else(test_var, resolve);
+        self.program_context.free(test_var, bool_id);
 
         Ok(())
     }
@@ -577,6 +586,7 @@ impl Context {
         }
 
         let test_var = stack.pop().unwrap().0;
+        stack_before = stack.clone();
 
         self.program_context.begin_while();
         for stmt in body {
@@ -630,6 +640,7 @@ impl Context {
             }
         }
         self.program_context.end_while(test_var, resolve);
+        self.program_context.free(test_var, self.types.bool());
 
         mem::swap(stack, &mut stack_before);
 
@@ -647,7 +658,7 @@ impl Context {
         lbrace_span: Span,
         rbrace_span: Span,
     ) -> Result<(), Error> {
-        let mut stack_before = stack.clone();
+        let stack_before = stack.clone();
 
         for op in low {
             self.check_op(stack, op)?;
@@ -755,6 +766,7 @@ impl Context {
         }
 
         let high_var = stack.pop().unwrap().0;
+        let mut stack_before = stack.clone();
         let iter_var = self.program_context.alloc(int_id);
         stack.push((iter_var, int_id));
 
@@ -803,6 +815,9 @@ impl Context {
         }
         self.program_context
             .end_for(iter_var, low_var, high_var, resolve);
+        self.program_context.free(iter_var, int_id);
+        self.program_context.free(low_var, int_id);
+        self.program_context.free(high_var, int_id);
 
         mem::swap(stack, &mut stack_before);
 
@@ -872,7 +887,15 @@ impl Context {
             Op::Float(val, _) => prim!(*val, float, Float),
             Op::Bool(val, _) => prim!(*val, bool, Bool),
             Op::Char(val, _) => prim!(*val as i64, int, Int),
-            Op::String(val, _) => prim!(val.clone(), byte_ptr, String),
+            Op::String(val, _) => {
+                let ty = self.types.byte_ptr();
+                let var = self.program_context.alloc(ty);
+                let string_id = self.program_context.get_or_insert_string(val);
+                self.program_context
+                    .push_op(ProgramOp::String(var, string_id));
+                stack.push((var, ty));
+                Ok(())
+            }
             Op::Name(name) => self.check_name(stack, name),
             Op::Expr(expr, _) => {
                 self.program_context.pause();
@@ -1014,6 +1037,7 @@ impl Context {
             self.program_context.free(var, ty);
             param_vars.push(var);
         }
+        param_vars.reverse();
         let mut return_vars = Vec::new();
         for ret in signature.returns {
             let ty = self.types.substitute(ret, &bindings);
@@ -1021,8 +1045,22 @@ impl Context {
             stack.push((var, ty));
             return_vars.push(var);
         }
-        self.program_context
-            .push_op(ProgramOp::Call(name.name, index, param_vars, return_vars));
+        if name.name == "@" {
+            self.program_context
+                .push_op(ProgramOp::Ref(return_vars[1], param_vars[0]));
+        } else if name.name == "abort" {
+            self.program_context.push_op(ProgramOp::Abort(name.span));
+        } else if name.name == "assert" {
+            self.program_context
+                .push_op(ProgramOp::Assert(param_vars[0], name.span));
+        } else {
+            self.program_context.push_op(ProgramOp::Call(
+                name.name,
+                index,
+                param_vars,
+                return_vars,
+            ));
+        }
         Ok(())
     }
 
@@ -1452,15 +1490,16 @@ impl CallGraph {
 
     fn set_active(&mut self, name: &'static str, index: usize) {
         self.active = (name, index);
+        if !self.graph.contains_key(&self.active) {
+            self.graph.insert(self.active, HashSet::new());
+        }
     }
 
     fn insert(&mut self, name: &'static str, index: usize, bindings: Vec<GTypeId>) {
-        if let Some(set) = self.graph.get_mut(&self.active) {
-            set.insert((name, index, bindings));
-        } else {
-            let set = HashSet::from([(name, index, bindings)]);
-            self.graph.insert(self.active, set);
-        }
+        self.graph
+            .get_mut(&self.active)
+            .unwrap()
+            .insert((name, index, bindings));
     }
 }
 
@@ -1472,7 +1511,8 @@ fn get_binds(
     if signature.params.len() > stack.len() {
         None
     } else {
-        let mut binds = vec![None; signature.params.len()];
+        // TODO: consider using BTreeMap<usize, GTpeId>
+        let mut binds = vec![None; types.generic_indices_signature(signature).len()];
         for ((_, arg), param) in stack.iter().rev().zip(signature.params.iter().rev()) {
             match types.bind(*param, *arg) {
                 Ok(map) => {
@@ -1489,7 +1529,7 @@ fn get_binds(
                 Err(_) => return None,
             }
         }
-        Some(binds.into_iter().flatten().collect())
+        Some(binds.into_iter().map(Option::unwrap).collect())
     }
 }
 
@@ -1602,6 +1642,7 @@ fn params_overlap(types: &mut Types, params_a: &[GTypeId], params_b: &[GTypeId])
 
 pub struct ProgramInfo {
     pub program: Program,
-    pub call_graph: CallGraph,
+    pub call_graph: HashMap<FnInfo, HashSet<CallInfo>>,
+    pub signatures: HashMap<&'static str, Vec<GSignature>>,
     pub types: Types,
 }

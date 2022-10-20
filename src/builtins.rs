@@ -33,13 +33,12 @@ macro_rules! arith {
 }
 
 macro_rules! bit {
-    ($op:expr $(, $($sigs:expr),*)?) => {(
+    ($op:expr) => {(
         $op,
         vec![
             sig!(BYTE BYTE => BYTE),
             sig!(INT INT => INT),
             sig!(BOOL BOOL => BOOL),
-            $($($sigs),*)?
         ]
     )};
 }
@@ -52,7 +51,7 @@ macro_rules! eq {
             sig!(INT INT => BOOL),
             sig!(FLOAT FLOAT => BOOL),
             sig!(BOOL BOOL => BOOL),
-            sig!(genp!(0) genp!(0) => BOOL),
+            sig!(genp!(0) genp!(1) => BOOL),
         ]
     )};
 }
@@ -193,7 +192,7 @@ lazy_static! {
         ("putp", vec![sig!(genp!(0) =>)]),
         ("putlnp", vec![sig!(genp!(0) =>)]),
         ("ln", vec![sig!(=>)]),
-        ("panic", vec![sig!(=>)]),
+        ("abort", vec![sig!(=>)]),
         ("assert", vec![sig!(BOOL =>)]),
         ("write", vec![sig!(genp!(0) gen!(0) =>)]),
         ("exit", vec![sig!(INT =>)]),

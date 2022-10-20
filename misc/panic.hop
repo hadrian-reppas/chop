@@ -1,4 +1,0 @@
-fn main int **byte {
-    ~ 
-    if 1 != { panic }
-}

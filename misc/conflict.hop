@@ -1,2 +1,0 @@
-fn f int {}
-fn f [T] T {}

@@ -10,6 +10,7 @@ use bimap::BiMap;
 use crate::ast::{Item, Name, PType};
 use crate::error::{Error, Note};
 use crate::lex::Span;
+use crate::rust_codegen;
 
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -59,6 +60,10 @@ impl Kind {
 
     pub fn is_auto(self) -> bool {
         !matches!(self, Kind::Builtin | Kind::Custom(_))
+    }
+
+    pub fn is_custom(self) -> bool {
+        matches!(self, Kind::Custom(_))
     }
 }
 
@@ -311,7 +316,7 @@ impl Types {
                     .map(|id| self.substitute(*id, binds))
                     .collect(),
             ),
-            GType::Generic(index, depth) => self
+            GType::Generic(depth, index) => self
                 .gtypes
                 .get_by_right(&binds[*index])
                 .unwrap()
@@ -336,7 +341,7 @@ impl Types {
                     .map(|id| self.substitute_concrete(*id, concrete))
                     .collect(),
             ),
-            GType::Generic(index, depth) => self
+            GType::Generic(depth, index) => self
                 .types
                 .get_by_right(&concrete[*index])
                 .unwrap()
@@ -453,6 +458,14 @@ impl Types {
         }
     }
 
+    pub fn generic_indices_signature(&self, signature: &GSignature) -> HashSet<usize> {
+        let mut indices = HashSet::new();
+        for id in &signature.params {
+            indices.extend(self.generic_indices(*id));
+        }
+        indices
+    }
+
     pub fn format(&self, id: GTypeId) -> String {
         match self.gtypes.get_by_right(&id).unwrap() {
             GType::Int(depth) => format!("{}int", "*".repeat(*depth)),
@@ -505,5 +518,54 @@ impl Types {
         out.push_str(" -> ");
         out.push_str(&self.format_types(&signature.returns));
         out
+    }
+
+    pub fn rust_type(&self, id: GTypeId) -> String {
+        match self.gtypes.get_by_right(&id).unwrap() {
+            GType::Int(depth) => format!("{}i64", "*mut ".repeat(*depth)),
+            GType::Float(depth) => format!("{}f64", "*mut ".repeat(*depth)),
+            GType::Byte(depth) => format!("{}u8", "*mut ".repeat(*depth)),
+            GType::Bool(depth) => format!("{}bool", "*mut ".repeat(*depth)),
+            GType::Custom(depth, name, generics) => {
+                let mut out = format!("{}hs_", "*mut ".repeat(*depth));
+                rust_codegen::escape_name(name, &mut out);
+                if !generics.is_empty() {
+                    out.push('<');
+                    for (i, id) in generics.iter().enumerate() {
+                        if i > 0 {
+                            out.push_str(", ");
+                        }
+                        out.push_str(&self.rust_type(*id));
+                    }
+                    out.push('>');
+                }
+                out
+            }
+            GType::Generic(depth, index) => format!("{}T{index}", "*mut ".repeat(*depth)),
+        }
+    }
+
+    pub fn rust_type_concrete(&self, id: TypeId) -> String {
+        match self.types.get_by_right(&id).unwrap() {
+            Type::Int(depth) => format!("{}i64", "*mut ".repeat(*depth)),
+            Type::Float(depth) => format!("{}f64", "*mut ".repeat(*depth)),
+            Type::Byte(depth) => format!("{}u8", "*mut ".repeat(*depth)),
+            Type::Bool(depth) => format!("{}bool", "*mut ".repeat(*depth)),
+            Type::Custom(depth, name, generics) => {
+                let mut out = format!("{}hs_", "*mut ".repeat(*depth));
+                rust_codegen::escape_name(name, &mut out);
+                if !generics.is_empty() {
+                    out.push('<');
+                    for (i, id) in generics.iter().enumerate() {
+                        if i > 0 {
+                            out.push_str(", ");
+                        }
+                        out.push_str(&self.rust_type_concrete(*id));
+                    }
+                    out.push('>');
+                }
+                out
+            }
+        }
     }
 }

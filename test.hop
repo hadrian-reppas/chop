@@ -2,14 +2,25 @@ import std : prelude
 
 global count: int { 0 }
 global flag: bool
+global my_pair: pair[int byte] { 0 cast_to[*int] 0 cast_to[*byte] pair }
 
-struct pair[T] {
-    fst: T
-    snd: T
+struct pair [T U] {
+    fst: *T
+    snd: *U
 }
 
 struct single [T] {
     value: T
+}
+
+fn alloc_test int -> ***int {
+
+    alloc_arr[pair[int byte]] ~
+
+    zalloc[int] * 0 == assert
+    5 zalloc_arr[byte] 2 + * 0 to_byte == assert
+
+    alloc[**int]
 }
 
 fn cast_to_int_ptr_ptr[T] *T -> **int {
@@ -39,6 +50,15 @@ fn test_while {
     while true { ~ 2 }
     while ~ 1 false { ! ! }
     ~ ~ ~
+}
+
+fn test_abort {
+    abort
+}
+
+fn member_test {
+    alloc[int] alloc[byte] pair DEBUG_STACK
+    .fst DEBUG_STACK ~
 }
 
 fn test_for -> float float {

@@ -3,3 +3,21 @@ fn swap [T U] T U -> U T {
         u t
     }
 }
+
+fn rot [T U V] T U V -> U V T {
+    let t u v {
+        u v t
+    }
+}
+
+fn under [T U] T U -> T U T {
+    let t u {
+        t u t
+    }
+}
+
+fn carve [T U] T U -> U {
+    let _ u {
+        u
+    }
+}

@@ -3,7 +3,10 @@ use std::{
     mem,
 };
 
-use crate::types::{GTypeId, TypeId};
+use crate::{
+    lex::Span,
+    types::{GTypeId, TypeId},
+};
 
 pub struct ProgramContext {
     pub program: Program,
@@ -12,6 +15,7 @@ pub struct ProgramContext {
     pub vars: HashMap<GTypeId, Vec<usize>>,
     free_vars: HashMap<GTypeId, Vec<usize>>,
     if_bodies: Vec<Vec<ProgramStmt>>,
+    string_map: HashMap<String, usize>,
     counter: usize,
     state: State,
 }
@@ -25,6 +29,7 @@ impl ProgramContext {
             vars: HashMap::new(),
             free_vars: HashMap::new(),
             if_bodies: Vec::new(),
+            string_map: HashMap::new(),
             counter: 0,
             state: State::Paused,
         }
@@ -49,7 +54,8 @@ impl ProgramContext {
             if let Some(var) = free.pop() {
                 var
             } else {
-                self.vars.insert(ty, vec![self.counter]);
+                free.push(self.counter);
+                self.vars.get_mut(&ty).unwrap().push(self.counter);
                 self.counter += 1;
                 self.counter - 1
             }
@@ -102,12 +108,13 @@ impl ProgramContext {
 
     pub fn end_if_else(&mut self, test_var: usize, resolve: Vec<(usize, usize)>) {
         let else_body = self.wip_bodies.pop().unwrap();
-        self.wip_bodies.last_mut().unwrap().push(ProgramStmt::If(
+        let body = self.if_bodies.pop().unwrap();
+        self.wip_bodies.last_mut().unwrap().push(ProgramStmt::If {
             test_var,
-            self.if_bodies.pop().unwrap(),
+            body,
             else_body,
             resolve,
-        ))
+        })
     }
 
     pub fn begin_for(&mut self) {
@@ -122,10 +129,13 @@ impl ProgramContext {
         resolve: Vec<(usize, usize)>,
     ) {
         let body = self.wip_bodies.pop().unwrap();
-        self.wip_bodies
-            .last_mut()
-            .unwrap()
-            .push(ProgramStmt::For(iter_var, low_var, high_var, body, resolve));
+        self.wip_bodies.last_mut().unwrap().push(ProgramStmt::For {
+            iter_var,
+            low_var,
+            high_var,
+            body,
+            resolve,
+        });
     }
 
     pub fn begin_while(&mut self) {
@@ -137,7 +147,11 @@ impl ProgramContext {
         self.wip_bodies
             .last_mut()
             .unwrap()
-            .push(ProgramStmt::While(test_var, body, resolve));
+            .push(ProgramStmt::While {
+                test_var,
+                body,
+                resolve,
+            });
     }
 
     pub fn begin_body(&mut self) {
@@ -154,18 +168,33 @@ impl ProgramContext {
         &mut self,
         stack: &[(usize, GTypeId)],
         name: &'static str,
+        index: usize,
         generic_count: usize,
         params: Vec<GTypeId>,
         returns: Vec<GTypeId>,
     ) {
+        let vars: HashMap<_, _> = self
+            .vars
+            .drain()
+            .map(|(id, vars)| {
+                (
+                    id,
+                    vars.into_iter()
+                        .filter(|var| !(0..params.len()).contains(var))
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .filter(|(_, vars)| !vars.is_empty())
+            .collect();
         let body = self.wip_bodies.pop().unwrap();
         self.program.functions.push(ProgramFn {
             name,
+            index,
             generic_count,
             params,
             returns,
             body,
-            vars: mem::take(&mut self.vars),
+            vars,
             return_vars: stack.iter().map(|(var, _)| *var).collect(),
         });
     }
@@ -194,6 +223,17 @@ impl ProgramContext {
             }),
         })
     }
+
+    pub fn get_or_insert_string(&mut self, s: &str) -> usize {
+        if let Some(index) = self.string_map.get(s) {
+            *index
+        } else {
+            let index = self.string_map.len();
+            self.string_map.insert(s.to_string(), index);
+            self.program.literals.push(s.to_string());
+            index
+        }
+    }
 }
 
 enum State {
@@ -207,6 +247,7 @@ pub struct Program {
     pub structs: Vec<ProgramStruct>,
     pub functions: Vec<ProgramFn>,
     pub globals: Vec<ProgramGlobal>,
+    pub literals: Vec<String>,
 }
 
 impl Program {
@@ -215,6 +256,7 @@ impl Program {
             structs: Vec::new(),
             functions: Vec::new(),
             globals: Vec::new(),
+            literals: Vec::new(),
         }
     }
 }
@@ -235,6 +277,7 @@ pub struct ProgramMember {
 #[derive(Debug)]
 pub struct ProgramFn {
     pub name: &'static str,
+    pub index: usize,
     pub generic_count: usize,
     pub params: Vec<GTypeId>,
     pub returns: Vec<GTypeId>,
@@ -262,8 +305,11 @@ pub enum ProgramOp {
     Int(usize, i64),
     Float(usize, f64),
     Bool(usize, bool),
-    String(usize, String),
+    String(usize, usize),
     Call(&'static str, usize, Vec<usize>, Vec<usize>),
+    Ref(usize, usize),
+    Assert(usize, Span),
+    Abort(Span),
     SizeOf(usize, GTypeId),
     Alloc(usize, GTypeId),
     Zalloc(usize, GTypeId),
@@ -275,12 +321,22 @@ pub enum ProgramOp {
 #[derive(Debug)]
 pub enum ProgramStmt {
     Op(ProgramOp),
-    If(
-        usize,
-        Vec<ProgramStmt>,
-        Vec<ProgramStmt>,
-        Vec<(usize, usize)>,
-    ),
-    For(usize, usize, usize, Vec<ProgramStmt>, Vec<(usize, usize)>),
-    While(usize, Vec<ProgramStmt>, Vec<(usize, usize)>),
+    If {
+        test_var: usize,
+        body: Vec<ProgramStmt>,
+        else_body: Vec<ProgramStmt>,
+        resolve: Vec<(usize, usize)>,
+    },
+    For {
+        iter_var: usize,
+        low_var: usize,
+        high_var: usize,
+        body: Vec<ProgramStmt>,
+        resolve: Vec<(usize, usize)>,
+    },
+    While {
+        test_var: usize,
+        body: Vec<ProgramStmt>,
+        resolve: Vec<(usize, usize)>,
+    },
 }
