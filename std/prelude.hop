@@ -1,23 +1,29 @@
-fn swap [T U] T U -> U T {
+fn swap[T U] T U -> U T {
     let t u {
         u t
     }
 }
 
-fn rot [T U V] T U V -> U V T {
+fn rot[T U V] T U V -> U V T {
     let t u v {
         u v t
     }
 }
 
-fn under [T U] T U -> T U T {
+fn under[T U] T U -> T U T {
     let t u {
         t u t
     }
 }
 
-fn carve [T U] T U -> U {
+fn carve[T U] T U -> U {
     let _ u {
         u
+    }
+}
+
+fn pump[T U] T U -> T T U {
+    let t u {
+        t t u
     }
 }

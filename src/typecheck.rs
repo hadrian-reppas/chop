@@ -856,6 +856,7 @@ impl Context {
         let mut binds = HashMap::new();
         for name in names.iter().rev() {
             let ty = stack.pop().unwrap();
+            self.program_context.alloc_let(ty.0);
             if name.name != "_" {
                 binds.insert(name.name, ty);
             }
@@ -866,7 +867,9 @@ impl Context {
             self.check_stmt(stack, stmt)?;
         }
 
-        self.let_binds.pop();
+        for (_, (var, ty)) in self.let_binds.pop().unwrap() {
+            self.program_context.free_let(var, ty);
+        }
 
         Ok(())
     }
@@ -1023,6 +1026,8 @@ impl Context {
                 reset!(),
                 name.span.location(),
             );
+        } else if name.name == "_" {
+            return Err(Error::Parse(name.span, "name '_' is reserved".to_string()));
         }
 
         if let Some((var, ty)) = self.get_let_bind(name.name) {
@@ -1046,8 +1051,11 @@ impl Context {
             return_vars.push(var);
         }
         if name.name == "@" {
-            self.program_context
-                .push_op(ProgramOp::Ref(return_vars[1], param_vars[0]));
+            self.program_context.push_op(ProgramOp::Ref(
+                return_vars[1],
+                param_vars[0],
+                stack[stack.len() - 2].1,
+            ));
         } else if name.name == "abort" {
             self.program_context.push_op(ProgramOp::Abort(name.span));
         } else if name.name == "assert" {

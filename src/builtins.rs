@@ -111,8 +111,12 @@ lazy_static! {
             sig!(genp!(0) INT => genp!(0)),
             sig!(INT genp!(0) => genp!(0))
         ),
-        arith!("-", sig!(genp!(0) INT => genp!(0))),
-        arith!("*", sig!(genp!(0) => gen!(0))),
+        arith!(
+            "-",
+            sig!(genp!(0) INT => genp!(0)),
+            sig!(genp!(0) genp!(0) => INT)
+        ),
+        arith!("*"),
         arith!("/"),
         arith!("%"),
         bit!("&"),
@@ -144,7 +148,6 @@ lazy_static! {
         (".", vec![sig!(gen!(0) => gen!(0) gen!(0))]),
         ("~", vec![sig!(gen!(0) =>)]),
         ("@", vec![sig!(gen!(0) => gen!(0) genp!(0))]),
-        ("_", vec![sig!(=>)]),
         (
             "to_byte",
             vec![
@@ -194,6 +197,7 @@ lazy_static! {
         ("ln", vec![sig!(=>)]),
         ("abort", vec![sig!(=>)]),
         ("assert", vec![sig!(BOOL =>)]),
+        ("read", vec![sig!(genp!(0) => gen!(0))]),
         ("write", vec![sig!(genp!(0) gen!(0) =>)]),
         ("exit", vec![sig!(INT =>)]),
         ("realloc", vec![sig!(genp!(0) INT => genp!(0))]),
@@ -201,7 +205,6 @@ lazy_static! {
         ("copy", vec![sig!(genp!(0) genp!(0) INT =>)]),
         ("pow", vec![sig!(FLOAT FLOAT => FLOAT)]),
         ("random", vec![sig!(=> FLOAT)]),
-        ("randint", vec![sig!(INT => INT)]),
         ("strcmp", vec![sig!(ptr!(BYTE) ptr!(BYTE) => INT)]),
         ("streq", vec![sig!(ptr!(BYTE) ptr!(BYTE) => BOOL)]),
         ("strcpy", vec![sig!(ptr!(BYTE) ptr!(BYTE) =>)]),

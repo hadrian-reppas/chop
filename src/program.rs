@@ -13,10 +13,12 @@ pub struct ProgramContext {
     pub wip_init: Vec<ProgramOp>,
     pub wip_bodies: Vec<Vec<ProgramStmt>>,
     pub vars: HashMap<GTypeId, Vec<usize>>,
-    free_vars: HashMap<GTypeId, Vec<usize>>,
-    if_bodies: Vec<Vec<ProgramStmt>>,
-    string_map: HashMap<String, usize>,
-    counter: usize,
+    pub free_vars: HashMap<GTypeId, Vec<usize>>,
+    pub if_bodies: Vec<Vec<ProgramStmt>>,
+    pub string_map: HashMap<String, usize>,
+    pub counter: usize,
+    pub let_counts: HashMap<usize, usize>,
+    pub to_free: HashSet<usize>,
     state: State,
 }
 
@@ -31,12 +33,16 @@ impl ProgramContext {
             if_bodies: Vec::new(),
             string_map: HashMap::new(),
             counter: 0,
+            let_counts: HashMap::new(),
+            to_free: HashSet::new(),
             state: State::Paused,
         }
     }
 
     pub fn init_vars(&mut self, params: &[GTypeId]) {
         self.free_vars = HashMap::new();
+        self.let_counts = HashMap::new();
+        self.to_free = HashSet::new();
         self.counter = params.len();
         for (i, id) in params.iter().enumerate() {
             match self.vars.entry(*id) {
@@ -50,12 +56,11 @@ impl ProgramContext {
     }
 
     pub fn alloc(&mut self, ty: GTypeId) -> usize {
-        if let Some(free) = self.free_vars.get_mut(&ty) {
-            if let Some(var) = free.pop() {
+        if let Some(vars) = self.vars.get_mut(&ty) {
+            if let Some(var) = self.free_vars.get_mut(&ty).unwrap().pop() {
                 var
             } else {
-                free.push(self.counter);
-                self.vars.get_mut(&ty).unwrap().push(self.counter);
+                vars.push(self.counter);
                 self.counter += 1;
                 self.counter - 1
             }
@@ -68,7 +73,32 @@ impl ProgramContext {
     }
 
     pub fn free(&mut self, var: usize, ty: GTypeId) {
-        self.free_vars.get_mut(&ty).unwrap().push(var);
+        if self.let_counts.contains_key(&var) {
+            self.to_free.insert(var);
+        } else {
+            self.free_vars.get_mut(&ty).unwrap().push(var);
+        }
+    }
+
+    pub fn alloc_let(&mut self, var: usize) {
+        if let Some(count) = self.let_counts.get(&var) {
+            self.let_counts.insert(var, count + 1);
+        } else {
+            self.let_counts.insert(var, 1);
+        }
+    }
+
+    pub fn free_let(&mut self, var: usize, ty: GTypeId) {
+        let count = self.let_counts[&var];
+        if count == 1 {
+            self.let_counts.remove(&var);
+            if self.to_free.contains(&var) {
+                self.to_free.remove(&var);
+                self.free_vars.get_mut(&ty).unwrap().push(var);
+            }
+        } else {
+            self.let_counts.insert(var, count - 1);
+        }
     }
 
     pub fn pause(&mut self) {
@@ -307,7 +337,7 @@ pub enum ProgramOp {
     Bool(usize, bool),
     String(usize, usize),
     Call(&'static str, usize, Vec<usize>, Vec<usize>),
-    Ref(usize, usize),
+    Ref(usize, usize, GTypeId),
     Assert(usize, Span),
     Abort(Span),
     SizeOf(usize, GTypeId),

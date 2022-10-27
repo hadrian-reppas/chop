@@ -5,7 +5,7 @@ struct string {
 }
 
 fn new_string -> string {
-    0 to_byte_ptr 0 0 string
+    0 cast_to[*byte] 0 0 string
 }
 
 fn push *string int {
@@ -21,7 +21,7 @@ fn push *string int {
 }
 
 fn push *string *byte {
-    ~ ~ panic
+    ~ ~ abort
 }
 
 fn std_push_one *string byte {
@@ -99,15 +99,19 @@ fn std_four_bytes int -> byte byte byte byte {
 }
 
 fn std_grow_string *string {
-    ..capacity * 2 *
-    if . 10 > {}
-    else { ~ 10 }
-    let new_capacity {
-        ..bytes * new_capacity realloc
-        let new_bytes {
-            ..bytes new_bytes write
+    ..capacity *
+    if . 0 == {
+        ~
+        .bytes 10 alloc_arr[byte] write
+    } else {
+        2 *
+        let new_capacity {
+            ..bytes * new_capacity realloc
+            let new_bytes {
+                ..bytes new_bytes write
+            }
+            .capacity new_capacity write
         }
-        .capacity new_capacity write
     }
 }
 

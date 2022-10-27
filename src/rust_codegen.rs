@@ -3,7 +3,9 @@ use std::mem;
 
 use lazy_static::lazy_static;
 
-use crate::program::{Program, ProgramFn, ProgramGlobal, ProgramOp, ProgramStmt, ProgramStruct};
+use crate::program::{
+    Program, ProgramFn, ProgramGlobal, ProgramMember, ProgramOp, ProgramStmt, ProgramStruct,
+};
 use crate::typecheck::{CallInfo, FnInfo, ProgramInfo};
 use crate::types::{GSignature, Kind, Types};
 
@@ -11,6 +13,32 @@ const PRELUDE: &str = "#![allow(warnings)]
 #[repr(transparent)]
 struct hglobal<T: Copy>(T);
 unsafe impl<T: Copy> Sync for hglobal<T> {}
+macro_rules! zeroed { ($ty:ty) => {unsafe { std::mem::transmute([0u8; std::mem::size_of::<$ty>()]) }}; }
+macro_rules! uninit { () => {std::mem::MaybeUninit::uninit().assume_init()}; }
+macro_rules! alloc { ($len:expr, $ty:ty, $alloc:ident) => {{
+    let layout = std::alloc::Layout::array::<$ty>($len as usize).unwrap();
+    let ptr = std::alloc::$alloc(layout);
+    hallocs.as_mut().unwrap().insert(ptr as usize, layout);
+    ptr as *mut $ty
+}}; }
+static mut hstart: std::time::Instant = zeroed!(std::time::Instant);
+static mut hallocs: Option<std::collections::HashMap<usize, std::alloc::Layout>> = None;
+fn hhashu32(mut x: u32) -> u32 {
+    x = ((x >> 16) ^ x).wrapping_mul(0x45d9f3b);
+    x = ((x >> 16) ^ x).wrapping_mul(0x45d9f3b);
+    (x >> 16) ^ x
+}
+fn hhash(mut x: u64) -> u64 {
+    let a = (x >> 32) as u32;
+    let b = x as u32;
+    let c = hhashu32(a) ^ hhashu32(a.reverse_bits() ^ b);
+    let d = hhashu32(b) ^ hhashu32(b.reverse_bits() ^ a);
+    (c as u64) << 32 | d as u64
+}
+unsafe fn hrandf() -> f64 {
+    let x = std::time::Instant::now().duration_since(hstart).as_nanos() as u64;
+    hhash(x).saturating_sub(1) as f64 / u64::MAX as f64
+}
 ";
 
 lazy_static! {
@@ -28,7 +56,7 @@ lazy_static! {
                 "fn hf__2b__7(hv0: f64, hv1: i64, hr0: &mut f64) { *hr0 = hv0 + hv1 as f64; }\n",
                 "fn hf__2b__8(hv0: f64, hv1: f64, hr0: &mut f64) { *hr0 = hv0 + hv1; }\n",
                 "unsafe fn hf__2b__9<T>(hv0: *mut T, hv1: i64, hr0: &mut *mut T) { *hr0 = hv0.offset(hv1 as isize); }\n",
-                "unsafe fn hf__2b__10<T>(hv0: i64, hv1: *mut T, hr0: &mut *mut T) { *hr0 = hv1.offset(hv0 as isize);  }\n",
+                "unsafe fn hf__2b__a<T>(hv0: i64, hv1: *mut T, hr0: &mut *mut T) { *hr0 = hv1.offset(hv0 as isize);  }\n",
             ]
         ),
         (
@@ -44,6 +72,7 @@ lazy_static! {
                 "fn hf__2d__7(hv0: f64, hv1: i64, hr0: &mut f64) { *hr0 = hv0 - hv1 as f64; }\n",
                 "fn hf__2d__8(hv0: f64, hv1: f64, hr0: &mut f64) { *hr0 = hv0 - hv1; }\n",
                 "unsafe fn hf__2d__9<T>(hv0: *mut T, hv1: i64, hr0: &mut *mut T) { *hr0 = hv0.offset(-hv1 as isize); }\n",
+                "unsafe fn hf__2d__a<T>(hv0: *mut T, hv1: *mut T, hr0: &mut i64) { *hr0 = hv0.offset_from(hv1); }\n",
             ],
         ),
         (
@@ -58,7 +87,6 @@ lazy_static! {
                 "fn hf__2a__6(hv0: f64, hv1: u8, hr0: &mut f64) { *hr0 = hv0 * hv1 as f64; }\n",
                 "fn hf__2a__7(hv0: f64, hv1: i64, hr0: &mut f64) { *hr0 = hv0 * hv1 as f64; }\n",
                 "fn hf__2a__8(hv0: f64, hv1: f64, hr0: &mut f64) { *hr0 = hv0 * hv1; }\n",
-                "unsafe fn hf__2a__9<T>(hv0: *mut T, hr0: &mut T) { *hr0 = hv0.read(); }\n",
             ],
         ),
         (
@@ -208,18 +236,7 @@ lazy_static! {
                 "fn hf__2e__0<T: Copy>(hv0: T, hr0: &mut T, hr1: &mut T) { *hr0 = hv0; *hr1 = hv0; }\n"
             ],
         ),
-        (
-            "~",
-            vec![
-                "fn hf__7e__0<T>(hv0: T) {}\n",
-            ],
-        ),
-        (
-            "_",
-            vec![
-                "fn hf____0() {}",
-            ],
-        ),
+        // ("~", vec!["fn hf__7e__0<T>(hv0: T) {}\n"]),
         (
             "to_byte",
             vec![
@@ -263,15 +280,13 @@ lazy_static! {
         (
             "puts",
             vec![
-                "unsafe fn hf_puts_0(hv0: *mut u8) { print!(\"{}\", std::ffi::CStr::from_ptr(std::mem::transmute(hv0)).to_str().unwrap()); }\n",
-                "unsafe fn hf_putlns_0(hv0: *mut u8) { println!(\"{}\", std::ffi::CStr::from_ptr(std::mem::transmute(hv0)).to_str().unwrap()); }\n",
+                "unsafe fn hf_puts_0(hv0: *mut u8) { print!(\"{}\", std::ffi::CStr::from_ptr(hv0 as *const i8).to_str().unwrap()); }\n",
             ],
         ),
         (
             "putlns",
             vec![
-                "unsafe fn hf_putc_0(hv0: i64) { print!(\"{}\", char::from_u32_unchecked(hv0 as u32)); }\n",
-                "unsafe fn hf_putlnc_0(hv0: i64) { println!(\"{}\", char::from_u32_unchecked(hv0 as u32)); }\n",
+                "unsafe fn hf_putlns_0(hv0: *mut u8) { println!(\"{}\", std::ffi::CStr::from_ptr(hv0 as *const i8).to_str().unwrap()); }\n",
             ],
         ),
         (
@@ -305,9 +320,15 @@ lazy_static! {
             ],
         ),
         (
+            "read",
+            vec![
+                "unsafe fn hf_read_0<T>(hv0: *mut T, hr0: &mut T) { *hr0 = hv0.read(); }\n",
+            ],
+        ),
+        (
             "write",
             vec![
-                "unsafe fn hf_write_0<T: Copy>(hv0: *mut T, hv1: T) { std::ptr::write(hv0, hv1); }\n",
+                "unsafe fn hf_write_0<T>(hv0: *mut T, hv1: T) { std::ptr::write(hv0, hv1); }\n",
             ],
         ),
         (
@@ -319,19 +340,26 @@ lazy_static! {
         (
             "realloc",
             vec![
-                "unsafe fn hf_realloc_0<T>(hv0: *mut T, hv1: i64, hr0: &mut *mut T) { *hr0 = todo!(); }\n",
+                "unsafe fn hf_realloc_0<T>(hv0: *mut T, hv1: i64, hr0: &mut *mut T) {
+    let new_size = hv1 as usize * std::mem::size_of::<T>();
+    let old_layout = *hallocs.as_mut().unwrap().get(&(hv0 as usize)).unwrap();
+    let ptr = std::alloc::realloc(hv0 as *mut u8, old_layout, new_size);
+    let layout = std::alloc::Layout::array::<T>(hv1 as usize).unwrap();
+    hallocs.as_mut().unwrap().insert(ptr as usize, layout);
+    *hr0 = ptr as *mut T;
+}\n",
             ],
         ),
         (
             "free",
             vec![
-                "unsafe fn hf_free_0<T>(hv0: *mut T) { todo!(); }\n",
+                "unsafe fn hf_free_0<T>(hv0: *mut T) { std::alloc::dealloc(hv0 as *mut u8, *hallocs.as_ref().unwrap().get(&(hv0 as usize)).unwrap()); }\n",
             ],
         ),
         (
             "copy",
             vec![
-                "unsafe fn hf_copy_0<T>(hv0: *mut T, hv1: *mut T) { todo!(); }\n"
+                "unsafe fn hf_copy_0<T>(hv0: *mut T, hv1: *mut T, hv2: i64) { std::ptr::copy(hv1, hv0, hv2 as usize); }\n"
             ],
         ),
         (
@@ -343,13 +371,7 @@ lazy_static! {
         (
             "random",
             vec![
-                "fn hf_random_0(hr0: &mut f64) { *hr0 = todo!(); }\n",
-            ],
-        ),
-        (
-            "randint",
-            vec![
-                "fn hf_randint_0(hv0: i64, hr0: &mut i64) { *hr0 = todo!(); }\n",
+                "unsafe fn hf_random_0(hr0: &mut f64) { *hr0 = hrandf(); }\n",
             ],
         ),
         (
@@ -447,10 +469,10 @@ impl<'a> Context<'a> {
     }
 
     fn generate_global(&mut self, global: &ProgramGlobal) {
-        self.code.push_str("static hg_");
+        self.code.push_str("static mut hg_");
         self.escape_name(global.name);
         self.code.push_str(&format!(
-            ": hglobal<{}> = unsafe {{ std::mem::transmute([0u8; std::mem::size_of::<{}>()]) }};\n",
+            ": hglobal<{}> = zeroed!({});\n",
             self.types.rust_type_concrete(global.type_id),
             self.types.rust_type_concrete(global.type_id),
         ));
@@ -458,7 +480,7 @@ impl<'a> Context<'a> {
 
     fn generate_literal(&mut self, index: usize) {
         self.code.push_str(&format!(
-            "static hl{index:x}: hglobal<*mut u8> = hglobal(0usize as *mut u8);\n",
+            "static mut hl{index:x}: hglobal<*mut u8> = hglobal(0usize as *mut u8);\n",
         ));
     }
 
@@ -473,12 +495,39 @@ impl<'a> Context<'a> {
             self.code
                 .push_str(&format!(": {},\n", self.types.rust_type(member.type_id),));
         }
-        self.code.push_str("}\nunsafe impl");
-        self.declare_generics(struct_def.generic_count);
-        self.code.push_str(" Sync for hs_");
+        self.code.push_str("}\nfn hf_");
         self.escape_name(struct_def.name);
+        let (index, signature) = self.signatures[struct_def.name]
+            .iter()
+            .enumerate()
+            .find(|(_, sig)| matches!(sig.kind, Kind::Constructor(_)))
+            .unwrap();
+        self.code.push_str(&format!("_{index:x}"));
         self.declare_generics(struct_def.generic_count);
-        self.code.push_str(" {}\n")
+        self.code.push('(');
+        for (i, param) in signature.params.iter().enumerate() {
+            if i > 0 {
+                self.code.push_str(", ");
+            }
+            self.code
+                .push_str(&format!("hv{i:x}: {}", self.types.rust_type(*param)));
+        }
+        if !signature.params.is_empty() {
+            self.code.push_str(", ");
+        }
+        self.code.push_str(&format!(
+            "hr0: &mut {}",
+            self.types.rust_type(signature.returns[0]),
+        ));
+        self.code.push_str(") {\n    *hr0 = hs_");
+        self.escape_name(struct_def.name);
+        self.code.push_str(" {\n");
+        for (i, ProgramMember { name, .. }) in struct_def.members.iter().enumerate() {
+            self.code.push_str("    hm_");
+            self.escape_name(name);
+            self.code.push_str(&format!(": hv{i:x},\n"));
+        }
+        self.code.push_str("    };\n}\n");
     }
 
     fn generate_function(&mut self, function: &ProgramFn) {
@@ -516,7 +565,7 @@ impl<'a> Context<'a> {
             for var in vars {
                 self.tabs();
                 self.code.push_str(&format!(
-                    "let mut hv{var:x}: {} = std::mem::MaybeUninit::uninit().assume_init();\n",
+                    "let mut hv{var:x}: {} = uninit!();\n",
                     self.types.rust_type(*type_id),
                 ));
             }
@@ -577,6 +626,9 @@ impl<'a> Context<'a> {
                 self.code.push_str(&format!("hv{var:x} = hl{index:?}.0;\n"));
             }
             ProgramOp::Call(name, index, params, returns) => {
+                if *name == "~" {
+                    return;
+                }
                 self.tabs();
                 self.code.push_str("hf_");
                 self.escape_name(name);
@@ -595,10 +647,11 @@ impl<'a> Context<'a> {
                 }
                 self.code.push_str(");\n");
             }
-            ProgramOp::Ref(var, old_var) => {
+            ProgramOp::Ref(var, old_var, type_id) => {
                 self.tabs();
                 self.code.push_str(&format!(
-                    "hv{var:x} = std::mem::transmute::(&mut hv{old_var:x});\n",
+                    "hv{var:x} = &mut hv{old_var:x} as *mut {};\n",
+                    self.types.rust_type(*type_id),
                 ));
             }
             ProgramOp::Abort(span) => {
@@ -635,39 +688,36 @@ impl<'a> Context<'a> {
             ProgramOp::Alloc(var, type_id) => {
                 self.tabs();
                 self.code.push_str(&format!(
-                    "hv{var:x} = std::alloc::alloc(std::alloc::Layout::new::<{}>()) as *mut {};\n",
-                    self.types.rust_type(*type_id),
+                    "hv{var:x} = alloc!(1, {}, alloc);\n",
                     self.types.rust_type(*type_id),
                 ));
             }
             ProgramOp::Zalloc(var, type_id) => {
                 self.tabs();
                 self.code.push_str(&format!(
-                    "hv{var:x} = std::alloc::alloc_zeroed(std::alloc::Layout::new::<{}>()) as *mut {};\n",
-                    self.types.rust_type(*type_id),
+                    "hv{var:x} = alloc!(1, {}, alloc_zeroed);\n",
                     self.types.rust_type(*type_id),
                 ));
             }
             ProgramOp::AllocArr(var, len_var, type_id) => {
                 self.tabs();
                 self.code.push_str(&format!(
-                    "hv{var:x} = std::alloc::alloc(std::alloc::Layout::array::<{}>(hv{len_var:x} as usize).unwrap()) as *mut {};\n",
-                    self.types.rust_type(*type_id),
+                    "hv{var:x} = alloc!(hv{len_var:x}, {}, alloc);\n",
                     self.types.rust_type(*type_id),
                 ));
             }
             ProgramOp::ZallocArr(var, len_var, type_id) => {
                 self.tabs();
                 self.code.push_str(&format!(
-                    "hv{var:x} = std::alloc::alloc_zeroed(std::alloc::Layout::array::<{}>(hv{len_var:x} as usize).unwrap()) as *mut {};\n",
-                    self.types.rust_type(*type_id),
+                    "hv{var:x} = alloc!(hv{len_var:x}, {}, alloc_zeroed);\n",
                     self.types.rust_type(*type_id),
                 ));
             }
-            ProgramOp::CastTo(var, old_var, _) => {
+            ProgramOp::CastTo(var, old_var, type_id) => {
                 self.tabs();
                 self.code.push_str(&format!(
-                    "hv{var:x} = std::mem::transmute(hv{old_var:x} as usize);\n"
+                    "hv{var:x} = hv{old_var:x} as usize as {};\n",
+                    self.types.rust_type(*type_id),
                 ));
             }
         }
@@ -770,11 +820,16 @@ impl<'a> Context<'a> {
     }
 
     fn generate_non_custom(&mut self, name: &str, index: usize) {
+        if name == "~" {
+            return;
+        }
         let signature = &self.signatures[name][index];
         if matches!(signature.kind, Kind::Builtin) {
             if name != "@" && name != "abort" && name != "assert" {
                 self.code.push_str(BUILTIN_MAP[name][index]);
             }
+            return;
+        } else if matches!(signature.kind, Kind::Constructor(_)) {
             return;
         }
         let mut generic_indices = HashSet::new();
@@ -806,21 +861,114 @@ impl<'a> Context<'a> {
                 .push_str(&format!("hr{i:x}: &mut {}", self.types.rust_type(*ret)));
         }
         self.code.push_str(") {\n");
-        self.depth += 1;
-        // TODO: generate non-custom body
-        self.tabs();
-        self.code.push_str("todo!();\n");
-        self.depth -= 1;
+        match signature.kind {
+            Kind::Member(_) => {
+                let ptr = self.types.depth(signature.params[0]) > 0;
+                if let Some(name) = name.strip_prefix("..") {
+                    if ptr {
+                        self.code.push_str("    *hr0 = hv0;\n");
+                        self.code.push_str("    *hr1 = &mut (*hv0).hm_");
+                        self.escape_name(name);
+                        self.code.push_str(";\n");
+                    } else {
+                        self.code.push_str("    *hr0 = hv0;\n");
+                        self.code.push_str("    *hr1 = hv0.hm_");
+                        self.escape_name(name);
+                        self.code.push_str(";\n");
+                    }
+                } else {
+                    let name = &name[1..];
+                    if ptr {
+                        self.code.push_str("    *hr0 = &mut (*hv0).hm_");
+                        self.escape_name(name);
+                        self.code.push_str(";\n");
+                    } else {
+                        self.code.push_str("    *hr0 = hv0.hm_");
+                        self.escape_name(name);
+                        self.code.push_str(";\n");
+                    }
+                }
+            }
+            Kind::Global(_) => {
+                self.code.push_str("    *hr0 = hg_");
+                self.escape_name(name);
+                self.code.push_str(".0;\n");
+            }
+            Kind::GlobalWrite(_) => {
+                let name = name.strip_prefix("write_").unwrap();
+                self.code.push_str("    hg_");
+                self.escape_name(name);
+                self.code.push_str(" = hglobal(hv0);\n")
+            }
+            Kind::GlobalPtr(_) => {
+                let name = name.strip_suffix("_ptr").unwrap();
+                self.code.push_str("    *hr0 = &mut hg_");
+                self.escape_name(name);
+                self.code.push_str(";\n")
+            }
+            _ => unreachable!(),
+        }
         self.code.push_str("}\n");
     }
 
     fn generate_main(&mut self) {
-        // TODO: init string literals
-        // TODO: init globals
-        // TODO: convert argv if necessary
-        // TODO: call hf_main_0
-        // TODO: exit
-        self.code.push_str("fn main() {}\n");
+        self.code.push_str("fn main() {\n");
+        for (i, literal) in self.program.literals.iter().enumerate() {
+            self.code
+                .push_str(&format!("    let mut hb{i:x} = {literal:?}"));
+            self.code.pop();
+            self.code.push_str(&format!(
+                "\\x00\".to_string();\n    unsafe {{ hl{i:x} = hglobal(hb{i:x}.as_mut_ptr()); }}\n"
+            ));
+        }
+        self.code
+            .push_str("    unsafe { hallocs = Some(std::collections::HashMap::new()); }\n");
+        for global in &self.program.globals {
+            if let Some(init) = &global.init {
+                self.code.push_str("    unsafe {\n");
+                self.depth = 2;
+                for (type_id, vars) in &init.vars {
+                    for var in vars {
+                        self.tabs();
+                        self.code.push_str(&format!(
+                            "let mut hv{var:x}: {} = std::mem::MaybeUninit::uninit().assume_init();\n",
+                            self.types.rust_type(*type_id),
+                        ));
+                    }
+                }
+                for op in &init.ops {
+                    self.generate_op(op);
+                }
+                self.tabs();
+                self.code.push_str("hg_");
+                self.escape_name(global.name);
+                self.code
+                    .push_str(&format!(" = hglobal(hv{:x});\n", init.var));
+                self.depth = 0;
+                self.code.push_str("    }\n");
+            }
+        }
+        let main_signature = &self.signatures["main"][0];
+        if !main_signature.params.is_empty() {
+            self.code.push_str("    let args: Vec<_> = std::env::args().map(|arg| std::ffi::CString::new(arg).unwrap()).collect();\n");
+            self.code.push_str("    let mut c_args = args.iter().map(|arg| arg.as_ptr() as *mut u8).collect::<Vec<*mut u8>>();\n");
+            self.code.push_str("    let argc = c_args.len() as i64;\n");
+            self.code
+                .push_str("    let argv: *mut *mut u8 = c_args.as_mut_ptr();\n");
+        }
+        self.code.push_str("    let mut code: i64 = 0;\n");
+        self.code.push_str("    unsafe { hf_main_0(");
+        if !main_signature.params.is_empty() {
+            self.code.push_str("argc, argv");
+        }
+        if !main_signature.returns.is_empty() {
+            if !main_signature.params.is_empty() {
+                self.code.push_str(", ");
+            }
+            self.code.push_str("&mut code");
+        }
+        self.code
+            .push_str("); }\n    std::process::exit(code as i32);\n}\n");
     }
 
     fn declare_generics(&mut self, n: usize) {

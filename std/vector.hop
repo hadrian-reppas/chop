@@ -1,0 +1,63 @@
+import std : prelude
+
+struct vector[T] {
+    ptr: *T
+    length: int
+    capacity: int
+}
+
+fn vector_from_value[T] T -> vector[T] {
+    10 alloc_arr[T] . rot write 1 10 vector
+}
+
+fn vector_from_null[T] *T -> vector[T] {
+    0 0 vector
+}
+
+fn push[T] *vector[T] T {
+    swap ..length read swap ..capacity read rot 
+    if == {
+        . std_grow_vector
+    }
+    ..ptr read swap ..length read rot + rot write
+    .length . read 1 + write
+}
+
+fn pop[T] *vector[T] -> T {
+    ..length read 0 > assert
+    ..length . read 1 - write
+    ..ptr read swap .length read + read
+}
+
+fn index[T] *vector[T] int -> T {
+    . 0 >= assert
+    swap ..length read rot . rot > assert
+    swap .ptr read + read
+}
+
+fn free_vector[T] vector[T] {
+    ..ptr swap .capacity
+    if 0 > {
+        free
+    } else {
+        ~
+    }
+}
+
+fn std_grow_vector[T] *vector[T] {
+    if ..length read 0 == {
+        ..capacity 10 write
+        .ptr 10 alloc_arr[T]
+        if . cast_to[int] 0 == {
+            abort
+        }
+        write
+    } else {
+        ..capacity read 2 * swap
+        .ptr . read rot realloc
+        if . cast_to[int] 0 == {
+            abort
+        }
+        write
+    }
+}

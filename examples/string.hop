@@ -12,9 +12,10 @@ fn main {
     @ '𢐎' push
     @ 'y' push
     @ 'z' push
+    ..bytes putlnp
     ..bytes putlns
     free_string
 
-    "size_of_string: " puts
-    size_of_string putln
+    "size_of[string]: " puts
+    size_of[string] putln
 }
