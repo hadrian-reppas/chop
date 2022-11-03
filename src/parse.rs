@@ -31,13 +31,20 @@ pub fn parse_file(path: &str) -> Result<Unit, Error> {
     parse(tokens)
 }
 
-fn parse_name(tokens: &mut Tokens) -> Result<Name, Error> {
+fn parse_name(tokens: &mut Tokens, is_let_bind: bool) -> Result<Name, Error> {
     if tokens.peek().is_name() {
         let span = tokens.next()?.span();
-        Ok(Name {
-            name: span.text,
-            span,
-        })
+        if !is_let_bind && span.text == "_" {
+            Err(Error::Parse(
+                span,
+                "name '_' is reserved for let binds".to_string(),
+            ))
+        } else {
+            Ok(Name {
+                name: span.text,
+                span,
+            })
+        }
     } else {
         Err(Error::Parse(
             tokens.peek().span(),
@@ -48,7 +55,7 @@ fn parse_name(tokens: &mut Tokens) -> Result<Name, Error> {
 
 fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
     let fn_span = tokens.next()?.span();
-    let name = parse_name(tokens)?;
+    let name = parse_name(tokens, false)?;
 
     let generics = parse_generics(tokens)?;
 
@@ -103,7 +110,7 @@ fn parse_generics(tokens: &mut Tokens) -> Result<Option<Generics>, Error> {
 
         let mut names = Vec::new();
         while tokens.peek().is_name() {
-            let generic = parse_name(tokens)?;
+            let generic = parse_name(tokens, false)?;
             if !generic.is_normal() {
                 return Err(Error::Parse(
                     generic.span,
@@ -132,7 +139,7 @@ fn parse_generics(tokens: &mut Tokens) -> Result<Option<Generics>, Error> {
 
 fn parse_struct(tokens: &mut Tokens) -> Result<Item, Error> {
     let struct_span = tokens.next()?.span();
-    let name = parse_name(tokens)?;
+    let name = parse_name(tokens, false)?;
     if !name.is_normal() {
         return Err(Error::Parse(
             name.span,
@@ -156,7 +163,7 @@ fn parse_struct(tokens: &mut Tokens) -> Result<Item, Error> {
 
     let mut fields = Vec::new();
     while !tokens.peek().is_rbrace() {
-        let name = parse_name(tokens)?;
+        let name = parse_name(tokens, false)?;
         if !tokens.peek().is_colon() {
             return Err(Error::Parse(
                 tokens.peek().span(),
@@ -186,7 +193,7 @@ fn parse_struct(tokens: &mut Tokens) -> Result<Item, Error> {
 
 fn parse_global(tokens: &mut Tokens) -> Result<Item, Error> {
     let global_span = tokens.next()?.span();
-    let name = parse_name(tokens)?;
+    let name = parse_name(tokens, false)?;
     if !tokens.peek().is_colon() {
         return Err(Error::Parse(
             tokens.peek().span(),
@@ -198,7 +205,7 @@ fn parse_global(tokens: &mut Tokens) -> Result<Item, Error> {
 
     let definition = if tokens.peek().is_lbrace() {
         let lbrace_span = tokens.next()?.span();
-        let group = parse_group(tokens)?;
+        let group = parse_group(tokens, false)?;
         if !tokens.peek().is_rbrace() {
             return Err(Error::Parse(
                 tokens.peek().span(),
@@ -226,11 +233,11 @@ fn parse_global(tokens: &mut Tokens) -> Result<Item, Error> {
 
 fn parse_import(tokens: &mut Tokens) -> Result<Item, Error> {
     let import_span = tokens.next()?.span();
-    let mut path = vec![parse_name(tokens)?];
+    let mut path = vec![parse_name(tokens, false)?];
     let mut colon_spans = Vec::new();
     while tokens.peek().is_colon() {
         colon_spans.push(tokens.next()?.span());
-        path.push(parse_name(tokens)?);
+        path.push(parse_name(tokens, false)?);
     }
     Ok(Item::Import {
         path,
@@ -240,7 +247,7 @@ fn parse_import(tokens: &mut Tokens) -> Result<Item, Error> {
 }
 
 fn parse_type(tokens: &mut Tokens) -> Result<PType, Error> {
-    let first = parse_name(tokens)?;
+    let first = parse_name(tokens, false)?;
     if first.is_normal() {
         let generics = parse_type_generics(tokens)?;
         Ok(PType {
@@ -249,7 +256,7 @@ fn parse_type(tokens: &mut Tokens) -> Result<PType, Error> {
             generics,
         })
     } else if first.is_ptr() {
-        let second = parse_name(tokens)?;
+        let second = parse_name(tokens, false)?;
         if second.is_normal() {
             let generics = parse_type_generics(tokens)?;
             Ok(PType {
@@ -304,7 +311,7 @@ fn parse_body(tokens: &mut Tokens) -> Result<(Vec<Stmt>, Span), Error> {
 
 fn parse_stmt(tokens: &mut Tokens) -> Result<Stmt, Error> {
     if tokens.peek().is_standalone() || tokens.peek().is_lparen() || tokens.peek().is_special_kw() {
-        let group = parse_group(tokens)?;
+        let group = parse_group(tokens, false)?;
         let span = group[0].span();
         Ok(Stmt::Group(group, span))
     } else if tokens.peek().is_if() {
@@ -323,7 +330,7 @@ fn parse_stmt(tokens: &mut Tokens) -> Result<Stmt, Error> {
     }
 }
 
-pub fn parse_group(tokens: &mut Tokens) -> Result<Vec<Op>, Error> {
+pub fn parse_group(tokens: &mut Tokens, is_if_test: bool) -> Result<Vec<Op>, Error> {
     let mut group = Vec::new();
     while tokens.peek().is_standalone()
         || tokens.peek().is_lparen()
@@ -355,7 +362,7 @@ pub fn parse_group(tokens: &mut Tokens) -> Result<Vec<Op>, Error> {
         }
     }
 
-    if group.is_empty() {
+    if group.is_empty() && !is_if_test {
         Err(Error::Parse(
             tokens.peek().span(),
             "expected a group".to_string(),
@@ -385,8 +392,8 @@ fn parse_rbrack(tokens: &mut Tokens) -> Result<Span, Error> {
     Ok(tokens.next()?.span())
 }
 
-fn parse_test(tokens: &mut Tokens) -> Result<(Vec<Op>, Span), Error> {
-    let group = parse_group(tokens)?;
+fn parse_test(tokens: &mut Tokens, is_if_test: bool) -> Result<(Vec<Op>, Span), Error> {
+    let group = parse_group(tokens, is_if_test)?;
     if !tokens.peek().is_lbrace() {
         return Err(Error::Parse(
             tokens.peek().span(),
@@ -399,7 +406,7 @@ fn parse_test(tokens: &mut Tokens) -> Result<(Vec<Op>, Span), Error> {
 fn parse_if(tokens: &mut Tokens) -> Result<Stmt, Error> {
     let if_span = tokens.next()?.span();
 
-    let (test, lbrace_span) = parse_test(tokens)?;
+    let (test, lbrace_span) = parse_test(tokens, true)?;
     let (body, rbrace_span) = parse_body(tokens)?;
 
     if tokens.peek().is_else() {
@@ -462,7 +469,7 @@ fn parse_if(tokens: &mut Tokens) -> Result<Stmt, Error> {
 
 fn parse_while(tokens: &mut Tokens) -> Result<Stmt, Error> {
     let while_span = tokens.next()?.span();
-    let (test, lbrace_span) = parse_test(tokens)?;
+    let (test, lbrace_span) = parse_test(tokens, false)?;
     let (body, rbrace_span) = parse_body(tokens)?;
 
     Ok(Stmt::While {
@@ -477,7 +484,7 @@ fn parse_while(tokens: &mut Tokens) -> Result<Stmt, Error> {
 fn parse_for(tokens: &mut Tokens) -> Result<Stmt, Error> {
     let for_span = tokens.next()?.span();
 
-    let low = parse_group(tokens)?;
+    let low = parse_group(tokens, false)?;
 
     if !tokens.peek().is_to() {
         return Err(Error::Parse(
@@ -488,7 +495,7 @@ fn parse_for(tokens: &mut Tokens) -> Result<Stmt, Error> {
 
     let to_span = tokens.next()?.span();
 
-    let (high, lbrace_span) = parse_test(tokens)?;
+    let (high, lbrace_span) = parse_test(tokens, false)?;
     let (body, rbrace_span) = parse_body(tokens)?;
 
     Ok(Stmt::For {
@@ -507,7 +514,7 @@ fn parse_let(tokens: &mut Tokens) -> Result<Stmt, Error> {
     let mut names: Vec<Name> = Vec::new();
 
     while tokens.peek().is_name() {
-        let name = parse_name(tokens)?;
+        let name = parse_name(tokens, true)?;
         for prev in &names {
             if prev.name != "_" && prev.name == name.name {
                 return Err(Error::Parse(

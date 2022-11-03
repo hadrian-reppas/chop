@@ -2,6 +2,9 @@ use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::mem;
 
+use petgraph::algo::toposort;
+use petgraph::graph::Graph;
+
 use crate::ast::*;
 use crate::builtins::{Builtins, BUILTINS};
 use crate::error::{Error, Note};
@@ -10,11 +13,7 @@ use crate::program::*;
 use crate::types::*;
 use crate::{color, reset};
 
-// TODO: check for recursive structs (with graph cycles)
-// TODO: dissalow globals in global inits? or maybe to a topological sort? or maybe UB?
-// TODO: reconsider 1.0 + 1 is allowed but 1.0 == 1 is not...
-// TODO: if tests should add a single bool to the stack
-// TODO: remove _ no-op (dissalow _ maybe?)
+// TODO: dissalow globals in global inits? or maybe to a topological sort?
 
 pub fn check(unit: &[Item]) -> Result<ProgramInfo, Error> {
     let mut context = Context::new(&BUILTINS);
@@ -81,6 +80,91 @@ impl Context {
             for (name, signature) in self.get_signatures(item)? {
                 self.insert_signature(name, signature)?;
             }
+        }
+        let mut graph = Graph::new();
+        let mut map = HashMap::new();
+        macro_rules! get_id {
+            ($name:expr) => {
+                if let Some(id) = map.get($name) {
+                    *id
+                } else {
+                    let id = graph.add_node($name);
+                    map.insert($name, id);
+                    id
+                }
+            };
+        }
+        for (name, fields) in &self.struct_fields {
+            let name_id = get_id!(*name);
+            for (_, ty) in fields {
+                if let Some(cname) = self.types.nonptr_custom_name(*ty) {
+                    let cname_id = get_id!(cname);
+                    graph.add_edge(name_id, cname_id, ());
+                }
+            }
+        }
+        if let Err(start_id) = toposort(&graph, None).map_err(|c| c.node_id()) {
+            let mut stack = vec![start_id];
+            let mut prev = HashMap::new();
+            while let Some(mut id) = stack.pop() {
+                for neighbor_id in graph.neighbors(id) {
+                    if neighbor_id == start_id {
+                        let mut names = vec![*graph.node_weight(id).unwrap()];
+                        while let Some(prev_id) = prev.get(&id) {
+                            id = *prev_id;
+                            names.insert(0, *graph.node_weight(id).unwrap());
+                        }
+                        let name_set: HashSet<_> = names.iter().collect();
+                        let mut items = unit.iter();
+                        let span = loop {
+                            match items.next().unwrap() {
+                                Item::Struct { name, .. } if name_set.contains(&name.name) => {
+                                    break name.span;
+                                }
+                                _ => {}
+                            }
+                        };
+                        let mut rot = 0;
+                        for (i, name) in names.iter().enumerate() {
+                            if *name == span.text {
+                                rot = i;
+                                break;
+                            }
+                        }
+                        let mut front: Vec<_> = names.drain(..rot).collect();
+                        names.append(&mut front);
+                        let msg = match names.len() {
+                            1 => format!("struct '{}' is defined recursively", names[0]),
+                            2 => format!(
+                                "structs '{}' and '{}' are defined recursively",
+                                names[0], names[1]
+                            ),
+                            _ => {
+                                let mut msg = "structs ".to_string();
+                                #[allow(clippy::needless_range_loop)]
+                                for i in 0..(names.len() - 1) {
+                                    if i > 0 {
+                                        msg.push_str(", '");
+                                    } else {
+                                        msg.push('\'');
+                                    }
+                                    msg.push_str(names[i]);
+                                    msg.push('\'');
+                                }
+                                msg.push_str(" and '");
+                                msg.push_str(names.last().unwrap());
+                                msg.push_str("' are defined recursively");
+                                msg
+                            }
+                        };
+                        return Err(Error::Type(span, msg, vec![]));
+                    } else {
+                        prev.insert(neighbor_id, id);
+                        stack.push(neighbor_id);
+                    }
+                }
+            }
+            unreachable!();
         }
         if let Some(mains) = self.signatures.get("main") {
             if mains.len() == 1 {
@@ -890,12 +974,12 @@ impl Context {
             Op::Float(val, _) => prim!(*val, float, Float),
             Op::Bool(val, _) => prim!(*val, bool, Bool),
             Op::Char(val, _) => prim!(*val as i64, int, Int),
+            Op::Byte(val, _) => prim!(*val, byte, Byte),
             Op::String(val, _) => {
                 let ty = self.types.byte_ptr();
                 let var = self.program_context.alloc(ty);
-                let string_id = self.program_context.get_or_insert_string(val);
                 self.program_context
-                    .push_op(ProgramOp::String(var, string_id));
+                    .push_op(ProgramOp::String(var, val.clone()));
                 stack.push((var, ty));
                 Ok(())
             }
@@ -1006,6 +1090,21 @@ impl Context {
                 }
                 let arg_var = stack.pop().unwrap().0;
                 let ty = self.types.convert(ptype, &self.generic_names)?;
+                if self.types.depth(ty) == 0 && ty != self.types.int() {
+                    return Err(Error::Type(
+                        *span,
+                        "cast target must be a pointer or 'int'".to_string(),
+                        vec![Note::new(
+                            None,
+                            format!(
+                                "cast target is {}{}{}",
+                                color!(Blue),
+                                self.types.format(ty),
+                                reset!(),
+                            ),
+                        )],
+                    ));
+                }
                 let var = self.program_context.alloc(ty);
                 stack.push((var, ty));
                 self.program_context
@@ -1196,6 +1295,8 @@ impl Context {
             Expr::Float(_, _) => Ok(self.types.float()),
             Expr::Bool(_, _) => Ok(self.types.bool()),
             Expr::Char(_, _) => Ok(self.types.int()),
+            Expr::Byte(_, _) => Ok(self.types.byte()),
+            Expr::String(_, _) => Ok(self.types.byte_ptr()),
             Expr::Name(name) => {
                 if let Some((_, ty)) = self.get_let_bind(name.name) {
                     Ok(ty)
@@ -1386,7 +1487,7 @@ impl Context {
                     let ty = self.types.convert(ty, generic_names)?;
                     constructor_params.push(ty);
                     struct_fields.push((fname.name, ty));
-                    generic_indices.extend(self.types.generic_indices(ty));
+                    generic_indices.extend(self.types.generic_indices_struct(ty, name.name));
                     let ty_ptr = self.types.ref_n(ty, 1);
                     let dotdot = leak(format!("..{}", fname.name));
                     let dot = dotdot.strip_prefix('.').unwrap();
@@ -1498,9 +1599,7 @@ impl CallGraph {
 
     fn set_active(&mut self, name: &'static str, index: usize) {
         self.active = (name, index);
-        if !self.graph.contains_key(&self.active) {
-            self.graph.insert(self.active, HashSet::new());
-        }
+        self.graph.entry(self.active).or_insert_with(HashSet::new);
     }
 
     fn insert(&mut self, name: &'static str, index: usize, bindings: Vec<GTypeId>) {
@@ -1547,6 +1646,8 @@ fn flatten_expr(expr: &Expr, ops: &mut Vec<Op>) {
         Expr::Float(val, span) => ops.push(Op::Float(*val, *span)),
         Expr::Bool(val, span) => ops.push(Op::Bool(*val, *span)),
         Expr::Char(val, span) => ops.push(Op::Char(*val, *span)),
+        Expr::Byte(val, span) => ops.push(Op::Byte(*val, *span)),
+        Expr::String(val, span) => ops.push(Op::String(val.clone(), *span)),
         Expr::Name(name) => ops.push(Op::Name(*name)),
         Expr::Add(left, right, span)
         | Expr::And(left, right, span)
@@ -1653,4 +1754,10 @@ pub struct ProgramInfo {
     pub call_graph: HashMap<FnInfo, HashSet<CallInfo>>,
     pub signatures: HashMap<&'static str, Vec<GSignature>>,
     pub types: Types,
+}
+
+impl ProgramInfo {
+    pub fn display(&self) {
+        self.program.display(&self.types);
+    }
 }

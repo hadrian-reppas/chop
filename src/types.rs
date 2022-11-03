@@ -2,6 +2,9 @@ use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
+// TODO: get rid of TypeId, we only need GTypes
+//       Type is for codegen, maybe should live there...
+
 // TODO: consider getting rid of the Types struct, TypeId and GTypeId
 // they don't  avoid allocations so no point...
 
@@ -301,6 +304,13 @@ impl Types {
         Ok(self.get_or_insert(gtype))
     }
 
+    pub fn nonptr_custom_name(&self, id: GTypeId) -> Option<&'static str> {
+        match self.gtypes.get_by_right(&id).unwrap() {
+            GType::Custom(0, name, _) => Some(name),
+            _ => None,
+        }
+    }
+
     pub fn substitute(&mut self, id: GTypeId, binds: &[GTypeId]) -> GTypeId {
         let gtype = match self.gtypes.get_by_right(&id).unwrap() {
             GType::Int(depth) => GType::Int(*depth),
@@ -458,12 +468,87 @@ impl Types {
         }
     }
 
+    pub fn generic_indices_struct(&self, id: GTypeId, name: &str) -> HashSet<usize> {
+        match self.gtypes.get_by_right(&id).unwrap() {
+            GType::Int(_) => HashSet::new(),
+            GType::Float(_) => HashSet::new(),
+            GType::Byte(_) => HashSet::new(),
+            GType::Bool(_) => HashSet::new(),
+            GType::Custom(_, cname, generics) => {
+                if *cname == name {
+                    HashSet::new()
+                } else {
+                    let mut indices = HashSet::new();
+                    for id in generics {
+                        indices.extend(self.generic_indices_struct(*id, name));
+                    }
+                    indices
+                }
+            }
+            GType::Generic(_, index) => HashSet::from([*index]),
+        }
+    }
+
     pub fn generic_indices_signature(&self, signature: &GSignature) -> HashSet<usize> {
         let mut indices = HashSet::new();
         for id in &signature.params {
             indices.extend(self.generic_indices(*id));
         }
         indices
+    }
+
+    pub fn display(&self, id: GTypeId) {
+        match self.gtypes.get_by_right(&id).unwrap() {
+            GType::Int(depth) => print!("{}Int{}", "Ptr(".repeat(*depth), ")".repeat(*depth)),
+            GType::Float(depth) => print!("{}Float{}", "Ptr(".repeat(*depth), ")".repeat(*depth)),
+            GType::Byte(depth) => print!("{}Byte{}", "Ptr(".repeat(*depth), ")".repeat(*depth)),
+            GType::Bool(depth) => print!("{}Bool{}", "Ptr(".repeat(*depth), ")".repeat(*depth)),
+            GType::Custom(depth, name, generics) => {
+                print!("{}Custom({:?}, ", "Ptr(".repeat(*depth), name);
+                if generics.is_empty() {
+                    print!("[]){}", ")".repeat(*depth));
+                } else {
+                    print!("[");
+                    for (i, id) in generics.iter().enumerate() {
+                        if i > 0 {
+                            print!(", ");
+                        }
+                        self.display(*id);
+                    }
+                    print!("]){}", ")".repeat(*depth));
+                }
+            }
+            GType::Generic(depth, index) => print!(
+                "{}Gen({}){}",
+                "Ptr(".repeat(*depth),
+                index,
+                ")".repeat(*depth),
+            ),
+        }
+    }
+
+    pub fn display_concrete(&self, id: TypeId) {
+        match self.types.get_by_right(&id).unwrap() {
+            Type::Int(depth) => print!("{}Int{}", "Ptr(".repeat(*depth), ")".repeat(*depth)),
+            Type::Float(depth) => print!("{}Float{}", "Ptr(".repeat(*depth), ")".repeat(*depth)),
+            Type::Byte(depth) => print!("{}Byte{}", "Ptr(".repeat(*depth), ")".repeat(*depth)),
+            Type::Bool(depth) => print!("{}Bool{}", "Ptr(".repeat(*depth), ")".repeat(*depth)),
+            Type::Custom(depth, name, generics) => {
+                print!("{}Custom({:?}, ", "Ptr(".repeat(*depth), name);
+                if generics.is_empty() {
+                    print!("[]){}", ")".repeat(*depth));
+                } else {
+                    print!("[");
+                    for (i, id) in generics.iter().enumerate() {
+                        if i > 0 {
+                            print!(", ");
+                        }
+                        self.display_concrete(*id);
+                    }
+                    print!("]){}", ")".repeat(*depth));
+                }
+            }
+        }
     }
 
     pub fn format(&self, id: GTypeId) -> String {

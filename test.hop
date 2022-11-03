@@ -1,15 +1,33 @@
+fn swap [T U] T U -> U T {
+    let t u {
+        u t
+    }
+}
+
+struct A {
+    b: C
+    ptr: *byte
+}
+
+struct list[T] {
+    val: T
+    next: *list[T]
+}
+
+struct C { val: *A }
+
+fn byte_test -> byte {
+    ("hello" + !"world") ~
+    (b'\U000000ff')
+}
+
 fn main {
-    1
-    1
-    let a b {a b ! ~ ! ~}
-    1.0
-    1.0 ~
-    1 ~ ~
-    1 ~
-    1 ~
-    1 ~
-    1 ~
-    1 ~
-    1 ~
-    1 ~
+    1 2
+    swap . 1 ==
+    if {
+        swap
+    } else {
+
+    }
+    ~ ~
 }

@@ -11,6 +11,8 @@ enum Tok {
     Float(f64, Span),
     Bool(bool, Span),
     Char(char, Span),
+    Byte(u8, Span),
+    String(String, Span),
     Var(Name),
     Group(Group, Span),
 
@@ -44,6 +46,8 @@ impl Tok {
             Tok::Float(_, span) => *span,
             Tok::Bool(_, span) => *span,
             Tok::Char(_, span) => *span,
+            Tok::Byte(_, span) => *span,
+            Tok::String(_, span) => *span,
             Tok::Var(name) => name.span,
             Tok::LParen(span) => *span,
             Tok::RParen(span) => *span,
@@ -87,6 +91,8 @@ fn convert(tokens: &mut Tokens) -> Result<Vec<Tok>, Error> {
             Token::Float(f, span) => toks.push(Tok::Float(f, span)),
             Token::Bool(b, span) => toks.push(Tok::Bool(b, span)),
             Token::Char(c, span) => toks.push(Tok::Char(c, span)),
+            Token::Byte(b, span) => toks.push(Tok::Byte(b, span)),
+            Token::String(s, span) => toks.push(Tok::String(s, span)),
             Token::Name(span) => {
                 toks.push(match span.text {
                     "+" => Tok::Add(span),
@@ -118,7 +124,7 @@ fn convert(tokens: &mut Tokens) -> Result<Vec<Tok>, Error> {
                 depth -= 1;
             }
             Token::LBrack(_) => {
-                let group = parse_group(tokens)?;
+                let group = parse_group(tokens, false)?;
                 if !tokens.peek().is_rbrack() {
                     return Err(Error::Parse(
                         tokens.peek().span(),
@@ -164,6 +170,8 @@ fn pratt_parse(tokens: &mut Peekable<impl Iterator<Item = Tok>>, bp: usize) -> R
         Tok::Float(f, span) => Expr::Float(f, span),
         Tok::Bool(b, span) => Expr::Bool(b, span),
         Tok::Char(c, span) => Expr::Char(c, span),
+        Tok::Byte(b, span) => Expr::Byte(b, span),
+        Tok::String(s, span) => Expr::String(s, span),
         Tok::Var(name) => Expr::Name(name),
         Tok::Group(group, span) => Expr::Group(group, span),
         Tok::Subtract(span) => Expr::Negate(Box::new(pratt_parse(tokens, NEGATE_BP)?), span),

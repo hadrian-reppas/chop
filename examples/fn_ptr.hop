@@ -1,0 +1,25 @@
+import std : prelude
+
+global epsilon: float { 0.001 }
+
+fn let slope_at_zero f: fn(float -> float) -> float {
+    epsilon f call
+    0.0 f call
+    - epsilon /
+}
+
+fn square float -> float {
+    . *
+}
+
+fn minus_one float -> float {
+    1.0 -
+}
+
+fn id[T] T -> T {}
+
+fn main {
+    "f(x) = x^2;   f'(0) = " square[] slope_at_zero putln
+    "f(x) = x - 1; f'(0) = " minus_one[] slope_at_zero putln
+    "f(x) = x;     f'(0) = " id[float] slope_at_zero putln
+}

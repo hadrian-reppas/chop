@@ -448,9 +448,6 @@ impl<'a> Context<'a> {
         for global in &self.program.globals {
             self.generate_global(global);
         }
-        for i in 0..self.program.literals.len() {
-            self.generate_literal(i);
-        }
         for struct_def in &self.program.structs {
             self.generate_struct(struct_def);
         }
@@ -475,12 +472,6 @@ impl<'a> Context<'a> {
             ": hglobal<{}> = zeroed!({});\n",
             self.types.rust_type_concrete(global.type_id),
             self.types.rust_type_concrete(global.type_id),
-        ));
-    }
-
-    fn generate_literal(&mut self, index: usize) {
-        self.code.push_str(&format!(
-            "static mut hl{index:x}: hglobal<*mut u8> = hglobal(0usize as *mut u8);\n",
         ));
     }
 
@@ -621,9 +612,13 @@ impl<'a> Context<'a> {
                 self.tabs();
                 self.code.push_str(&format!("hv{var:x} = {val:?};\n"));
             }
-            ProgramOp::String(var, index) => {
+            ProgramOp::Byte(var, val) => {
                 self.tabs();
-                self.code.push_str(&format!("hv{var:x} = hl{index:?}.0;\n"));
+                self.code.push_str(&format!("hv{var:x} = {val:?};\n"));
+            }
+            ProgramOp::String(var, val) => {
+                self.tabs();
+                self.code.push_str(&format!("hv{var:x} = {val:?}.0;\n"));
             }
             ProgramOp::Call(name, index, params, returns) => {
                 if *name == "~" {
@@ -913,14 +908,6 @@ impl<'a> Context<'a> {
 
     fn generate_main(&mut self) {
         self.code.push_str("fn main() {\n");
-        for (i, literal) in self.program.literals.iter().enumerate() {
-            self.code
-                .push_str(&format!("    let mut hb{i:x} = {literal:?}"));
-            self.code.pop();
-            self.code.push_str(&format!(
-                "\\x00\".to_string();\n    unsafe {{ hl{i:x} = hglobal(hb{i:x}.as_mut_ptr()); }}\n"
-            ));
-        }
         self.code
             .push_str("    unsafe { hallocs = Some(std::collections::HashMap::new()); }\n");
         for global in &self.program.globals {

@@ -1,11 +1,9 @@
-use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
-    mem,
-};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::mem;
 
 use crate::{
     lex::Span,
-    types::{GTypeId, TypeId},
+    types::{GTypeId, TypeId, Types},
 };
 
 pub struct ProgramContext {
@@ -15,7 +13,6 @@ pub struct ProgramContext {
     pub vars: HashMap<GTypeId, Vec<usize>>,
     pub free_vars: HashMap<GTypeId, Vec<usize>>,
     pub if_bodies: Vec<Vec<ProgramStmt>>,
-    pub string_map: HashMap<String, usize>,
     pub counter: usize,
     pub let_counts: HashMap<usize, usize>,
     pub to_free: HashSet<usize>,
@@ -31,7 +28,6 @@ impl ProgramContext {
             vars: HashMap::new(),
             free_vars: HashMap::new(),
             if_bodies: Vec::new(),
-            string_map: HashMap::new(),
             counter: 0,
             let_counts: HashMap::new(),
             to_free: HashSet::new(),
@@ -253,17 +249,6 @@ impl ProgramContext {
             }),
         })
     }
-
-    pub fn get_or_insert_string(&mut self, s: &str) -> usize {
-        if let Some(index) = self.string_map.get(s) {
-            *index
-        } else {
-            let index = self.string_map.len();
-            self.string_map.insert(s.to_string(), index);
-            self.program.literals.push(s.to_string());
-            index
-        }
-    }
 }
 
 enum State {
@@ -277,7 +262,6 @@ pub struct Program {
     pub structs: Vec<ProgramStruct>,
     pub functions: Vec<ProgramFn>,
     pub globals: Vec<ProgramGlobal>,
-    pub literals: Vec<String>,
 }
 
 impl Program {
@@ -286,7 +270,18 @@ impl Program {
             structs: Vec::new(),
             functions: Vec::new(),
             globals: Vec::new(),
-            literals: Vec::new(),
+        }
+    }
+
+    pub fn display(&self, types: &Types) {
+        for global in &self.globals {
+            global.display(types);
+        }
+        for struct_def in &self.structs {
+            struct_def.display(types);
+        }
+        for function in &self.functions {
+            function.display(types);
         }
     }
 }
@@ -296,6 +291,23 @@ pub struct ProgramStruct {
     pub generic_count: usize,
     pub name: &'static str,
     pub members: Vec<ProgramMember>,
+}
+
+impl ProgramStruct {
+    fn display(&self, types: &Types) {
+        print!("Struct({:?}, {}, ", self.name, self.generic_count);
+        if self.members.is_empty() {
+            println!("[])");
+        } else {
+            println!("[");
+            for member in &self.members {
+                print!("    ({:?}, ", member.name);
+                types.display(member.type_id);
+                println!("),");
+            }
+            println!("])");
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -316,11 +328,61 @@ pub struct ProgramFn {
     pub return_vars: Vec<usize>,
 }
 
+impl ProgramFn {
+    fn display(&self, types: &Types) {
+        println!(
+            "Function({:?}, {}, {},",
+            self.name, self.index, self.generic_count,
+        );
+        print!("    [");
+        for (i, type_id) in self.params.iter().enumerate() {
+            if i > 0 {
+                print!(", ");
+            }
+            types.display(*type_id);
+        }
+        println!("],");
+        print!("    [");
+        for (i, type_id) in self.returns.iter().enumerate() {
+            if i > 0 {
+                print!(", ");
+            }
+            types.display(*type_id);
+        }
+        println!("],");
+        display_vars(&self.vars, types);
+        if self.body.is_empty() {
+            println!("    [],");
+        } else {
+            println!("    [");
+            for stmt in &self.body {
+                stmt.display(types, 2);
+            }
+            println!("    ],");
+        }
+        println!("    {:?},\n)", self.return_vars);
+    }
+}
+
 #[derive(Debug)]
 pub struct ProgramGlobal {
     pub name: &'static str,
     pub type_id: TypeId,
     pub init: Option<ProgramGlobalInit>,
+}
+
+impl ProgramGlobal {
+    fn display(&self, types: &Types) {
+        print!("Global({:?}, ", self.name);
+        types.display_concrete(self.type_id);
+        if let Some(init) = &self.init {
+            print!(", ");
+            init.display(types);
+            println!(")");
+        } else {
+            println!(", None)");
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -330,12 +392,41 @@ pub struct ProgramGlobalInit {
     pub vars: HashMap<GTypeId, Vec<usize>>,
 }
 
+impl ProgramGlobalInit {
+    fn display(&self, types: &Types) {
+        println!("Init(");
+        display_vars(&self.vars, types);
+        println!("    [");
+        for op in &self.ops {
+            op.display(types, 2);
+            println!(",");
+        }
+        println!("    ],");
+        print!("    {},\n)", self.var);
+    }
+}
+
+fn display_vars(vars: &HashMap<GTypeId, Vec<usize>>, types: &Types) {
+    if vars.is_empty() {
+        println!("    Vars([]),");
+    } else {
+        println!("    Vars([");
+        for (id, vars) in vars {
+            print!("        (");
+            types.display(*id);
+            println!(", {:?}),", vars);
+        }
+        println!("    ]),");
+    }
+}
+
 #[derive(Debug)]
 pub enum ProgramOp {
     Int(usize, i64),
     Float(usize, f64),
     Bool(usize, bool),
-    String(usize, usize),
+    Byte(usize, u8),
+    String(usize, String),
     Call(&'static str, usize, Vec<usize>, Vec<usize>),
     Ref(usize, usize, GTypeId),
     Assert(usize, Span),
@@ -346,6 +437,59 @@ pub enum ProgramOp {
     AllocArr(usize, usize, GTypeId),
     ZallocArr(usize, usize, GTypeId),
     CastTo(usize, usize, GTypeId),
+}
+
+impl ProgramOp {
+    fn display(&self, types: &Types, depth: usize) {
+        print!("{}", "    ".repeat(depth));
+        match self {
+            ProgramOp::Int(var, val) => print!("IntLit({var}, {val})"),
+            ProgramOp::Float(var, val) => print!("FloatLit({var}, {val:?})"),
+            ProgramOp::Bool(var, val) => print!("BoolLit({var}, {val})"),
+            ProgramOp::Byte(var, val) => print!("ByteLit({var}, {val})"),
+            ProgramOp::String(var, val) => print!("StringLit({var}, {val:?})"),
+            ProgramOp::Call(name, index, params, returns) => {
+                print!("Call({name:?}, {index}, {params:?}, {returns:?})")
+            }
+            ProgramOp::Ref(var, old_var, type_id) => {
+                print!("Ref({var}, {old_var}, ");
+                types.display(*type_id);
+                print!(")");
+            }
+            ProgramOp::Assert(var, _) => println!("Assert({var})"),
+            ProgramOp::Abort(_) => println!("Abort"),
+            ProgramOp::SizeOf(var, type_id) => {
+                print!("SizeOf({var}, ");
+                types.display(*type_id);
+                print!(")");
+            }
+            ProgramOp::Alloc(var, type_id) => {
+                print!("Alloc({var}, ");
+                types.display(*type_id);
+                print!(")");
+            }
+            ProgramOp::Zalloc(var, type_id) => {
+                print!("Zalloc({var}, ");
+                types.display(*type_id);
+                print!(")");
+            }
+            ProgramOp::AllocArr(var, len_var, type_id) => {
+                print!("AllocArr({var}, {len_var}, ");
+                types.display(*type_id);
+                print!(")");
+            }
+            ProgramOp::ZallocArr(var, len_var, type_id) => {
+                print!("ZallocArr({var}, {len_var}, ");
+                types.display(*type_id);
+                print!(")");
+            }
+            ProgramOp::CastTo(var, old_var, type_id) => {
+                print!("CastTo({var}, {old_var}, ");
+                types.display(*type_id);
+                print!(")");
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -369,4 +513,78 @@ pub enum ProgramStmt {
         body: Vec<ProgramStmt>,
         resolve: Vec<(usize, usize)>,
     },
+}
+
+impl ProgramStmt {
+    fn display(&self, types: &Types, depth: usize) {
+        print!("{}", "    ".repeat(depth));
+        match self {
+            ProgramStmt::Op(op) => {
+                op.display(types, 0);
+                println!(",");
+            }
+            ProgramStmt::If {
+                test_var,
+                body,
+                else_body,
+                resolve,
+            } => {
+                print!("If({test_var}, [");
+                if body.is_empty() {
+                    println!("],");
+                } else {
+                    println!();
+                    for stmt in body {
+                        stmt.display(types, depth + 2);
+                    }
+                    println!("{}],", "    ".repeat(depth + 1));
+                }
+                print!("{}[", "    ".repeat(depth + 1));
+                if else_body.is_empty() {
+                    println!("],");
+                } else {
+                    println!();
+                    for stmt in else_body {
+                        stmt.display(types, depth + 2);
+                    }
+                    println!("{}],", "    ".repeat(depth + 1));
+                }
+                println!("{}{resolve:?},", "    ".repeat(depth + 1));
+                println!("{}),", "    ".repeat(depth));
+            }
+            ProgramStmt::For {
+                iter_var,
+                low_var,
+                high_var,
+                body,
+                resolve,
+            } => {
+                println!("For({iter_var}, {low_var}, {high_var}, [");
+                for stmt in body {
+                    stmt.display(types, depth + 2);
+                }
+                println!("{}],", "    ".repeat(depth + 1));
+                println!("{}{resolve:?},", "    ".repeat(depth + 1));
+                println!("{}),", "    ".repeat(depth));
+            }
+            ProgramStmt::While {
+                test_var,
+                body,
+                resolve,
+            } => {
+                print!("While({test_var}, [");
+                if body.is_empty() {
+                    println!("],");
+                } else {
+                    println!();
+                    for stmt in body {
+                        stmt.display(types, depth + 2);
+                    }
+                    println!("{}],", "    ".repeat(depth + 1));
+                }
+                println!("{}{resolve:?},", "    ".repeat(depth + 1));
+                println!("{}),", "    ".repeat(depth));
+            }
+        }
+    }
 }

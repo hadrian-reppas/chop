@@ -52,11 +52,11 @@ impl Span {
     }
 }
 
-impl Into<Name> for Span {
-    fn into(self) -> Name {
+impl From<Span> for Name {
+    fn from(span: Span) -> Name {
         Name {
-            name: self.text,
-            span: self,
+            name: span.text,
+            span,
         }
     }
 }
@@ -68,6 +68,7 @@ pub enum Token {
     Bool(bool, Span),
     Char(char, Span),
     String(String, Span),
+    Byte(u8, Span),
 
     Name(Span),
 
@@ -108,6 +109,7 @@ impl Token {
             Token::Bool(_, span) => *span,
             Token::Char(_, span) => *span,
             Token::String(_, span) => *span,
+            Token::Byte(_, span) => *span,
             Token::Name(span) => *span,
             Token::Arrow(span) => *span,
             Token::LParen(span) => *span,
@@ -202,6 +204,7 @@ impl Token {
                 | Token::Bool(_, _)
                 | Token::Char(_, _)
                 | Token::String(_, _)
+                | Token::Byte(_, _)
         )
     }
 
@@ -370,6 +373,8 @@ impl TokenIter {
             return self.lex_string();
         } else if self.suffix.starts_with('\'') {
             return self.lex_char();
+        } else if self.suffix.starts_with("b'") {
+            return self.lex_byte();
         } else if self.suffix.starts_with("//") {
             let mut len = 0;
             for c in self.suffix.chars() {
@@ -470,6 +475,31 @@ impl TokenIter {
             Err(Error::Lex(
                 self.make_span(2),
                 "empty char literal".to_string(),
+            ))
+        }
+    }
+
+    fn lex_byte(&mut self) -> Result<Token, Error> {
+        if let Some((c, len)) = self.lex_char_or_escape(&self.suffix[2..], 2, '\'')? {
+            if self.suffix[2 + len..].starts_with('\'') {
+                if let Ok(b) = c.try_into() {
+                    Ok(Token::Byte(b, self.make_span(len + 3)))
+                } else {
+                    Err(Error::Lex(
+                        self.make_span(len + 3),
+                        "byte literal is too large".to_string(),
+                    ))
+                }
+            } else {
+                Err(Error::Lex(
+                    self.make_span(2),
+                    "unterminated byte literal".to_string(),
+                ))
+            }
+        } else {
+            Err(Error::Lex(
+                self.make_span(3),
+                "empty byte literal".to_string(),
             ))
         }
     }

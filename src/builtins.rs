@@ -48,7 +48,13 @@ macro_rules! eq {
         $op,
         vec![
             sig!(BYTE BYTE => BOOL),
+            sig!(BYTE INT => BOOL),
+            sig!(BYTE FLOAT => BOOL),
+            sig!(INT BYTE => BOOL),
             sig!(INT INT => BOOL),
+            sig!(INT FLOAT => BOOL),
+            sig!(FLOAT BYTE => BOOL),
+            sig!(FLOAT INT => BOOL),
             sig!(FLOAT FLOAT => BOOL),
             sig!(BOOL BOOL => BOOL),
             sig!(genp!(0) genp!(1) => BOOL),
@@ -61,7 +67,13 @@ macro_rules! cmp {
         $op,
         vec![
             sig!(BYTE BYTE => BOOL),
+            sig!(BYTE INT => BOOL),
+            sig!(BYTE FLOAT => BOOL),
+            sig!(INT BYTE => BOOL),
             sig!(INT INT => BOOL),
+            sig!(INT FLOAT => BOOL),
+            sig!(FLOAT BYTE => BOOL),
+            sig!(FLOAT INT => BOOL),
             sig!(FLOAT FLOAT => BOOL),
             sig!(genp!(0) genp!(1) => BOOL),
         ]
