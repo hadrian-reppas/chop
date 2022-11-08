@@ -38,13 +38,6 @@ impl Name {
     pub fn is_ptr(&self) -> bool {
         self.name.chars().all(|c| c == '*')
     }
-
-    pub fn new(name: &'static str) -> Name {
-        Name {
-            name,
-            span: Span::empty(),
-        }
-    }
 }
 
 pub type Unit = Vec<Item>;

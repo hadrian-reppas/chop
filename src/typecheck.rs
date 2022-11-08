@@ -13,7 +13,11 @@ use crate::program::*;
 use crate::types::*;
 use crate::{color, reset};
 
-// TODO: dissalow globals in global inits? or maybe to a topological sort?
+// TODO: topological sort on global uses in global inits (check
+//       call graph to find dependencies)
+
+// TODO: is the resolve step required? (maybe the way we allocate
+//       stack variables means that step is redundant)
 
 pub fn check(unit: &[Item]) -> Result<ProgramInfo, Error> {
     let mut context = Context::new(&BUILTINS);
@@ -22,6 +26,7 @@ pub fn check(unit: &[Item]) -> Result<ProgramInfo, Error> {
         program: context.program_context.program,
         call_graph: context.call_graph.graph,
         signatures: context.signatures,
+        struct_fields: context.struct_fields,
         types: context.types,
     })
 }
@@ -596,9 +601,9 @@ impl Context {
         }
 
         let mut resolve = Vec::new();
-        for ((var, _), (else_var, _)) in stack.iter().copied().zip(else_stack) {
+        for ((var, id), (else_var, _)) in stack.iter().copied().zip(else_stack) {
             if var != else_var {
-                resolve.push((var, else_var));
+                resolve.push((var, else_var, id));
             }
         }
         self.program_context.end_if_else(test_var, resolve);
@@ -714,13 +719,14 @@ impl Context {
         }
 
         let mut resolve = Vec::new();
-        let t_var = stack.pop().unwrap().0;
+        let (t_var, bool_id) = stack.pop().unwrap();
         if t_var != test_var {
-            resolve.push((test_var, t_var));
+            resolve.push((test_var, t_var, bool_id));
         }
-        for ((var_before, _), (var, _)) in stack_before.iter().copied().zip(stack.iter().copied()) {
+        for ((var_before, id), (var, _)) in stack_before.iter().copied().zip(stack.iter().copied())
+        {
             if var_before != var {
-                resolve.push((var_before, var));
+                resolve.push((var_before, var, id));
             }
         }
         self.program_context.end_while(test_var, resolve);
@@ -853,6 +859,7 @@ impl Context {
         let mut stack_before = stack.clone();
         let iter_var = self.program_context.alloc(int_id);
         stack.push((iter_var, int_id));
+        self.program_context.for_vars.insert(iter_var);
 
         self.program_context.begin_for();
         for stmt in body {
@@ -892,13 +899,15 @@ impl Context {
         }
 
         let mut resolve = Vec::new();
-        for ((var_before, _), (var, _)) in stack_before.iter().copied().zip(stack.iter().copied()) {
+        for ((var_before, id), (var, _)) in stack_before.iter().copied().zip(stack.iter().copied())
+        {
             if var_before != var {
-                resolve.push((var_before, var));
+                resolve.push((var_before, var, id));
             }
         }
         self.program_context
             .end_for(iter_var, low_var, high_var, resolve);
+        self.program_context.for_vars.remove(&iter_var);
         self.program_context.free(iter_var, int_id);
         self.program_context.free(low_var, int_id);
         self.program_context.free(high_var, int_id);
@@ -1134,7 +1143,7 @@ impl Context {
             return Ok(());
         }
 
-        let (signature, bindings, index) = self.get_sbi(stack, name)?;
+        let (signature, binds, index) = self.get_sbi(stack, name)?;
         let mut param_vars = Vec::new();
         for _ in 0..signature.params.len() {
             let (var, ty) = stack.pop().unwrap();
@@ -1144,7 +1153,7 @@ impl Context {
         param_vars.reverse();
         let mut return_vars = Vec::new();
         for ret in signature.returns {
-            let ty = self.types.substitute(ret, &bindings);
+            let ty = self.types.substitute(ret, &binds);
             let var = self.program_context.alloc(ty);
             stack.push((var, ty));
             return_vars.push(var);
@@ -1157,7 +1166,7 @@ impl Context {
             ));
         } else if name.name == "abort" {
             self.program_context.push_op(ProgramOp::Abort(name.span));
-        } else if name.name == "assert" {
+        } else if name.name == "assert" && *signature.params.last().unwrap() == self.types.bool() {
             self.program_context
                 .push_op(ProgramOp::Assert(param_vars[0], name.span));
         } else {
@@ -1166,6 +1175,7 @@ impl Context {
                 index,
                 param_vars,
                 return_vars,
+                binds,
             ));
         }
         Ok(())
@@ -1432,6 +1442,10 @@ impl Context {
                 for ty in &params {
                     seen.extend(self.types.generic_indices(*ty));
                 }
+                // TODO: Be less strict on generic parameters in arguments.
+                //       If a function does not use all of its generic parameters
+                //       in its arguments, it must be called indirectly with the
+                //       "f[] call" syntax.
                 for (i, name) in generic_names.iter().enumerate() {
                     if !seen.contains(&i) {
                         return Err(Error::Parse(
@@ -1753,10 +1767,12 @@ pub struct ProgramInfo {
     pub program: Program,
     pub call_graph: HashMap<FnInfo, HashSet<CallInfo>>,
     pub signatures: HashMap<&'static str, Vec<GSignature>>,
+    pub struct_fields: HashMap<&'static str, Vec<(&'static str, GTypeId)>>,
     pub types: Types,
 }
 
 impl ProgramInfo {
+    #[allow(dead_code)]
     pub fn display(&self) {
         self.program.display(&self.types);
     }

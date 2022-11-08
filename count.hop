@@ -1,0 +1,15 @@
+fn -- int -> int  {
+    1 -
+}
+
+fn main {
+    10
+    while . 0 >= {
+        . put
+        if . 0 > {
+            " -> " puts
+        }
+        --
+    }
+    ~ ln
+}

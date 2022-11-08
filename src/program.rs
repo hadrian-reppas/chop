@@ -6,6 +6,8 @@ use crate::{
     types::{GTypeId, TypeId, Types},
 };
 
+// TODO: ProgramOp::Call should contain the binds
+
 pub struct ProgramContext {
     pub program: Program,
     pub wip_init: Vec<ProgramOp>,
@@ -15,6 +17,7 @@ pub struct ProgramContext {
     pub if_bodies: Vec<Vec<ProgramStmt>>,
     pub counter: usize,
     pub let_counts: HashMap<usize, usize>,
+    pub for_vars: HashSet<usize>,
     pub to_free: HashSet<usize>,
     state: State,
 }
@@ -30,6 +33,7 @@ impl ProgramContext {
             if_bodies: Vec::new(),
             counter: 0,
             let_counts: HashMap::new(),
+            for_vars: HashSet::new(),
             to_free: HashSet::new(),
             state: State::Paused,
         }
@@ -71,7 +75,7 @@ impl ProgramContext {
     pub fn free(&mut self, var: usize, ty: GTypeId) {
         if self.let_counts.contains_key(&var) {
             self.to_free.insert(var);
-        } else {
+        } else if !self.for_vars.contains(&var) {
             self.free_vars.get_mut(&ty).unwrap().push(var);
         }
     }
@@ -132,7 +136,7 @@ impl ProgramContext {
         }
     }
 
-    pub fn end_if_else(&mut self, test_var: usize, resolve: Vec<(usize, usize)>) {
+    pub fn end_if_else(&mut self, test_var: usize, resolve: Vec<(usize, usize, GTypeId)>) {
         let else_body = self.wip_bodies.pop().unwrap();
         let body = self.if_bodies.pop().unwrap();
         self.wip_bodies.last_mut().unwrap().push(ProgramStmt::If {
@@ -152,7 +156,7 @@ impl ProgramContext {
         iter_var: usize,
         low_var: usize,
         high_var: usize,
-        resolve: Vec<(usize, usize)>,
+        resolve: Vec<(usize, usize, GTypeId)>,
     ) {
         let body = self.wip_bodies.pop().unwrap();
         self.wip_bodies.last_mut().unwrap().push(ProgramStmt::For {
@@ -168,7 +172,7 @@ impl ProgramContext {
         self.begin_body();
     }
 
-    pub fn end_while(&mut self, test_var: usize, resolve: Vec<(usize, usize)>) {
+    pub fn end_while(&mut self, test_var: usize, resolve: Vec<(usize, usize, GTypeId)>) {
         let body = self.wip_bodies.pop().unwrap();
         self.wip_bodies
             .last_mut()
@@ -427,7 +431,7 @@ pub enum ProgramOp {
     Bool(usize, bool),
     Byte(usize, u8),
     String(usize, String),
-    Call(&'static str, usize, Vec<usize>, Vec<usize>),
+    Call(&'static str, usize, Vec<usize>, Vec<usize>, Vec<GTypeId>),
     Ref(usize, usize, GTypeId),
     Assert(usize, Span),
     Abort(Span),
@@ -448,7 +452,7 @@ impl ProgramOp {
             ProgramOp::Bool(var, val) => print!("BoolLit({var}, {val})"),
             ProgramOp::Byte(var, val) => print!("ByteLit({var}, {val})"),
             ProgramOp::String(var, val) => print!("StringLit({var}, {val:?})"),
-            ProgramOp::Call(name, index, params, returns) => {
+            ProgramOp::Call(name, index, params, returns, _) => {
                 print!("Call({name:?}, {index}, {params:?}, {returns:?})")
             }
             ProgramOp::Ref(var, old_var, type_id) => {
@@ -456,8 +460,8 @@ impl ProgramOp {
                 types.display(*type_id);
                 print!(")");
             }
-            ProgramOp::Assert(var, _) => println!("Assert({var})"),
-            ProgramOp::Abort(_) => println!("Abort"),
+            ProgramOp::Assert(var, _) => print!("Assert({var})"),
+            ProgramOp::Abort(_) => print!("Abort"),
             ProgramOp::SizeOf(var, type_id) => {
                 print!("SizeOf({var}, ");
                 types.display(*type_id);
@@ -499,19 +503,19 @@ pub enum ProgramStmt {
         test_var: usize,
         body: Vec<ProgramStmt>,
         else_body: Vec<ProgramStmt>,
-        resolve: Vec<(usize, usize)>,
+        resolve: Vec<(usize, usize, GTypeId)>,
     },
     For {
         iter_var: usize,
         low_var: usize,
         high_var: usize,
         body: Vec<ProgramStmt>,
-        resolve: Vec<(usize, usize)>,
+        resolve: Vec<(usize, usize, GTypeId)>,
     },
     While {
         test_var: usize,
         body: Vec<ProgramStmt>,
-        resolve: Vec<(usize, usize)>,
+        resolve: Vec<(usize, usize, GTypeId)>,
     },
 }
 

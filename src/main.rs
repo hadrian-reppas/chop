@@ -1,13 +1,12 @@
 mod ast;
 mod builtins;
-mod c_codegen;
+mod codegen;
 mod error;
 mod expr;
 mod imports;
 mod lex;
 mod parse;
 mod program;
-mod rust_codegen;
 mod typecheck;
 mod types;
 
@@ -37,9 +36,8 @@ fn transpile(file_name: &str) -> Result<(), error::Error> {
     let main_unit = parse::parse_file(file_name)?;
     let unit = imports::resolve_imports(main_unit, PathBuf::from(file_name))?;
     let info = typecheck::check(&unit)?;
-    info.display();
-    let code = rust_codegen::generate(&info);
-    let mut file = File::create("out.rs").unwrap();
+    let code = codegen::generate(info);
+    let mut file = File::create("out.c").unwrap();
     write!(file, "{}", code).unwrap();
     Ok(())
 }

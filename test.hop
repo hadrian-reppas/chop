@@ -4,6 +4,8 @@ fn swap [T U] T U -> U T {
     }
 }
 
+global alloc_list: list[*byte]
+
 struct A {
     b: C
     ptr: *byte
@@ -14,11 +16,23 @@ struct list[T] {
     next: *list[T]
 }
 
-struct C { val: *A }
+struct C { val: **A }
+
+fn foo list[A] C -> A {
+    ~ .val
+}
 
 fn byte_test -> byte {
-    ("hello" + !"world") ~
-    (b'\U000000ff')
+    (1 + - 2) ~
+    1 2 neg + ~
+    (b'\0')
+}
+
+fn swap_ptrs[T U] *T *U -> *U *T {
+    let t_ptr u_ptr {
+        t_ptr cast_to[*U]
+        u_ptr cast_to[*T]
+    }
 }
 
 fn main {
@@ -29,5 +43,35 @@ fn main {
     } else {
 
     }
-    ~ ~
+    2 == assert
+    1 == assert
+
+    1 2
+    swap . 2 ==
+    if {
+        swap
+    } else {
+
+    }
+    1 == assert
+    2 == assert
+
+    0 to_byte '\0' == assert
+
+    b'1' true swap swap ~ ~
+    "hello" 1.0 swap ~ ~
+    "" generic_swap
+
+    1 @ read ~ ~
+    true @ swap write
+
+    0 cast_to[**A] C
+    0 cast_to[*byte] A
+    0 cast_to[*list[A]] list
+    0 cast_to[**A] C
+    foo ~
+}
+
+fn generic_swap[T] T {
+    . swap ~ ~ 
 }

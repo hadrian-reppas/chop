@@ -57,7 +57,7 @@ macro_rules! eq {
             sig!(FLOAT INT => BOOL),
             sig!(FLOAT FLOAT => BOOL),
             sig!(BOOL BOOL => BOOL),
-            sig!(genp!(0) genp!(1) => BOOL),
+            sig!(genp!(0) genp!(0) => BOOL),
         ]
     )};
 }
@@ -75,7 +75,7 @@ macro_rules! cmp {
             sig!(FLOAT BYTE => BOOL),
             sig!(FLOAT INT => BOOL),
             sig!(FLOAT FLOAT => BOOL),
-            sig!(genp!(0) genp!(1) => BOOL),
+            sig!(genp!(0) genp!(0) => BOOL),
         ]
     )};
 }
@@ -222,8 +222,10 @@ lazy_static! {
         ("strcpy", vec![sig!(ptr!(BYTE) ptr!(BYTE) =>)]),
         ("strlen", vec![sig!(ptr!(BYTE) => INT)]),
         ("read_file", vec![sig!(ptr!(BYTE) => ptr!(BYTE))]),
-        ("write_to_file", vec![sig!(ptr!(BYTE) ptr!(BYTE) =>)]),
+        ("write_to_file", vec![sig!(ptr!(BYTE) ptr!(BYTE) => BOOL)]),
+        ("append_to_file", vec![sig!(ptr!(BYTE) ptr!(BYTE) => BOOL)]),
         ("DEBUG_STACK", vec![sig!(=>)]),
         // TODO: stdin
+        // TODO: time
     ]);
 }

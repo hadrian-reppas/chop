@@ -1,0 +1,25 @@
+import std : prelude
+
+global buf: buffer[byte]
+
+struct buffer[T] {
+    ptr: *T
+    len: int
+}
+
+fn make_buffer[T] *T int -> buffer[T] {
+    let ptr len {
+        len alloc_arr[T] . ptr len copy len buffer
+    }
+}
+
+fn main int **byte {
+    swap 2 == assert
+
+    1 + read
+    . strlen 1 +
+    make_buffer
+    write_buf
+
+    buf .ptr putlns
+}

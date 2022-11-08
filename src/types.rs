@@ -1,5 +1,4 @@
-use std::collections::hash_map::Entry;
-use std::collections::{HashMap, HashSet};
+use std::collections::{hash_map, HashMap, HashSet};
 use std::fmt;
 
 // TODO: get rid of TypeId, we only need GTypes
@@ -11,9 +10,9 @@ use std::fmt;
 use bimap::BiMap;
 
 use crate::ast::{Item, Name, PType};
+use crate::codegen;
 use crate::error::{Error, Note};
 use crate::lex::Span;
-use crate::rust_codegen;
 
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -46,6 +45,13 @@ pub enum Kind {
     Global(Span),
     GlobalWrite(Span),
     GlobalPtr(Span),
+}
+
+// TODO: REMOVE
+impl fmt::Debug for Kind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Kind()")
+    }
 }
 
 impl Kind {
@@ -156,12 +162,34 @@ impl Type {
         }
         self
     }
+
+    fn depth(&self) -> usize {
+        match self {
+            Type::Int(depth) => *depth,
+            Type::Float(depth) => *depth,
+            Type::Byte(depth) => *depth,
+            Type::Bool(depth) => *depth,
+            Type::Custom(depth, _, _) => *depth,
+        }
+    }
+
+    fn deref_n(mut self, n: usize) -> Option<Type> {
+        match &mut self {
+            Type::Int(depth) => *depth = depth.checked_sub(n)?,
+            Type::Float(depth) => *depth = depth.checked_sub(n)?,
+            Type::Byte(depth) => *depth = depth.checked_sub(n)?,
+            Type::Bool(depth) => *depth = depth.checked_sub(n)?,
+            Type::Custom(depth, _, _) => *depth = depth.checked_sub(n)?,
+        }
+        Some(self)
+    }
 }
 
 pub struct Types {
     types: BiMap<Type, TypeId>,
     gtypes: BiMap<GType, GTypeId>,
     generic_counts: HashMap<&'static str, usize>,
+    pub custom_map: HashMap<&'static str, HashMap<Vec<TypeId>, usize>>,
     counter: usize,
 }
 
@@ -171,6 +199,7 @@ impl Types {
             types: BiMap::new(),
             gtypes: BiMap::new(),
             generic_counts: HashMap::from([("int", 0), ("float", 0), ("byte", 0), ("bool", 0)]),
+            custom_map: HashMap::new(),
             counter: 0,
         }
     }
@@ -220,10 +249,32 @@ impl Types {
         if let Some(id) = self.types.get_by_left(&ty) {
             *id
         } else {
+            if let Type::Custom(_, name, generics) = &ty {
+                self.counter += 1;
+                match self.custom_map.entry(*name) {
+                    hash_map::Entry::Occupied(mut o) => {
+                        o.get_mut().insert(generics.clone(), self.counter - 1);
+                    }
+                    hash_map::Entry::Vacant(v) => {
+                        v.insert(HashMap::from([(generics.clone(), self.counter - 1)]));
+                    }
+                }
+            }
             self.types.insert(ty, TypeId(self.counter));
             self.counter += 1;
             TypeId(self.counter - 1)
         }
+    }
+
+    pub fn deref_n_concrete(&mut self, id: TypeId, n: usize) -> TypeId {
+        let ty = self
+            .types
+            .get_by_right(&id)
+            .unwrap()
+            .clone()
+            .deref_n(n)
+            .unwrap();
+        self.get_or_insert_concrete(ty)
     }
 
     pub fn convert(&mut self, ty: &PType, generics: &[Name]) -> Result<GTypeId, Error> {
@@ -387,12 +438,12 @@ impl Types {
                     for (a_id, b_id) in a_generics.into_iter().zip(b_generics) {
                         for (index, id) in self.bind(a_id, b_id)? {
                             match map.entry(index) {
-                                Entry::Occupied(o) => {
+                                hash_map::Entry::Occupied(o) => {
                                     if *o.get() != id {
                                         return Err(());
                                     }
                                 }
-                                Entry::Vacant(v) => {
+                                hash_map::Entry::Vacant(v) => {
                                     v.insert(id);
                                 }
                             }
@@ -418,16 +469,32 @@ impl Types {
         self.get_or_insert(GType::Int(0))
     }
 
+    pub fn concrete_int(&mut self) -> TypeId {
+        self.get_or_insert_concrete(Type::Int(0))
+    }
+
     pub fn float(&mut self) -> GTypeId {
         self.get_or_insert(GType::Float(0))
+    }
+
+    pub fn concrete_float(&mut self) -> TypeId {
+        self.get_or_insert_concrete(Type::Float(0))
     }
 
     pub fn byte(&mut self) -> GTypeId {
         self.get_or_insert(GType::Byte(0))
     }
 
+    pub fn concrete_byte(&mut self) -> TypeId {
+        self.get_or_insert_concrete(Type::Byte(0))
+    }
+
     pub fn bool(&mut self) -> GTypeId {
         self.get_or_insert(GType::Bool(0))
+    }
+
+    pub fn concrete_bool(&mut self) -> TypeId {
+        self.get_or_insert_concrete(Type::Bool(0))
     }
 
     pub fn byte_ptr(&mut self) -> GTypeId {
@@ -449,6 +516,10 @@ impl Types {
 
     pub fn depth(&self, id: GTypeId) -> usize {
         self.gtypes.get_by_right(&id).unwrap().depth()
+    }
+
+    pub fn concrete_depth(&self, id: TypeId) -> usize {
+        self.types.get_by_right(&id).unwrap().depth()
     }
 
     pub fn generic_indices(&self, id: GTypeId) -> HashSet<usize> {
@@ -551,6 +622,23 @@ impl Types {
         }
     }
 
+    pub fn generate(&self, id: TypeId) -> String {
+        match self.types.get_by_right(&id).unwrap() {
+            Type::Int(depth) => format!("int64_t{}", "*".repeat(*depth)),
+            Type::Float(depth) => format!("double{}", "*".repeat(*depth)),
+            Type::Byte(depth) => format!("uint8_t{}", "*".repeat(*depth)),
+            Type::Bool(depth) => format!("uint8_t{}", "*".repeat(*depth)),
+            Type::Custom(depth, name, generics) => {
+                format!(
+                    "struct hs_{}_{}{}",
+                    codegen::escape_name(name),
+                    self.custom_map[name][generics],
+                    "*".repeat(*depth),
+                )
+            }
+        }
+    }
+
     pub fn format(&self, id: GTypeId) -> String {
         match self.gtypes.get_by_right(&id).unwrap() {
             GType::Int(depth) => format!("{}int", "*".repeat(*depth)),
@@ -565,7 +653,7 @@ impl Types {
                         "{}{}{}",
                         "*".repeat(*depth),
                         name,
-                        self.format_types(generics)
+                        self.format_types(generics),
                     )
                 }
             }
@@ -573,13 +661,46 @@ impl Types {
         }
     }
 
-    pub fn format_types(&self, stack: &[GTypeId]) -> String {
+    pub fn format_concrete(&self, id: TypeId) -> String {
+        match self.types.get_by_right(&id).unwrap() {
+            Type::Int(depth) => format!("{}int", "*".repeat(*depth)),
+            Type::Float(depth) => format!("{}float", "*".repeat(*depth)),
+            Type::Byte(depth) => format!("{}byte", "*".repeat(*depth)),
+            Type::Bool(depth) => format!("{}bool", "*".repeat(*depth)),
+            Type::Custom(depth, name, generics) => {
+                if generics.is_empty() {
+                    format!("{}{}", "*".repeat(*depth), name)
+                } else {
+                    format!(
+                        "{}{}{}",
+                        "*".repeat(*depth),
+                        name,
+                        self.format_concrete_types(generics),
+                    )
+                }
+            }
+        }
+    }
+
+    pub fn format_types(&self, types: &[GTypeId]) -> String {
         let mut out = "[".to_string();
-        for (i, id) in stack.iter().copied().enumerate() {
+        for (i, id) in types.iter().copied().enumerate() {
             if i > 0 {
                 out.push_str(", ");
             }
             out.push_str(&self.format(id));
+        }
+        out.push(']');
+        out
+    }
+
+    pub fn format_concrete_types(&self, types: &[TypeId]) -> String {
+        let mut out = "[".to_string();
+        for (i, id) in types.iter().copied().enumerate() {
+            if i > 0 {
+                out.push_str(", ");
+            }
+            out.push_str(&self.format_concrete(id));
         }
         out.push(']');
         out
@@ -603,54 +724,5 @@ impl Types {
         out.push_str(" -> ");
         out.push_str(&self.format_types(&signature.returns));
         out
-    }
-
-    pub fn rust_type(&self, id: GTypeId) -> String {
-        match self.gtypes.get_by_right(&id).unwrap() {
-            GType::Int(depth) => format!("{}i64", "*mut ".repeat(*depth)),
-            GType::Float(depth) => format!("{}f64", "*mut ".repeat(*depth)),
-            GType::Byte(depth) => format!("{}u8", "*mut ".repeat(*depth)),
-            GType::Bool(depth) => format!("{}bool", "*mut ".repeat(*depth)),
-            GType::Custom(depth, name, generics) => {
-                let mut out = format!("{}hs_", "*mut ".repeat(*depth));
-                rust_codegen::escape_name(name, &mut out);
-                if !generics.is_empty() {
-                    out.push('<');
-                    for (i, id) in generics.iter().enumerate() {
-                        if i > 0 {
-                            out.push_str(", ");
-                        }
-                        out.push_str(&self.rust_type(*id));
-                    }
-                    out.push('>');
-                }
-                out
-            }
-            GType::Generic(depth, index) => format!("{}T{index}", "*mut ".repeat(*depth)),
-        }
-    }
-
-    pub fn rust_type_concrete(&self, id: TypeId) -> String {
-        match self.types.get_by_right(&id).unwrap() {
-            Type::Int(depth) => format!("{}i64", "*mut ".repeat(*depth)),
-            Type::Float(depth) => format!("{}f64", "*mut ".repeat(*depth)),
-            Type::Byte(depth) => format!("{}u8", "*mut ".repeat(*depth)),
-            Type::Bool(depth) => format!("{}bool", "*mut ".repeat(*depth)),
-            Type::Custom(depth, name, generics) => {
-                let mut out = format!("{}hs_", "*mut ".repeat(*depth));
-                rust_codegen::escape_name(name, &mut out);
-                if !generics.is_empty() {
-                    out.push('<');
-                    for (i, id) in generics.iter().enumerate() {
-                        if i > 0 {
-                            out.push_str(", ");
-                        }
-                        out.push_str(&self.rust_type_concrete(*id));
-                    }
-                    out.push('>');
-                }
-                out
-            }
-        }
     }
 }
