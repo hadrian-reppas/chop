@@ -224,8 +224,8 @@ lazy_static! {
         ("read_file", vec![sig!(ptr!(BYTE) => ptr!(BYTE))]),
         ("write_to_file", vec![sig!(ptr!(BYTE) ptr!(BYTE) => BOOL)]),
         ("append_to_file", vec![sig!(ptr!(BYTE) ptr!(BYTE) => BOOL)]),
+        ("time", vec![sig!(=> FLOAT)]),
         ("DEBUG_STACK", vec![sig!(=>)]),
         // TODO: stdin
-        // TODO: time
     ]);
 }

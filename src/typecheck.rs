@@ -1637,7 +1637,6 @@ fn get_binds(
     if signature.params.len() > stack.len() {
         None
     } else {
-        // TODO: consider using BTreeMap<usize, GTpeId>
         let mut binds = vec![None; types.generic_indices_signature(signature).len()];
         for ((_, arg), param) in stack.iter().rev().zip(signature.params.iter().rev()) {
             match types.bind(*param, *arg) {

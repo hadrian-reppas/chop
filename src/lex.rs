@@ -5,8 +5,6 @@ use regex::Regex;
 
 use crate::{ast::Name, error::Error};
 
-// TODO: add byte literal (eg b'a')
-
 #[derive(Clone, Copy)]
 pub struct Span {
     pub text: &'static str,

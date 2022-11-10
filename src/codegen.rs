@@ -327,7 +327,7 @@ impl Generator {
                 ));
             }
             ProgramOp::Abort(span) => {
-                let msg = format!("panicked at {}\n", span.location());
+                let msg = format!("panicked at {}", span.location());
                 self.code.push_str(&format!(
                     "printf(\"%s\\n\", {}); exit(1);\n",
                     escape_string(&msg),
@@ -610,6 +610,11 @@ impl Generator {
     } else {
         *hr0 = 0;
     }\n",
+            ),
+            "time" => self.code.push_str(
+                "    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    *hr0 = ts.tv_sec + ts.tv_nsec/1000000000.0;\n",
             ),
             "DEBUG_STACK" => {}
             _ => unreachable!(),

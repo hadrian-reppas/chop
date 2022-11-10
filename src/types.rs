@@ -1,12 +1,6 @@
 use std::collections::{hash_map, HashMap, HashSet};
 use std::fmt;
 
-// TODO: get rid of TypeId, we only need GTypes
-//       Type is for codegen, maybe should live there...
-
-// TODO: consider getting rid of the Types struct, TypeId and GTypeId
-// they don't  avoid allocations so no point...
-
 use bimap::BiMap;
 use petgraph::algo::toposort;
 use petgraph::Graph;

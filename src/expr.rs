@@ -100,7 +100,6 @@ pub fn parse(tokens: &mut Tokens) -> Result<(Expr, Span), Error> {
     Ok((pratt_parse(&mut tokens, 0)?, rparen.span()))
 }
 
-// TODO: allow Strings in expressions
 fn convert(tokens: &mut Tokens) -> Result<Vec<Tok>, Error> {
     let mut toks = vec![Tok::LParen(tokens.next()?.span())];
     let mut depth = 1;

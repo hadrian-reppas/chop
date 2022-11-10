@@ -1,18 +1,18 @@
 import std : vector
 
 fn sort_vector *vector[float] {
-    abort ~
+    ~ // TODO
 } 
 
 fn main {
-    0 cast_to[*float] vector_from_null
+    0 cast_to[*float] new_vector
     for 0 to 20 {
         ~
         @ random push
     }
     @ sort_vector
     for 0 to 20 {
-        swap @ rot index putln
+        ~ @ pop putln
     }
     free_vector
 }
