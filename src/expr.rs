@@ -6,6 +6,25 @@ use crate::error::Error;
 use crate::lex::{Span, Token, Tokens};
 use crate::parse::parse_group;
 
+const OR_BP: usize = 6;
+const XOR_BP: usize = 8;
+const AND_BP: usize = 10;
+const EQUAL_BP: usize = 14;
+const NOT_EQUAL_BP: usize = 14;
+const GREATER_EQUAL_BP: usize = 16;
+const GREATER_THAN_BP: usize = 16;
+const LESS_EQUAL_BP: usize = 16;
+const LESS_THAN_BP: usize = 16;
+const SHIFT_BP: usize = 18;
+const ADD_BP: usize = 24;
+const SUBTRACT_BP: usize = 24;
+const DIVIDE_BP: usize = 30;
+const MODULO_BP: usize = 30;
+const MULTIPLY_BP: usize = 30;
+const NEGATE_BP: usize = 40;
+const NOT_BP: usize = 40;
+const DEREF_BP: usize = 40;
+
 enum Tok {
     Int(i64, Span),
     Float(f64, Span),
@@ -144,25 +163,6 @@ fn convert(tokens: &mut Tokens) -> Result<Vec<Tok>, Error> {
     }
     Ok(toks)
 }
-
-const OR_BP: usize = 6;
-const XOR_BP: usize = 8;
-const AND_BP: usize = 10;
-const EQUAL_BP: usize = 14;
-const NOT_EQUAL_BP: usize = 14;
-const GREATER_EQUAL_BP: usize = 16;
-const GREATER_THAN_BP: usize = 16;
-const LESS_EQUAL_BP: usize = 16;
-const LESS_THAN_BP: usize = 16;
-const SHIFT_BP: usize = 18;
-const ADD_BP: usize = 24;
-const SUBTRACT_BP: usize = 24;
-const DIVIDE_BP: usize = 30;
-const MODULO_BP: usize = 30;
-const MULTIPLY_BP: usize = 30;
-const NEGATE_BP: usize = 40;
-const NOT_BP: usize = 40;
-const DEREF_BP: usize = 40;
 
 fn pratt_parse(tokens: &mut Peekable<impl Iterator<Item = Tok>>, bp: usize) -> Result<Expr, Error> {
     let mut lhs = match tokens.next().unwrap() {

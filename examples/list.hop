@@ -1,39 +1,5 @@
-struct list {
-    value: int
-    next: *list
-}
-
-fn print *list {
-    if . to_int 0 == {
-        ~
-        "NULL" puts
-    } else {
-        "list(" puts
-        * ..value put
-        ", " puts
-        .next print
-        ')' putc
-    }
-}
-
-fn free_list *list {
-    if . 0 to_list_ptr == {
-        ~
-    } else {
-        ..next * free_list
-        free
-    }
-}
+import std : list
 
 fn main {
-    0 to_list_ptr
-    for 0 to 5 {
-        let next value {
-            alloc_list .
-            value next list
-            write
-        }
-    }
-    . print ln
-    free_list
+    // TODO
 }

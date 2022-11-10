@@ -86,6 +86,80 @@ impl Context {
                 self.insert_signature(name, signature)?;
             }
         }
+        self.check_for_recursive_struct_defs(unit)?;
+        if let Some(mains) = self.signatures.get("main") {
+            if mains.len() == 1 {
+                let GSignature {
+                    params,
+                    returns,
+                    kind,
+                } = mains[0].clone();
+
+                if !params.is_empty() && params != [self.types.int(), self.types.byte_ptr_ptr()] {
+                    Err(Error::Type(
+                        kind.span().unwrap(),
+                        format!(
+                            "'main' must have parameters {}[]{} or {}[int, **byte]{}",
+                            color!(Blue),
+                            reset!(),
+                            color!(Blue),
+                            reset!(),
+                        ),
+                        vec![Note::new(
+                            None,
+                            format!(
+                                "'main' has signature {}{} -> {}{}",
+                                color!(Blue),
+                                self.types.format_types(&params),
+                                self.types.format_types(&returns),
+                                reset!(),
+                            ),
+                        )],
+                    ))
+                } else if !returns.is_empty() && returns != [self.types.int()] {
+                    Err(Error::Type(
+                        kind.span().unwrap(),
+                        format!(
+                            "'main' must return {}[]{} or {}[int]{}",
+                            color!(Blue),
+                            reset!(),
+                            color!(Blue),
+                            reset!(),
+                        ),
+                        vec![Note::new(
+                            None,
+                            format!(
+                                "'main' has signature {}{} -> {}{}",
+                                color!(Blue),
+                                self.types.format_types(&params),
+                                self.types.format_types(&returns),
+                                reset!(),
+                            ),
+                        )],
+                    ))
+                } else {
+                    Ok(())
+                }
+            } else {
+                Err(Error::Main(
+                    "multiple functions named 'main'".to_string(),
+                    mains
+                        .iter()
+                        .map(|s| {
+                            Note::new(
+                                Some(s.kind.span().unwrap()),
+                                "'main' defined here".to_string(),
+                            )
+                        })
+                        .collect(),
+                ))
+            }
+        } else {
+            Err(Error::Main("no function named 'main'".to_string(), vec![]))
+        }
+    }
+
+    fn check_for_recursive_struct_defs(&self, unit: &[Item]) -> Result<(), Error> {
         let mut graph = Graph::new();
         let mut map = HashMap::new();
         macro_rules! get_id {
@@ -171,76 +245,7 @@ impl Context {
             }
             unreachable!();
         }
-        if let Some(mains) = self.signatures.get("main") {
-            if mains.len() == 1 {
-                let GSignature {
-                    params,
-                    returns,
-                    kind,
-                } = mains[0].clone();
-
-                if !params.is_empty() && params != [self.types.int(), self.types.byte_ptr_ptr()] {
-                    Err(Error::Type(
-                        kind.span().unwrap(),
-                        format!(
-                            "'main' must have parameters {}[]{} or {}[int, **byte]{}",
-                            color!(Blue),
-                            reset!(),
-                            color!(Blue),
-                            reset!(),
-                        ),
-                        vec![Note::new(
-                            None,
-                            format!(
-                                "'main' has signature {}{} -> {}{}",
-                                color!(Blue),
-                                self.types.format_types(&params),
-                                self.types.format_types(&returns),
-                                reset!(),
-                            ),
-                        )],
-                    ))
-                } else if !returns.is_empty() && returns != [self.types.int()] {
-                    Err(Error::Type(
-                        kind.span().unwrap(),
-                        format!(
-                            "'main' must return {}[]{} or {}[int]{}",
-                            color!(Blue),
-                            reset!(),
-                            color!(Blue),
-                            reset!(),
-                        ),
-                        vec![Note::new(
-                            None,
-                            format!(
-                                "'main' has signature {}{} -> {}{}",
-                                color!(Blue),
-                                self.types.format_types(&params),
-                                self.types.format_types(&returns),
-                                reset!(),
-                            ),
-                        )],
-                    ))
-                } else {
-                    Ok(())
-                }
-            } else {
-                Err(Error::Main(
-                    "multiple functions named 'main'".to_string(),
-                    mains
-                        .iter()
-                        .map(|s| {
-                            Note::new(
-                                Some(s.kind.span().unwrap()),
-                                "'main' defined here".to_string(),
-                            )
-                        })
-                        .collect(),
-                ))
-            }
-        } else {
-            Err(Error::Main("no function named 'main'".to_string(), vec![]))
-        }
+        Ok(())
     }
 
     fn check_unit(&mut self, unit: &[Item]) -> Result<(), Error> {

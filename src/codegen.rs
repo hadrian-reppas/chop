@@ -68,21 +68,30 @@ impl Generator {
             }
         }
 
+        let mut structs = Vec::new();
         let cloned_map = self.types.custom_map.clone();
         for (name, fields) in &self.struct_fields {
             for (binds, id) in cloned_map.get(name).into_iter().flatten() {
-                self.code
-                    .push_str(&format!("struct hs_{}_{id} {{\n", escape_name(name)));
+                let mut code = format!("struct hs_{}_{id} {{\n", escape_name(name));
+                let mut ftypes = Vec::new();
                 for (fname, gtype) in fields {
                     let id = self.types.substitute_concrete(*gtype, binds);
-                    self.code.push_str("    ");
-                    self.code.push_str(&self.types.generate(id));
-                    self.code.push_str(" hm_");
-                    self.code.push_str(&escape_name(fname));
-                    self.code.push_str(";\n");
+                    ftypes.push(id);
+                    code.push_str("    ");
+                    code.push_str(&self.types.generate(id));
+                    code.push_str(" hm_");
+                    code.push_str(&escape_name(fname));
+                    code.push_str(";\n");
                 }
-                self.code.push_str("};\n");
+                code.push_str("};\n");
+                structs.push((code, *id, ftypes));
             }
+        }
+
+        self.types.sort_structs(&mut structs);
+
+        for (struct_code, _, _) in structs {
+            self.code.push_str(&struct_code);
         }
 
         for global in &self.program.globals {
@@ -146,9 +155,21 @@ impl Generator {
     setlocale(LC_ALL, \"\");\n",
         );
 
-        for global in &self.program.globals {
+        self.depth = 2;
+        let globals = self.program.globals.clone();
+        for global in globals {
             if let Some(init) = &global.init {
-                todo!("generate global init");
+                self.code.push_str("    {\n");
+                self.generate_vars(&init.vars, &[]);
+                for op in &init.ops {
+                    self.generate_op(op, &[]);
+                }
+                self.code.push_str(&format!(
+                    "        hg_{} = hv{};\n",
+                    escape_name(global.name),
+                    init.var,
+                ));
+                self.code.push_str("    }\n");
             }
         }
 
@@ -208,6 +229,21 @@ impl Generator {
         self.generate_topline(name, id, params, returns);
         self.tab();
 
+        self.generate_vars(vars, binds);
+
+        for stmt in body {
+            self.generate_stmt(stmt, binds);
+        }
+
+        for (i, var) in return_vars.iter().enumerate() {
+            self.code.push_str(&format!("    *hr{i} = hv{var};\n"));
+        }
+
+        self.untab();
+        self.code.push_str("}\n");
+    }
+
+    fn generate_vars(&mut self, vars: &HashMap<GTypeId, Vec<usize>>, binds: &[TypeId]) {
         for (id, vars) in vars {
             let id = self.types.substitute_concrete(*id, binds);
             let depth = self.types.concrete_depth(id);
@@ -224,17 +260,6 @@ impl Generator {
             }
             self.code.push_str(";\n");
         }
-
-        for stmt in body {
-            self.generate_stmt(stmt, binds);
-        }
-
-        for (i, var) in return_vars.iter().enumerate() {
-            self.code.push_str(&format!("    *hr{i} = hv{var};\n"));
-        }
-
-        self.untab();
-        self.code.push_str("}\n");
     }
 
     fn generate_stmt(&mut self, stmt: &ProgramStmt, binds: &[TypeId]) {
@@ -266,7 +291,9 @@ impl Generator {
         match op {
             ProgramOp::Int(var, val) => self.code.push_str(&format!("hv{var} = {val};\n")),
             ProgramOp::Float(var, val) => self.code.push_str(&format!("hv{var} = {val:?};\n")),
-            ProgramOp::Bool(var, val) => self.code.push_str(&format!("hv{var} = {val};\n")),
+            ProgramOp::Bool(var, val) => {
+                self.code.push_str(&format!("hv{var} = {};\n", *val as u8))
+            }
             ProgramOp::Byte(var, val) => self.code.push_str(&format!("hv{var} = {val};\n")),
             ProgramOp::String(var, val) => self
                 .code
@@ -290,7 +317,7 @@ impl Generator {
                 self.code.push_str(");\n");
             }
             ProgramOp::Ref(var, old_var, _) => {
-                self.code.push_str(&format!("hv{var} = &{old_var};\n"));
+                self.code.push_str(&format!("hv{var} = &hv{old_var};\n"));
             }
             ProgramOp::Assert(var, span) => {
                 let msg = format!("assertion failed at {}", span.location());
@@ -465,6 +492,7 @@ impl Generator {
             "neg" => self.code.push_str("    *hr0 = -hv0;\n"),
             "." => self.code.push_str("    *hr0 = hv0; *hr1 = hv0;\n"),
             "~" => {}
+            "@" => {}
             "to_byte" => self.code.push_str("    *hr0 = (uint8_t) hv0;\n"),
             "to_int" => self.code.push_str("    *hr0 = (int64_t) hv0;\n"),
             "to_float" => self.code.push_str("    *hr0 = (double) hv0;\n"),
@@ -510,7 +538,7 @@ impl Generator {
             "write" => self.code.push_str("    *hv0 = hv1;\n"),
             "exit" => self.code.push_str("    exit((int) hv0);\n"),
             "realloc" => {
-                let id = self.types.deref_n_concrete(returns[0], 2);
+                let id = self.types.deref_n_concrete(params[0], 1);
                 self.code.push_str(&format!(
                     "    *hr0 = realloc(hv0, hv1*sizeof({}));\n",
                     self.types.generate(id),

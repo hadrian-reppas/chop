@@ -1,6 +1,6 @@
 import std : prelude
 
-global buf: buffer[byte]
+global buf: buffer[byte] { 0 cast_to[*byte] 0 buffer }
 
 struct buffer[T] {
     ptr: *T

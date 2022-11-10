@@ -5,9 +5,9 @@ fn main int **byte -> int {
     if 2 != {
         ~ "USAGE: cat <filename>" putlns 1
     } else {
-        1 + *
+        1 + read
         read_file
-        if . 0 to_byte_ptr == {
+        if . 0 cast_to[*byte] == {
             ~ 1
         } else {
             putlns 0

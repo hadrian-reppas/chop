@@ -8,6 +8,8 @@ use std::fmt;
 // they don't  avoid allocations so no point...
 
 use bimap::BiMap;
+use petgraph::algo::toposort;
+use petgraph::Graph;
 
 use crate::ast::{Item, Name, PType};
 use crate::codegen;
@@ -15,26 +17,12 @@ use crate::error::{Error, Note};
 use crate::lex::Span;
 
 #[repr(transparent)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)] // TODO: REMOVE Debug
 pub struct TypeId(usize);
 
-// TODO: REMOVE THIS
-impl fmt::Debug for TypeId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TypeId")
-    }
-}
-
 #[repr(transparent)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)] // TODO: Remove Debug
 pub struct GTypeId(usize);
-
-// TODO: REMOVE THIS
-impl fmt::Debug for GTypeId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "GTypeId")
-    }
-}
 
 #[derive(Clone, Copy)]
 pub enum Kind {
@@ -69,10 +57,6 @@ impl Kind {
 
     pub fn is_auto(self) -> bool {
         !matches!(self, Kind::Builtin | Kind::Custom(_))
-    }
-
-    pub fn is_custom(self) -> bool {
-        matches!(self, Kind::Custom(_))
     }
 }
 
@@ -250,13 +234,14 @@ impl Types {
             *id
         } else {
             if let Type::Custom(_, name, generics) = &ty {
-                self.counter += 1;
                 match self.custom_map.entry(*name) {
                     hash_map::Entry::Occupied(mut o) => {
-                        o.get_mut().insert(generics.clone(), self.counter - 1);
+                        if !o.get().contains_key(generics) {
+                            o.get_mut().insert(generics.clone(), self.counter);
+                        }
                     }
                     hash_map::Entry::Vacant(v) => {
-                        v.insert(HashMap::from([(generics.clone(), self.counter - 1)]));
+                        v.insert(HashMap::from([(generics.clone(), self.counter)]));
                     }
                 }
             }
@@ -522,6 +507,40 @@ impl Types {
         self.types.get_by_right(&id).unwrap().depth()
     }
 
+    pub fn sort_structs(&mut self, structs: &mut [(String, usize, Vec<TypeId>)]) {
+        let mut graph = Graph::new();
+        let mut map = HashMap::new();
+        macro_rules! get_id {
+            ($x:expr) => {
+                if let Some(id) = map.get(&$x) {
+                    *id
+                } else {
+                    let id = graph.add_node($x);
+                    map.insert($x, id);
+                    id
+                }
+            };
+        }
+        for (_, id, ftypes) in structs.iter() {
+            let from = get_id!(TypeId(*id));
+            for ftype in ftypes {
+                let depth = self.concrete_depth(*ftype);
+                if depth == 0 {
+                    let to = get_id!(self.deref_n_concrete(*ftype, depth));
+                    graph.add_edge(from, to, ());
+                }
+            }
+        }
+        let sort = toposort(&graph, None).unwrap();
+        let typeid_map: HashMap<_, _> = sort
+            .iter()
+            .rev()
+            .enumerate()
+            .map(|(i, id)| (graph[*id], i))
+            .collect();
+        structs.sort_by_key(|(_, id, _)| typeid_map[&TypeId(*id)]);
+    }
+
     pub fn generic_indices(&self, id: GTypeId) -> HashSet<usize> {
         match self.gtypes.get_by_right(&id).unwrap() {
             GType::Int(_) => HashSet::new(),
@@ -661,27 +680,6 @@ impl Types {
         }
     }
 
-    pub fn format_concrete(&self, id: TypeId) -> String {
-        match self.types.get_by_right(&id).unwrap() {
-            Type::Int(depth) => format!("{}int", "*".repeat(*depth)),
-            Type::Float(depth) => format!("{}float", "*".repeat(*depth)),
-            Type::Byte(depth) => format!("{}byte", "*".repeat(*depth)),
-            Type::Bool(depth) => format!("{}bool", "*".repeat(*depth)),
-            Type::Custom(depth, name, generics) => {
-                if generics.is_empty() {
-                    format!("{}{}", "*".repeat(*depth), name)
-                } else {
-                    format!(
-                        "{}{}{}",
-                        "*".repeat(*depth),
-                        name,
-                        self.format_concrete_types(generics),
-                    )
-                }
-            }
-        }
-    }
-
     pub fn format_types(&self, types: &[GTypeId]) -> String {
         let mut out = "[".to_string();
         for (i, id) in types.iter().copied().enumerate() {
@@ -689,18 +687,6 @@ impl Types {
                 out.push_str(", ");
             }
             out.push_str(&self.format(id));
-        }
-        out.push(']');
-        out
-    }
-
-    pub fn format_concrete_types(&self, types: &[TypeId]) -> String {
-        let mut out = "[".to_string();
-        for (i, id) in types.iter().copied().enumerate() {
-            if i > 0 {
-                out.push_str(", ");
-            }
-            out.push_str(&self.format_concrete(id));
         }
         out.push(']');
         out

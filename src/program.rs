@@ -6,8 +6,6 @@ use crate::{
     types::{GTypeId, TypeId, Types},
 };
 
-// TODO: ProgramOp::Call should contain the binds
-
 pub struct ProgramContext {
     pub program: Program,
     pub wip_init: Vec<ProgramOp>,
@@ -368,7 +366,7 @@ impl ProgramFn {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ProgramGlobal {
     pub name: &'static str,
     pub type_id: TypeId,
@@ -389,7 +387,7 @@ impl ProgramGlobal {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ProgramGlobalInit {
     pub ops: Vec<ProgramOp>,
     pub var: usize,
@@ -424,7 +422,7 @@ fn display_vars(vars: &HashMap<GTypeId, Vec<usize>>, types: &Types) {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ProgramOp {
     Int(usize, i64),
     Float(usize, f64),

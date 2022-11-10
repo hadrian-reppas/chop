@@ -1,0 +1,8 @@
+import std : prelude
+
+fn main int **byte {
+    for 1 to under {
+        swap . rot + read putlns
+    }
+    ~ ~
+}

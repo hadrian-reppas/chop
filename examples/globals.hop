@@ -6,7 +6,7 @@ fn increment_counter {
 }
 
 fn increment_counter_by_ptr {
-    counter_ptr * 1 +
+    counter_ptr read 1 +
     let new_counter {
         counter_ptr new_counter write
     }

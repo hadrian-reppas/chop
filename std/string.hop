@@ -1,11 +1,11 @@
+import std : vector
+
 struct string {
-    bytes: *byte
-    length: int
-    capacity: int
+    bytes: vector[byte]
 }
 
 fn new_string -> string {
-    0 cast_to[*byte] 0 0 string
+    // TODO
 }
 
 fn push *string int {
