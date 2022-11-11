@@ -292,7 +292,7 @@ impl Generator {
             ProgramOp::Int(var, val) => self.code.push_str(&format!("hv{var} = {val};\n")),
             ProgramOp::Float(var, val) => self.code.push_str(&format!("hv{var} = {val:?};\n")),
             ProgramOp::Bool(var, val) => {
-                self.code.push_str(&format!("hv{var} = {};\n", *val as u8))
+                self.code.push_str(&format!("hv{var} = {};\n", *val as u8));
             }
             ProgramOp::Byte(var, val) => self.code.push_str(&format!("hv{var} = {val};\n")),
             ProgramOp::String(var, val) => self
@@ -336,42 +336,42 @@ impl Generator {
             ProgramOp::SizeOf(var, id) => {
                 let id = self.types.substitute_concrete(*id, binds);
                 self.code
-                    .push_str(&format!("hv{var} = sizeof({});\n", self.types.generate(id)))
+                    .push_str(&format!("hv{var} = sizeof({});\n", self.types.generate(id)));
             }
             ProgramOp::Alloc(var, id) => {
                 let id = self.types.substitute_concrete(*id, binds);
                 self.code.push_str(&format!(
                     "hv{var} = malloc(sizeof({}));\n",
                     self.types.generate(id),
-                ))
+                ));
             }
             ProgramOp::Zalloc(var, id) => {
                 let id = self.types.substitute_concrete(*id, binds);
                 self.code.push_str(&format!(
                     "hv{var} = calloc(1, sizeof({}));\n",
                     self.types.generate(id),
-                ))
+                ));
             }
             ProgramOp::AllocArr(var, len_var, id) => {
                 let id = self.types.substitute_concrete(*id, binds);
                 self.code.push_str(&format!(
                     "hv{var} = malloc(hv{len_var}*sizeof({}));\n",
                     self.types.generate(id),
-                ))
+                ));
             }
             ProgramOp::ZallocArr(var, len_var, id) => {
                 let id = self.types.substitute_concrete(*id, binds);
                 self.code.push_str(&format!(
                     "hv{var} = calloc(hv{len_var}, sizeof({}));\n",
                     self.types.generate(id),
-                ))
+                ));
             }
             ProgramOp::CastTo(var, old_var, id) => {
                 let id = self.types.substitute_concrete(*id, binds);
                 self.code.push_str(&format!(
                     "hv{var} = ({}) hv{old_var};\n",
                     self.types.generate(id),
-                ))
+                ));
             }
         }
     }

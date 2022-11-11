@@ -27,7 +27,7 @@ enum PathKind {
     Std(Vec<&'static str>),
 }
 
-pub fn resolve_imports(unit: Vec<Item>, path: PathBuf) -> Result<Vec<Item>, Error> {
+pub fn resolve(unit: Vec<Item>, path: PathBuf) -> Result<Vec<Item>, Error> {
     let mut path_map = HashMap::new();
     let mut std_map = HashMap::new();
     walk_files(unit, PathKind::File(path), &mut path_map, &mut std_map)?;
@@ -56,7 +56,7 @@ fn walk_files(
                             #[allow(clippy::map_entry)]
                             if !std_map.contains_key(&path) {
                                 let unit = std_unit(&path, err_span)?;
-                                walk_files(unit, PathKind::Std(path), path_map, std_map)?
+                                walk_files(unit, PathKind::Std(path), path_map, std_map)?;
                             }
                         } else {
                             let mut new_path = file_path.parent().unwrap().to_path_buf();
@@ -67,7 +67,7 @@ fn walk_files(
                             let leaked = leak(new_path.to_str().unwrap().to_string());
                             match parse_file(leaked) {
                                 Ok(unit) => {
-                                    walk_files(unit, PathKind::File(new_path), path_map, std_map)?
+                                    walk_files(unit, PathKind::File(new_path), path_map, std_map)?;
                                 }
                                 Err(err) => match err {
                                     Error::Io(msg) => return Err(Error::Import(err_span, msg)),
@@ -94,7 +94,7 @@ fn walk_files(
                         #[allow(clippy::map_entry)]
                         if !std_map.contains_key(&path) {
                             let unit = std_unit(&path, err_span)?;
-                            walk_files(unit, PathKind::Std(path), path_map, std_map)?
+                            walk_files(unit, PathKind::Std(path), path_map, std_map)?;
                         }
                     } else {
                         std_map.get_mut(&std_path).unwrap().push(item);

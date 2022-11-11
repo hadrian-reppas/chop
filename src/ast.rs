@@ -340,22 +340,22 @@ impl Op {
 
     pub fn span(&self) -> Span {
         match self {
-            Op::Int(_, span) => *span,
-            Op::Float(_, span) => *span,
-            Op::Bool(_, span) => *span,
-            Op::Char(_, span) => *span,
-            Op::String(_, span) => *span,
-            Op::Byte(_, span) => *span,
+            Op::Int(_, span)
+            | Op::Float(_, span)
+            | Op::Bool(_, span)
+            | Op::Char(_, span)
+            | Op::String(_, span)
+            | Op::Byte(_, span)
+            | Op::SizeOf(_, span, _, _)
+            | Op::Alloc(_, span, _, _)
+            | Op::Zalloc(_, span, _, _)
+            | Op::AllocArr(_, span, _, _)
+            | Op::ZallocArr(_, span, _, _)
+            | Op::CastTo(_, span, _, _)
+            | Op::Assert(span)
+            | Op::Abort(span, _)
+            | Op::Expr(_, span) => *span,
             Op::Name(name) => name.span,
-            Op::SizeOf(_, span, _, _) => *span,
-            Op::Alloc(_, span, _, _) => *span,
-            Op::Zalloc(_, span, _, _) => *span,
-            Op::AllocArr(_, span, _, _) => *span,
-            Op::ZallocArr(_, span, _, _) => *span,
-            Op::CastTo(_, span, _, _) => *span,
-            Op::Assert(span) => *span,
-            Op::Abort(span, _) => *span,
-            Op::Expr(_, span) => *span,
         }
     }
 }

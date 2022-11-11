@@ -142,7 +142,7 @@ impl ProgramContext {
             body,
             else_body,
             resolve,
-        })
+        });
     }
 
     pub fn begin_for(&mut self) {
@@ -237,7 +237,7 @@ impl ProgramContext {
             name,
             type_id,
             init: None,
-        })
+        });
     }
 
     pub fn end_global_init(&mut self, name: &'static str, type_id: TypeId, var: usize) {
@@ -249,7 +249,7 @@ impl ProgramContext {
                 var,
                 vars: mem::take(&mut self.vars),
             }),
-        })
+        });
     }
 }
 
@@ -451,7 +451,7 @@ impl ProgramOp {
             ProgramOp::Byte(var, val) => print!("ByteLit({var}, {val})"),
             ProgramOp::String(var, val) => print!("StringLit({var}, {val:?})"),
             ProgramOp::Call(name, index, params, returns, _) => {
-                print!("Call({name:?}, {index}, {params:?}, {returns:?})")
+                print!("Call({name:?}, {index}, {params:?}, {returns:?})");
             }
             ProgramOp::Ref(var, old_var, type_id) => {
                 print!("Ref({var}, {old_var}, ");

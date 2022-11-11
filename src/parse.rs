@@ -2,7 +2,9 @@ use std::collections::HashSet;
 
 use lazy_static::lazy_static;
 
-use crate::ast::*;
+use crate::ast::{
+    Definition, ElsePart, Field, Generics, Item, Name, Op, PType, Stmt, TypeGenerics, Unit,
+};
 use crate::error::Error;
 use crate::expr;
 use crate::lex::{Span, Token, Tokens};

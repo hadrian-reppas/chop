@@ -85,12 +85,12 @@ pub enum GType {
 impl GType {
     pub fn ref_n(mut self, n: usize) -> GType {
         match &mut self {
-            GType::Int(depth) => *depth += n,
-            GType::Float(depth) => *depth += n,
-            GType::Byte(depth) => *depth += n,
-            GType::Bool(depth) => *depth += n,
-            GType::Custom(depth, _, _) => *depth += n,
-            GType::Generic(depth, _) => *depth += n,
+            GType::Int(depth)
+            | GType::Float(depth)
+            | GType::Byte(depth)
+            | GType::Bool(depth)
+            | GType::Custom(depth, _, _)
+            | GType::Generic(depth, _) => *depth += n,
         }
         self
     }
@@ -200,14 +200,13 @@ impl Types {
                         format!("type '{}' is already defined", name.name),
                         vec![note],
                     ));
-                } else {
-                    let count = match generics {
-                        Some(generics) => generics.names.len(),
-                        None => 0,
-                    };
-                    self.generic_counts.insert(name.name, count);
-                    struct_spans.insert(name.name, name.span);
                 }
+                let count = match generics {
+                    Some(generics) => generics.names.len(),
+                    None => 0,
+                };
+                self.generic_counts.insert(name.name, count);
+                struct_spans.insert(name.name, name.span);
             }
         }
         Ok(())
@@ -258,7 +257,7 @@ impl Types {
 
     pub fn convert(&mut self, ty: &PType, generics: &[Name]) -> Result<GTypeId, Error> {
         let (name, span) = (ty.name.name, ty.name.span);
-        let depth = ty.stars.map(|s| s.name.len()).unwrap_or(0);
+        let depth = ty.stars.map_or(0, |s| s.name.len());
         let generic_params = if generics.iter().any(|g| g.name == name) {
             if ty.generics.is_some() {
                 return Err(Error::Type(
@@ -266,9 +265,8 @@ impl Types {
                     "generics cannot have generic parameters".to_string(),
                     vec![],
                 ));
-            } else {
-                Vec::new()
             }
+            Vec::new()
         } else if let Some(generic_count) = self.generic_counts.get(name) {
             if *generic_count == 0 {
                 if ty.generics.is_some() {
@@ -277,9 +275,8 @@ impl Types {
                         format!("type '{}' does not have generic parameters", name),
                         vec![],
                     ));
-                } else {
-                    Vec::new()
                 }
+                Vec::new()
             } else if let Some(gens) = &ty.generics {
                 if gens.types.len() == *generic_count {
                     gens.types
@@ -537,10 +534,7 @@ impl Types {
 
     pub fn generic_indices(&self, id: GTypeId) -> HashSet<usize> {
         match self.gtypes.get_by_right(&id).unwrap() {
-            GType::Int(_) => HashSet::new(),
-            GType::Float(_) => HashSet::new(),
-            GType::Byte(_) => HashSet::new(),
-            GType::Bool(_) => HashSet::new(),
+            GType::Int(_) | GType::Float(_) | GType::Byte(_) | GType::Bool(_) => HashSet::new(),
             GType::Custom(_, _, generics) => {
                 let mut indices = HashSet::new();
                 for id in generics {
@@ -554,10 +548,7 @@ impl Types {
 
     pub fn generic_indices_struct(&self, id: GTypeId, name: &str) -> HashSet<usize> {
         match self.gtypes.get_by_right(&id).unwrap() {
-            GType::Int(_) => HashSet::new(),
-            GType::Float(_) => HashSet::new(),
-            GType::Byte(_) => HashSet::new(),
-            GType::Bool(_) => HashSet::new(),
+            GType::Int(_) | GType::Float(_) | GType::Byte(_) | GType::Bool(_) => HashSet::new(),
             GType::Custom(_, cname, generics) => {
                 if *cname == name {
                     HashSet::new()

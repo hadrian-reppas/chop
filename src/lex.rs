@@ -104,40 +104,40 @@ pub enum Token {
 impl Token {
     pub fn span(&self) -> Span {
         match self {
-            Token::Int(_, span) => *span,
-            Token::Float(_, span) => *span,
-            Token::Bool(_, span) => *span,
-            Token::Char(_, span) => *span,
-            Token::String(_, span) => *span,
-            Token::Byte(_, span) => *span,
-            Token::Name(span) => *span,
-            Token::Arrow(span) => *span,
-            Token::LParen(span) => *span,
-            Token::RParen(span) => *span,
-            Token::LBrace(span) => *span,
-            Token::RBrace(span) => *span,
-            Token::LBrack(span) => *span,
-            Token::RBrack(span) => *span,
-            Token::Colon(span) => *span,
-            Token::Fn(span) => *span,
-            Token::If(span) => *span,
-            Token::Else(span) => *span,
-            Token::While(span) => *span,
-            Token::For(span) => *span,
-            Token::To(span) => *span,
-            Token::Let(span) => *span,
-            Token::Struct(span) => *span,
-            Token::Global(span) => *span,
-            Token::Import(span) => *span,
-            Token::SizeOf(span) => *span,
-            Token::Alloc(span) => *span,
-            Token::Zalloc(span) => *span,
-            Token::AllocArr(span) => *span,
-            Token::ZallocArr(span) => *span,
-            Token::CastTo(span) => *span,
-            Token::Assert(span) => *span,
-            Token::Abort(span) => *span,
-            Token::Eof(span) => *span,
+            Token::Int(_, span)
+            | Token::Float(_, span)
+            | Token::Bool(_, span)
+            | Token::Char(_, span)
+            | Token::String(_, span)
+            | Token::Byte(_, span)
+            | Token::Name(span)
+            | Token::Arrow(span)
+            | Token::LParen(span)
+            | Token::RParen(span)
+            | Token::LBrace(span)
+            | Token::RBrace(span)
+            | Token::LBrack(span)
+            | Token::RBrack(span)
+            | Token::Colon(span)
+            | Token::Fn(span)
+            | Token::If(span)
+            | Token::Else(span)
+            | Token::While(span)
+            | Token::For(span)
+            | Token::To(span)
+            | Token::Let(span)
+            | Token::Struct(span)
+            | Token::Global(span)
+            | Token::Import(span)
+            | Token::SizeOf(span)
+            | Token::Alloc(span)
+            | Token::Zalloc(span)
+            | Token::AllocArr(span)
+            | Token::ZallocArr(span)
+            | Token::CastTo(span)
+            | Token::Assert(span)
+            | Token::Abort(span)
+            | Token::Eof(span) => *span,
         }
     }
 

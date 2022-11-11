@@ -5,19 +5,16 @@ use std::mem;
 use petgraph::algo::toposort;
 use petgraph::graph::Graph;
 
-use crate::ast::*;
+use crate::ast::{ElsePart, Expr, Field, Item, Name, Op, PType, Stmt, TypeGenerics};
 use crate::builtins::{Builtins, BUILTINS};
 use crate::error::{Error, Note};
 use crate::lex::Span;
-use crate::program::*;
-use crate::types::*;
+use crate::program::{Program, ProgramContext, ProgramMember, ProgramOp, ProgramStruct};
+use crate::types::{GSignature, GTypeId, Kind, Types};
 use crate::{color, reset};
 
 // TODO: topological sort on global uses in global inits (check
 //       call graph to find dependencies)
-
-// TODO: is the resolve step required? (maybe the way we allocate
-//       stack variables means that step is redundant)
 
 pub fn check(unit: &[Item]) -> Result<ProgramInfo, Error> {
     let mut context = Context::new(&BUILTINS);
@@ -237,10 +234,9 @@ impl Context {
                             }
                         };
                         return Err(Error::Type(span, msg, vec![]));
-                    } else {
-                        prev.insert(neighbor_id, id);
-                        stack.push(neighbor_id);
                     }
+                    prev.insert(neighbor_id, id);
+                    stack.push(neighbor_id);
                 }
             }
             unreachable!();

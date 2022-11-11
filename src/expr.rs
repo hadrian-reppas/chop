@@ -61,33 +61,33 @@ enum Tok {
 impl Tok {
     fn span(&self) -> Span {
         match self {
-            Tok::Int(_, span) => *span,
-            Tok::Float(_, span) => *span,
-            Tok::Bool(_, span) => *span,
-            Tok::Char(_, span) => *span,
-            Tok::Byte(_, span) => *span,
-            Tok::String(_, span) => *span,
+            Tok::Int(_, span)
+            | Tok::Float(_, span)
+            | Tok::Bool(_, span)
+            | Tok::Char(_, span)
+            | Tok::Byte(_, span)
+            | Tok::String(_, span)
+            | Tok::LParen(span)
+            | Tok::RParen(span)
+            | Tok::Add(span)
+            | Tok::And(span)
+            | Tok::Divide(span)
+            | Tok::Equal(span)
+            | Tok::GreaterEqual(span)
+            | Tok::GreaterThan(span)
+            | Tok::LessEqual(span)
+            | Tok::LessThan(span)
+            | Tok::Modulo(span)
+            | Tok::Multiply(span)
+            | Tok::NotEqual(span)
+            | Tok::Or(span)
+            | Tok::Subtract(span)
+            | Tok::Xor(span)
+            | Tok::LShift(span)
+            | Tok::RShift(span)
+            | Tok::Not(span)
+            | Tok::Group(_, span) => *span,
             Tok::Var(name) => name.span,
-            Tok::LParen(span) => *span,
-            Tok::RParen(span) => *span,
-            Tok::Add(span) => *span,
-            Tok::And(span) => *span,
-            Tok::Divide(span) => *span,
-            Tok::Equal(span) => *span,
-            Tok::GreaterEqual(span) => *span,
-            Tok::GreaterThan(span) => *span,
-            Tok::LessEqual(span) => *span,
-            Tok::LessThan(span) => *span,
-            Tok::Modulo(span) => *span,
-            Tok::Multiply(span) => *span,
-            Tok::NotEqual(span) => *span,
-            Tok::Or(span) => *span,
-            Tok::Subtract(span) => *span,
-            Tok::Xor(span) => *span,
-            Tok::LShift(span) => *span,
-            Tok::RShift(span) => *span,
-            Tok::Not(span) => *span,
-            Tok::Group(_, span) => *span,
         }
     }
 }
@@ -215,9 +215,8 @@ fn pratt_parse(tokens: &mut Peekable<impl Iterator<Item = Tok>>, bp: usize) -> R
             Some(Tok::Xor(token)) => expr!(Xor, XOR_BP, token),
             Some(Tok::LShift(token)) => expr!(LShift, SHIFT_BP, token),
             Some(Tok::RShift(token)) => expr!(RShift, SHIFT_BP, token),
-            Some(Tok::RParen(_)) => break,
+            Some(Tok::RParen(_)) | None => break,
             Some(token) => return Err(Error::Parse(token.span(), "unexpected token".to_string())),
-            None => break,
         }
     }
 
