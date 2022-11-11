@@ -293,6 +293,8 @@ pub enum Op {
     AllocArr(PType, Span, Span, Span),
     ZallocArr(PType, Span, Span, Span),
     CastTo(PType, Span, Span, Span),
+    Assert(Span),
+    Abort(Span, Vec<PType>),
     Expr(Expr, Span),
 }
 
@@ -312,6 +314,8 @@ impl fmt::Debug for Op {
             Op::AllocArr(ty, _, _, _) => write!(f, "AllocArr({ty:?})"),
             Op::ZallocArr(ty, _, _, _) => write!(f, "ZallocArr({ty:?})"),
             Op::CastTo(ty, _, _, _) => write!(f, "CastTo({ty:?})"),
+            Op::Assert(_) => write!(f, "Assert()"),
+            Op::Abort(_, types) => write!(f, "Abort({types:?})"),
             Op::Expr(e, _) => write!(f, "{e:?}"),
         }
     }
@@ -349,6 +353,8 @@ impl Op {
             Op::AllocArr(_, span, _, _) => *span,
             Op::ZallocArr(_, span, _, _) => *span,
             Op::CastTo(_, span, _, _) => *span,
+            Op::Assert(span) => *span,
+            Op::Abort(span, _) => *span,
             Op::Expr(_, span) => *span,
         }
     }

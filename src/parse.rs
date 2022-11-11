@@ -7,11 +7,6 @@ use crate::error::Error;
 use crate::expr;
 use crate::lex::{Span, Token, Tokens};
 
-// TODO: parse fn let
-// TODO: parse assert as a keyword (and remove from builtins)
-// TODO: parse abort[T U V] as keyword (and remove from builtins)
-// TODO: make DEBUG_STACK a keyword?
-
 lazy_static! {
     static ref RESERVED_TYPES: HashSet<&'static str> =
         HashSet::from(["byte", "int", "float", "bool", "ptr", "_"]);
@@ -400,6 +395,20 @@ pub fn parse_group(tokens: &mut Tokens, is_if_test: bool) -> Result<Vec<Op>, Err
                 Token::AllocArr(span) => kw!(AllocArr, span),
                 Token::ZallocArr(span) => kw!(ZallocArr, span),
                 Token::CastTo(span) => kw!(CastTo, span),
+                Token::Assert(span) => group.push(Op::Assert(span)),
+                Token::Abort(span) => {
+                    if tokens.peek().is_lbrack() {
+                        tokens.next()?;
+                        let mut types = Vec::new();
+                        while !tokens.peek().is_rbrack() {
+                            types.push(parse_type(tokens)?);
+                        }
+                        tokens.next()?;
+                        group.push(Op::Abort(span, types));
+                    } else {
+                        group.push(Op::Abort(span, vec![]));
+                    }
+                }
                 _ => unreachable!(),
             }
         }

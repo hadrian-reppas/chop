@@ -95,6 +95,8 @@ pub enum Token {
     AllocArr(Span),
     ZallocArr(Span),
     CastTo(Span),
+    Assert(Span),
+    Abort(Span),
 
     Eof(Span),
 }
@@ -133,6 +135,8 @@ impl Token {
             Token::AllocArr(span) => *span,
             Token::ZallocArr(span) => *span,
             Token::CastTo(span) => *span,
+            Token::Assert(span) => *span,
+            Token::Abort(span) => *span,
             Token::Eof(span) => *span,
         }
     }
@@ -215,6 +219,8 @@ impl Token {
                 | Token::AllocArr(_)
                 | Token::ZallocArr(_)
                 | Token::CastTo(_)
+                | Token::Assert(_)
+                | Token::Abort(_)
         )
     }
 }
@@ -421,6 +427,8 @@ impl TokenIter {
             "zalloc" => Token::Zalloc(span),
             "alloc_arr" => Token::AllocArr(span),
             "zalloc_arr" => Token::ZallocArr(span),
+            "assert" => Token::Assert(span),
+            "abort" => Token::Abort(span),
             "true" => Token::Bool(true, span),
             "false" => Token::Bool(false, span),
             _ => Token::Name(span),

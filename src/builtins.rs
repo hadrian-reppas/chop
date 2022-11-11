@@ -207,8 +207,6 @@ lazy_static! {
         ("putp", vec![sig!(genp!(0) =>)]),
         ("putlnp", vec![sig!(genp!(0) =>)]),
         ("ln", vec![sig!(=>)]),
-        ("abort", vec![sig!(=>)]),
-        ("assert", vec![sig!(BOOL =>)]),
         ("read", vec![sig!(genp!(0) => gen!(0))]),
         ("write", vec![sig!(genp!(0) gen!(0) =>)]),
         ("exit", vec![sig!(INT =>)]),

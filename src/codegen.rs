@@ -532,8 +532,6 @@ impl Generator {
             "putp" => self.code.push_str("    printf(\"%p\" , hv0);\n"),
             "putlnp" => self.code.push_str("    printf(\"%p\\n\" , hv0);\n"),
             "ln" => self.code.push_str("    printf(\"\\n\");\n"),
-            "assert" => {}
-            "abort" => {}
             "read" => self.code.push_str("    *hr0 = *hv0;\n"),
             "write" => self.code.push_str("    *hv0 = hv1;\n"),
             "exit" => self.code.push_str("    exit((int) hv0);\n"),
@@ -616,7 +614,6 @@ impl Generator {
     clock_gettime(CLOCK_REALTIME, &ts);
     *hr0 = ts.tv_sec + ts.tv_nsec/1000000000.0;\n",
             ),
-            "DEBUG_STACK" => {}
             _ => unreachable!(),
         }
         self.code.push_str("}\n");

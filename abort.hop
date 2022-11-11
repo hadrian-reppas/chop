@@ -1,0 +1,15 @@
+fn get_pair bool -> int int {
+    if {
+        1 2
+    } else {
+        abort[int int]
+    }
+}
+
+fn main {
+    true get_pair
+    put ' ' putc putln
+
+    false get_pair
+    put ' ' putc putln
+}

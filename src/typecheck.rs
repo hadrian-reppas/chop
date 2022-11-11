@@ -1125,6 +1125,35 @@ impl Context {
                     .push_op(ProgramOp::CastTo(var, arg_var, ty));
                 Ok(())
             }
+            Op::Assert(span) => {
+                if stack.is_empty() || (stack.last().unwrap().1 != self.types.bool()) {
+                    return Err(Error::Type(
+                        *span,
+                        "'assert' expects a 'bool'".to_string(),
+                        vec![Note::new(
+                            None,
+                            format!(
+                                "stack is {}{}{}",
+                                color!(Blue),
+                                self.types.format_stack(stack),
+                                reset!(),
+                            ),
+                        )],
+                    ));
+                }
+                let (var, _) = stack.pop().unwrap();
+                self.program_context.push_op(ProgramOp::Assert(var, *span));
+                Ok(())
+            }
+            Op::Abort(span, types) => {
+                for ty in types {
+                    let ty = self.types.convert(ty, &self.generic_names)?;
+                    let var = self.program_context.alloc(ty);
+                    stack.push((var, ty));
+                }
+                self.program_context.push_op(ProgramOp::Abort(*span));
+                Ok(())
+            }
         }
     }
 
@@ -1139,8 +1168,7 @@ impl Context {
                 reset!(),
                 name.span.location(),
             );
-        } else if name.name == "_" {
-            return Err(Error::Parse(name.span, "name '_' is reserved".to_string()));
+            return Ok(());
         }
 
         if let Some((var, ty)) = self.get_let_bind(name.name) {
@@ -1169,11 +1197,6 @@ impl Context {
                 param_vars[0],
                 stack[stack.len() - 2].1,
             ));
-        } else if name.name == "abort" {
-            self.program_context.push_op(ProgramOp::Abort(name.span));
-        } else if name.name == "assert" && *signature.params.last().unwrap() == self.types.bool() {
-            self.program_context
-                .push_op(ProgramOp::Assert(param_vars[0], name.span));
         } else {
             self.program_context.push_op(ProgramOp::Call(
                 name.name,
