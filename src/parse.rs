@@ -7,6 +7,11 @@ use crate::error::Error;
 use crate::expr;
 use crate::lex::{Span, Token, Tokens};
 
+// TODO: parse fn let
+// TODO: parse assert as a keyword (and remove from builtins)
+// TODO: parse abort[T U V] as keyword (and remove from builtins)
+// TODO: make DEBUG_STACK a keyword?
+
 lazy_static! {
     static ref RESERVED_TYPES: HashSet<&'static str> =
         HashSet::from(["byte", "int", "float", "bool", "ptr", "_"]);
@@ -57,13 +62,30 @@ fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
     let fn_span = tokens.next()?.span();
     let name = parse_name(tokens, false)?;
 
+    let let_span = if tokens.peek().is_let() {
+        Some(tokens.next()?.span())
+    } else {
+        None
+    };
+
     let generics = parse_generics(tokens)?;
 
     let mut params = Vec::new();
     let mut returns = Vec::new();
     let mut arrow_span = None;
+    let mut let_names = Vec::new();
 
     while tokens.peek().is_name() {
+        if let_span.is_some() {
+            let_names.push(parse_name(tokens, true)?);
+            if !tokens.peek().is_colon() {
+                return Err(Error::Parse(
+                    tokens.peek().span(),
+                    "expected ':'".to_string(),
+                ));
+            }
+            tokens.next()?;
+        }
         params.push(parse_type(tokens)?);
     }
 
@@ -91,17 +113,38 @@ fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
 
     let (body, rbrace_span) = parse_body(tokens)?;
 
-    Ok(Item::Function {
-        name,
-        generics,
-        params,
-        returns,
-        body,
-        fn_span,
-        arrow_span,
-        lbrace_span,
-        rbrace_span,
-    })
+    if let Some(let_span) = let_span {
+        let let_stmt = Stmt::Let {
+            names: let_names,
+            body,
+            let_span,
+            lbrace_span,
+            rbrace_span,
+        };
+        Ok(Item::Function {
+            name,
+            generics,
+            params,
+            returns,
+            body: vec![let_stmt],
+            fn_span,
+            arrow_span,
+            lbrace_span,
+            rbrace_span,
+        })
+    } else {
+        Ok(Item::Function {
+            name,
+            generics,
+            params,
+            returns,
+            body,
+            fn_span,
+            arrow_span,
+            lbrace_span,
+            rbrace_span,
+        })
+    }
 }
 
 fn parse_generics(tokens: &mut Tokens) -> Result<Option<Generics>, Error> {

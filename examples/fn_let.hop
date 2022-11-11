@@ -1,3 +1,8 @@
-fn let delta a: float b: float c: float -> float {
+fn delta let a: int b: int c: int -> int {
     (b*b - 4*a*c)
+}
+
+fn main {
+    1 2 3 delta -8 == assert
+    4 8 0 delta 64 == assert
 }
