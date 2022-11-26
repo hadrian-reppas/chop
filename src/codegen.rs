@@ -871,15 +871,25 @@ pub fn escape_names(names: &[&str]) -> String {
     out
 }
 
-// TODO: do this better
 fn escape_string(s: &str) -> String {
     let mut out = "\"".to_string();
+    let mut prev_esc = false;
     for c in s.chars() {
-        match c.len_utf8() {
-            1 => out.push_str(&format!("\\x{:01$x}", c as u32, 2)),
-            2 => out.push_str(&format!("\\u{:01$x}", c as u32, 4)),
-            3 | 4 => out.push_str(&format!("\\U{:01$x}", c as u32, 8)),
-            _ => unreachable!(),
+        if c.is_ascii_alphanumeric() || c == ' ' || c == '_' {
+            if prev_esc && c.is_ascii_hexdigit() {
+                out.push_str(&format!("\\x{:01$x}", c as u32, 2));
+            } else {
+                out.push(c);
+                prev_esc = false;
+            }
+        } else {
+            match c.len_utf8() {
+                1 => out.push_str(&format!("\\x{:01$x}", c as u32, 2)),
+                2 => out.push_str(&format!("\\u{:01$x}", c as u32, 4)),
+                3 | 4 => out.push_str(&format!("\\U{:01$x}", c as u32, 8)),
+                _ => unreachable!(),
+            }
+            prev_esc = true;
         }
     }
     out.push('"');

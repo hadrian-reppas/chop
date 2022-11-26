@@ -15,8 +15,6 @@ use crate::program::{Program, ProgramContext, ProgramMember, ProgramOp, ProgramS
 use crate::types::{GSignature, GTypeId, Kind, Types};
 use crate::{color, reset};
 
-// TODO: (rust style) remove trailing commas from macro calls
-
 // TODO: topological sort on global uses in global inits (check
 //       call graph to find dependencies)
 
@@ -1753,8 +1751,6 @@ impl Context {
         }
     }
 
-    // TODO: functions that take nothing and return a single value should be
-    //       allowed as names (fn f -> int can be 'f' or 'f()')
     fn check_expr(&mut self, expr: &Expr) -> Result<GTypeId, Error> {
         macro_rules! binop {
             ($op:expr, $left:ident, $right:ident, $span:expr) => {{
@@ -1829,23 +1825,36 @@ impl Context {
             Expr::Char(_, _) => Ok(self.types.int()),
             Expr::Byte(_, _) => Ok(self.types.byte()),
             Expr::String(_, _) => Ok(self.types.byte_ptr()),
-            Expr::Name(qname) => match qname {
-                QualifiedName::Straight(name) => {
-                    if let Some((_, ty)) = self.get_let_bind(name.name) {
-                        Ok(ty)
+            Expr::Name(qname) => {
+                if let QualifiedName::Straight(name) = qname && let Some((_, ty)) = self.get_let_bind(name.name) {
+                    Ok(ty)
+                } else {
+                    let NameInfo { signature, binds, .. } = self.get_qsbi(&[], qname)?;
+                    if signature.returns.len() == 1 {
+                        Ok(self.types.substitute(signature.returns[0], &binds))
                     } else {
                         Err(Error::Type(
-                            name.span,
-                            "names in expressions must be let variables (for now)".to_string(),
-                            vec![],
+                            qname.span(),
+                            "expression functions must return a single value".to_string(),
+                            vec![
+                                Note::new(
+                                    None,
+                                    format!("'{}' returns {} values", qname.name().name, signature.returns.len()),
+                                ),
+                                Note::new(
+                                    None,
+                                    format!(
+                                        "'{}' has signature {}{}{}",
+                                        qname.name().name,
+                                        color!(Blue),
+                                        self.types.format_signature(&signature),
+                                        reset!()
+                                    ),
+                                ),
+                            ],
                         ))
                     }
                 }
-                QualifiedName::Qualified(module, _) => Err(Error::Type(
-                    module.span,
-                    "names in expressions must be let variables (for now)".to_string(),
-                    vec![],
-                )),
             },
             Expr::Add(left, right, span) => binop!("+", left, right, *span),
             Expr::And(left, right, span) => binop!("&", left, right, *span),

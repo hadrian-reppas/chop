@@ -94,7 +94,6 @@ fn handle_file(
             match parse_file(leaked) {
                 Ok(unit) => handle_file(unit, new_path, new_file_path, map)?,
                 Err(err) => match err {
-                    // TODO: add note if they are trying to import a directory
                     Error::Io(msg) => return Err(Error::Import(Some(err_span), msg, vec![])),
                     other => return Err(other),
                 },

@@ -6,7 +6,13 @@ fn print_twice bool {
 }
 
 fn main {
-    1 int_helpers::print_twice ln 
-    2.0 print_twice ln
-    true print_twice
+    (one + five_halves) putln
+}
+
+fn one -> int {
+    1
+}
+
+fn five_halves -> float {
+    2.5
 }

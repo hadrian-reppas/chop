@@ -15,8 +15,6 @@ lazy_static! {
         HashSet::from(["byte", "int", "float", "bool", "ptr", "_"]);
 }
 
-// TODO: import path::to::file::{ _ } imports all functions/structs in that file
-
 pub fn parse(mut tokens: Tokens) -> Result<Vec<Item>, Error> {
     let mut items = Vec::new();
     loop {

@@ -35,7 +35,6 @@ fn main() {
 fn transpile(file_name: &str) -> Result<(), error::Error> {
     let main_unit = parse::parse_file(file_name)?;
     let (units, main_unit_prefix) = imports::collect(main_unit, PathBuf::from(file_name))?;
-    println!("{:#?}", units.keys().collect::<Vec<_>>());
     let info = typecheck::check(&units, &main_unit_prefix)?;
     let code = codegen::generate(info);
     let mut file = File::create("out.c").unwrap();
