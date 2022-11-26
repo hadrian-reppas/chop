@@ -320,7 +320,7 @@ impl Context {
                                                     format!(
                                                         "previously imported signature is {}{}{}",
                                                         color!(Blue),
-                                                        self.types.format_signature(existing_sig),
+                                                        self.types.format_signature(existing_sig, &HashMap::new(), &HashMap::new()),
                                                         reset!()
                                                     ),
                                                 ),
@@ -329,7 +329,7 @@ impl Context {
                                                     format!(
                                                         "new siganture is {}{}{}",
                                                         color!(Blue),
-                                                        self.types.format_signature(new_sig),
+                                                        self.types.format_signature(new_sig, &HashMap::new(), &HashMap::new()),
                                                         reset!()
                                                     ),
                                                 ),
@@ -346,7 +346,7 @@ impl Context {
                                                         format!("builtin function '{}' has signature {}{}{}",
                                                             name.name,
                                                             color!(Blue),
-                                                            self.types.format_signature(existing_sig),
+                                                            self.types.format_signature(existing_sig, &HashMap::new(), &HashMap::new()),
                                                             reset!()
                                                         )
                                                     ),
@@ -355,7 +355,7 @@ impl Context {
                                                         format!("imported function '{}' has signature {}{}{}",
                                                             name.name,
                                                             color!(Blue),
-                                                            self.types.format_signature(new_sig),
+                                                            self.types.format_signature(new_sig, &HashMap::new(), &HashMap::new()),
                                                             reset!()
                                                         )
                                                     ),
@@ -371,7 +371,7 @@ impl Context {
                                                         format!("definition of '{}' has signature {}{}{}",
                                                             name.name,
                                                             color!(Blue),
-                                                            self.types.format_signature(existing_sig),
+                                                            self.types.format_signature(existing_sig, &HashMap::new(), &HashMap::new()),
                                                             reset!()
                                                         )
                                                     ),
@@ -380,7 +380,7 @@ impl Context {
                                                         format!("imported function '{}' has signature {}{}{}",
                                                             name.name,
                                                             color!(Blue),
-                                                            self.types.format_signature(new_sig),
+                                                            self.types.format_signature(new_sig, &HashMap::new(), &HashMap::new()),
                                                             reset!()
                                                         )
                                                     ),
@@ -400,7 +400,7 @@ impl Context {
                                                         format!("generated function '{}' has signature {}{}{}",
                                                             name.name,
                                                             color!(Blue),
-                                                            self.types.format_signature(existing_sig),
+                                                            self.types.format_signature(existing_sig, &HashMap::new(), &HashMap::new()),
                                                             reset!()
                                                         )
                                                     ),
@@ -409,7 +409,7 @@ impl Context {
                                                         format!("imported function '{}' has signature {}{}{}",
                                                             name.name,
                                                             color!(Blue),
-                                                            self.types.format_signature(new_sig),
+                                                            self.types.format_signature(new_sig, &HashMap::new(), &HashMap::new()),
                                                             reset!()
                                                         )
                                                     ),
@@ -663,7 +663,11 @@ impl Context {
                                 format!(
                                     "expected {}{}{}",
                                     color!(Blue),
-                                    self.types.format_types(&returns),
+                                    self.types.format_types(
+                                        &returns,
+                                        &self.struct_qual,
+                                        &self.module_qual
+                                    ),
                                     reset!()
                                 ),
                             ),
@@ -672,7 +676,11 @@ impl Context {
                                 format!(
                                     "found {}{}{}",
                                     color!(Blue),
-                                    self.types.format_types(&stack_types),
+                                    self.types.format_types(
+                                        &stack_types,
+                                        &self.struct_qual,
+                                        &self.module_qual
+                                    ),
                                     reset!()
                                 ),
                             ),
@@ -735,7 +743,7 @@ impl Context {
                                     format!(
                                         "declared type is {}{}{}",
                                         color!(Blue),
-                                        self.types.format(ty),
+                                        self.types.format(ty, &self.struct_qual, &self.module_qual),
                                         reset!()
                                     ),
                                 ),
@@ -744,7 +752,11 @@ impl Context {
                                     format!(
                                         "stack is {}{}{}",
                                         color!(Blue),
-                                        self.types.format_stack(&stack),
+                                        self.types.format_stack(
+                                            &stack,
+                                            &self.struct_qual,
+                                            &self.module_qual
+                                        ),
                                         reset!()
                                     ),
                                 ),
@@ -836,7 +848,8 @@ impl Context {
                     format!(
                         "stack is {}{}{}",
                         color!(Blue),
-                        self.types.format_stack(stack),
+                        self.types
+                            .format_stack(stack, &self.struct_qual, &self.module_qual),
                         reset!()
                     ),
                 )],
@@ -849,7 +862,8 @@ impl Context {
             format!(
                 "before else if block, stack is {}{}{} ({})",
                 color!(Blue),
-                self.types.format_stack(stack),
+                self.types
+                    .format_stack(stack, &self.struct_qual, &self.module_qual),
                 reset!(),
                 lbrace_span.location()
             )
@@ -857,7 +871,8 @@ impl Context {
             format!(
                 "before if block, stack is {}{}{} ({})",
                 color!(Blue),
-                self.types.format_stack(stack),
+                self.types
+                    .format_stack(stack, &self.struct_qual, &self.module_qual),
                 reset!(),
                 lbrace_span.location()
             )
@@ -899,7 +914,11 @@ impl Context {
                                 format!(
                                     "after else if block, stack is {}{}{} ({})",
                                     color!(Blue),
-                                    self.types.format_stack(stack),
+                                    self.types.format_stack(
+                                        stack,
+                                        &self.struct_qual,
+                                        &self.module_qual
+                                    ),
                                     reset!(),
                                     rbrace_span.location()
                                 ),
@@ -910,7 +929,11 @@ impl Context {
                                 format!(
                                     "after if block, stack is {}{}{} ({})",
                                     color!(Blue),
-                                    self.types.format_stack(stack),
+                                    self.types.format_stack(
+                                        stack,
+                                        &self.struct_qual,
+                                        &self.module_qual
+                                    ),
                                     reset!(),
                                     rbrace_span.location()
                                 ),
@@ -921,7 +944,11 @@ impl Context {
                             format!(
                                 "after else block, stack is {}{}{} ({})",
                                 color!(Blue),
-                                self.types.format_stack(&else_stack),
+                                self.types.format_stack(
+                                    &else_stack,
+                                    &self.struct_qual,
+                                    &self.module_qual
+                                ),
                                 reset!(),
                                 else_part.rbrace_span.location()
                             ),
@@ -944,7 +971,11 @@ impl Context {
                                 format!(
                                     "after else if block, stack is {}{}{} ({})",
                                     color!(Blue),
-                                    self.types.format_stack(stack),
+                                    self.types.format_stack(
+                                        stack,
+                                        &self.struct_qual,
+                                        &self.module_qual
+                                    ),
                                     reset!(),
                                     rbrace_span.location()
                                 ),
@@ -955,7 +986,11 @@ impl Context {
                                 format!(
                                     "after if block, stack is {}{}{} ({})",
                                     color!(Blue),
-                                    self.types.format_stack(stack),
+                                    self.types.format_stack(
+                                        stack,
+                                        &self.struct_qual,
+                                        &self.module_qual
+                                    ),
                                     reset!(),
                                     rbrace_span.location()
                                 ),
@@ -1002,7 +1037,8 @@ impl Context {
                     format!(
                         "stack is {}{}{}",
                         color!(Blue),
-                        self.types.format_stack(stack),
+                        self.types
+                            .format_stack(stack, &self.struct_qual, &self.module_qual),
                         reset!()
                     ),
                 )],
@@ -1023,7 +1059,11 @@ impl Context {
                         format!(
                             "before test, stack is {}{}{}",
                             color!(Blue),
-                            self.types.format_stack(&stack_before),
+                            self.types.format_stack(
+                                &stack_before,
+                                &self.struct_qual,
+                                &self.module_qual
+                            ),
                             reset!()
                         ),
                     ),
@@ -1032,7 +1072,8 @@ impl Context {
                         format!(
                             "after test, stack is {}{}{}",
                             color!(Blue),
-                            self.types.format_stack(stack),
+                            self.types
+                                .format_stack(stack, &self.struct_qual, &self.module_qual),
                             reset!()
                         ),
                     ),
@@ -1063,7 +1104,11 @@ impl Context {
                         format!(
                             "before while block, stack is {}{}{}",
                             color!(Blue),
-                            self.types.format_stack(&stack_before),
+                            self.types.format_stack(
+                                &stack_before,
+                                &self.struct_qual,
+                                &self.module_qual
+                            ),
                             reset!()
                         ),
                     ),
@@ -1072,7 +1117,8 @@ impl Context {
                         format!(
                             "after while block, stack is {}{}{}",
                             color!(Blue),
-                            self.types.format_stack(stack),
+                            self.types
+                                .format_stack(stack, &self.struct_qual, &self.module_qual),
                             reset!()
                         ),
                     ),
@@ -1130,7 +1176,8 @@ impl Context {
                     format!(
                         "stack is {}{}{}",
                         color!(Blue),
-                        self.types.format_stack(stack),
+                        self.types
+                            .format_stack(stack, &self.struct_qual, &self.module_qual),
                         reset!()
                     ),
                 )],
@@ -1151,7 +1198,11 @@ impl Context {
                         format!(
                             "before bound, stack is {}{}{}",
                             color!(Blue),
-                            self.types.format_stack(&stack_before),
+                            self.types.format_stack(
+                                &stack_before,
+                                &self.struct_qual,
+                                &self.module_qual
+                            ),
                             reset!()
                         ),
                     ),
@@ -1160,7 +1211,8 @@ impl Context {
                         format!(
                             "after bound, stack is {}{}{}",
                             color!(Blue),
-                            self.types.format_stack(stack),
+                            self.types
+                                .format_stack(stack, &self.struct_qual, &self.module_qual),
                             reset!()
                         ),
                     ),
@@ -1183,7 +1235,8 @@ impl Context {
                     format!(
                         "stack is {}{}{}",
                         color!(Blue),
-                        self.types.format_stack(stack),
+                        self.types
+                            .format_stack(stack, &self.struct_qual, &self.module_qual),
                         reset!()
                     ),
                 )],
@@ -1204,7 +1257,11 @@ impl Context {
                         format!(
                             "before bound, stack is {}{}{}",
                             color!(Blue),
-                            self.types.format_stack(&stack_before),
+                            self.types.format_stack(
+                                &stack_before,
+                                &self.struct_qual,
+                                &self.module_qual
+                            ),
                             reset!()
                         ),
                     ),
@@ -1213,7 +1270,8 @@ impl Context {
                         format!(
                             "after bound, stack is {}{}{}",
                             color!(Blue),
-                            self.types.format_stack(stack),
+                            self.types
+                                .format_stack(stack, &self.struct_qual, &self.module_qual),
                             reset!()
                         ),
                     ),
@@ -1247,7 +1305,11 @@ impl Context {
                         format!(
                             "before for block, stack is {}{}{}",
                             color!(Blue),
-                            self.types.format_stack(&stack_before),
+                            self.types.format_stack(
+                                &stack_before,
+                                &self.struct_qual,
+                                &self.module_qual
+                            ),
                             reset!()
                         ),
                     ),
@@ -1256,7 +1318,8 @@ impl Context {
                         format!(
                             "after for block, stack is {}{}{}",
                             color!(Blue),
-                            self.types.format_stack(stack),
+                            self.types
+                                .format_stack(stack, &self.struct_qual, &self.module_qual),
                             reset!()
                         ),
                     ),
@@ -1305,7 +1368,8 @@ impl Context {
                     format!(
                         "stack is {}{}{}",
                         color!(Blue),
-                        self.types.format_stack(stack),
+                        self.types
+                            .format_stack(stack, &self.struct_qual, &self.module_qual),
                         reset!()
                     ),
                 )],
@@ -1419,7 +1483,11 @@ impl Context {
                             format!(
                                 "stack is {}{}{}",
                                 color!(Blue),
-                                self.types.format_stack(stack),
+                                self.types.format_stack(
+                                    stack,
+                                    &self.struct_qual,
+                                    &self.module_qual
+                                ),
                                 reset!()
                             ),
                         )],
@@ -1449,7 +1517,11 @@ impl Context {
                             format!(
                                 "stack is {}{}{}",
                                 color!(Blue),
-                                self.types.format_stack(stack),
+                                self.types.format_stack(
+                                    stack,
+                                    &self.struct_qual,
+                                    &self.module_qual
+                                ),
                                 reset!()
                             ),
                         )],
@@ -1482,7 +1554,11 @@ impl Context {
                             format!(
                                 "stack is {}{}{}",
                                 color!(Blue),
-                                self.types.format_stack(stack),
+                                self.types.format_stack(
+                                    stack,
+                                    &self.struct_qual,
+                                    &self.module_qual
+                                ),
                                 reset!()
                             ),
                         )],
@@ -1504,7 +1580,7 @@ impl Context {
                             format!(
                                 "cast target is {}{}{}",
                                 color!(Blue),
-                                self.types.format(ty),
+                                self.types.format(ty, &self.struct_qual, &self.module_qual),
                                 reset!()
                             ),
                         )],
@@ -1526,7 +1602,11 @@ impl Context {
                             format!(
                                 "stack is {}{}{}",
                                 color!(Blue),
-                                self.types.format_stack(stack),
+                                self.types.format_stack(
+                                    stack,
+                                    &self.struct_qual,
+                                    &self.module_qual
+                                ),
                                 reset!()
                             ),
                         )],
@@ -1564,7 +1644,8 @@ impl Context {
                 color!(Green),
                 reset!(),
                 color!(Blue),
-                self.types.format_stack(stack),
+                self.types
+                    .format_stack(stack, &self.struct_qual, &self.module_qual),
                 reset!(),
                 qname.span().location()
             );
@@ -1655,7 +1736,11 @@ impl Context {
                                 format!(
                                     "stack is {}{}{}",
                                     color!(Blue),
-                                    self.types.format_stack(stack),
+                                    self.types.format_stack(
+                                        stack,
+                                        &self.struct_qual,
+                                        &self.module_qual
+                                    ),
                                     reset!()
                                 ),
                             ))
@@ -1667,7 +1752,11 @@ impl Context {
                                         "'{}' has signature {}{}{}",
                                         name.name,
                                         color!(Blue),
-                                        self.types.format_signature(s),
+                                        self.types.format_signature(
+                                            s,
+                                            &self.struct_qual,
+                                            &self.module_qual
+                                        ),
                                         reset!()
                                     ),
                                 )
@@ -1713,7 +1802,11 @@ impl Context {
                             format!(
                                 "stack is {}{}{}",
                                 color!(Blue),
-                                self.types.format_stack(stack),
+                                self.types.format_stack(
+                                    stack,
+                                    &self.struct_qual,
+                                    &self.module_qual
+                                ),
                                 reset!()
                             ),
                         ))
@@ -1725,7 +1818,11 @@ impl Context {
                                     "'{}' has signature {}{}{}",
                                     name.name,
                                     color!(Blue),
-                                    self.types.format_signature(s),
+                                    self.types.format_signature(
+                                        s,
+                                        &self.struct_qual,
+                                        &self.module_qual
+                                    ),
                                     reset!()
                                 ),
                             )
@@ -1767,7 +1864,11 @@ impl Context {
                                     "'{}' has signature {}{}{}",
                                     $op,
                                     color!(Blue),
-                                    self.types.format_signature(&signature),
+                                    self.types.format_signature(
+                                        &signature,
+                                        &self.struct_qual,
+                                        &self.module_qual
+                                    ),
                                     reset!()
                                 ),
                             ),
@@ -1800,7 +1901,11 @@ impl Context {
                                     "'{}' has signature {}{}{}",
                                     $op,
                                     color!(Blue),
-                                    self.types.format_signature(&signature),
+                                    self.types.format_signature(
+                                        &signature,
+                                        &self.struct_qual,
+                                        &self.module_qual
+                                    ),
                                     reset!()
                                 ),
                             ),
@@ -1839,7 +1944,7 @@ impl Context {
                                         "'{}' has signature {}{}{}",
                                         qname.name().name,
                                         color!(Blue),
-                                        self.types.format_signature(&signature),
+                                        self.types.format_signature(&signature, &self.struct_qual, &self.module_qual),
                                         reset!()
                                     ),
                                 ),
@@ -1904,7 +2009,7 @@ impl Context {
                                 format!(
                                     "'neg' has signature {}{}{}",
                                     color!(Blue),
-                                    self.types.format_signature(&signature),
+                                    self.types.format_signature(&signature, &self.struct_qual, &self.module_qual),
                                     reset!()
                                 ),
                             ),
@@ -1933,7 +2038,7 @@ impl Context {
                             format!(
                                 "stack is {}{}{}",
                                 color!(Blue),
-                                self.types.format_stack(&stack),
+                                self.types.format_stack(&stack, &self.struct_qual, &self.module_qual),
                                 reset!()
                             ),
                         )],
@@ -1963,7 +2068,7 @@ impl Context {
                                     "'{}' has signature {}{}{}",
                                     name.name().name,
                                     color!(Blue),
-                                    self.types.format_signature(&signature),
+                                    self.types.format_signature(&signature, &self.struct_qual, &self.module_qual),
                                     reset!()
                                 ),
                             ),
@@ -2046,8 +2151,16 @@ impl Context {
                                 format!(
                                     "'main' has signature {}{} -> {}{}",
                                     color!(Blue),
-                                    self.types.format_types(&params),
-                                    self.types.format_types(&returns),
+                                    self.types.format_types(
+                                        &params,
+                                        &self.struct_qual,
+                                        &self.module_qual
+                                    ),
+                                    self.types.format_types(
+                                        &returns,
+                                        &self.struct_qual,
+                                        &self.module_qual
+                                    ),
                                     reset!()
                                 ),
                             )],
@@ -2067,8 +2180,16 @@ impl Context {
                                 format!(
                                     "'main' has signature {}{} -> {}{}",
                                     color!(Blue),
-                                    self.types.format_types(&params),
-                                    self.types.format_types(&returns),
+                                    self.types.format_types(
+                                        &params,
+                                        &self.struct_qual,
+                                        &self.module_qual
+                                    ),
+                                    self.types.format_types(
+                                        &returns,
+                                        &self.struct_qual,
+                                        &self.module_qual
+                                    ),
                                     reset!()
                                 ),
                             )],
@@ -2433,7 +2554,7 @@ fn check_for_conflicts(
                 format!(
                     "'{name}' has signature {}{}{}",
                     color!(Blue),
-                    types.format_signature(existing),
+                    types.format_signature(existing, &HashMap::new(), &HashMap::new()),
                     reset!()
                 ),
             );

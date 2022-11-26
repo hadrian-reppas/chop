@@ -598,27 +598,46 @@ impl Types {
         }
     }
 
-    pub fn format(&self, id: GTypeId) -> String {
+    pub fn format(
+        &self,
+        id: GTypeId,
+        struct_qual: &HashMap<&str, Vec<&str>>,
+        module_qual: &HashMap<&str, Vec<&str>>,
+    ) -> String {
         match self.gtypes.get_by_right(&id).unwrap() {
             GType::Int(depth) => format!("{}int", "*".repeat(*depth)),
             GType::Float(depth) => format!("{}float", "*".repeat(*depth)),
             GType::Byte(depth) => format!("{}byte", "*".repeat(*depth)),
             GType::Bool(depth) => format!("{}bool", "*".repeat(*depth)),
             GType::Custom(depth, name, generics) => {
-                // TODO: do not always fully qualify struct names
-                //     for (before, after) in struct_qual {
-                //         if after == name {
-                //             before.join("::")
-                //         }
-                //     }
+                let mut nname = None;
+                for (alias, qname) in struct_qual {
+                    if name == qname {
+                        nname = Some(alias.to_string());
+                        break;
+                    }
+                }
+                if nname.is_none() {
+                    for qualified in module_qual.values() {
+                        if name.len() == qualified.len() + 1 && name.starts_with(qualified) {
+                            nname = Some(format!(
+                                "{}::{}",
+                                name[name.len() - 2],
+                                name[name.len() - 1]
+                            ));
+                            break;
+                        }
+                    }
+                }
+                let nname = nname.unwrap_or_else(|| name.join("::"));
                 if generics.is_empty() {
-                    format!("{}{}", "*".repeat(*depth), name.join("::"))
+                    format!("{}{}", "*".repeat(*depth), nname)
                 } else {
                     format!(
                         "{}{}{}",
                         "*".repeat(*depth),
-                        name.join("::"),
-                        self.format_types(generics)
+                        nname,
+                        self.format_types(generics, struct_qual, module_qual)
                     )
                 }
             }
@@ -626,35 +645,50 @@ impl Types {
         }
     }
 
-    pub fn format_types(&self, types: &[GTypeId]) -> String {
+    pub fn format_types(
+        &self,
+        types: &[GTypeId],
+        struct_qual: &HashMap<&str, Vec<&str>>,
+        module_qual: &HashMap<&str, Vec<&str>>,
+    ) -> String {
         let mut out = "[".to_string();
         for (i, id) in types.iter().copied().enumerate() {
             if i > 0 {
                 out.push_str(", ");
             }
-            out.push_str(&self.format(id));
+            out.push_str(&self.format(id, struct_qual, module_qual));
         }
         out.push(']');
         out
     }
 
-    pub fn format_stack(&self, stack: &[(usize, GTypeId)]) -> String {
+    pub fn format_stack(
+        &self,
+        stack: &[(usize, GTypeId)],
+        struct_qual: &HashMap<&str, Vec<&str>>,
+        module_qual: &HashMap<&str, Vec<&str>>,
+    ) -> String {
         let mut out = "[".to_string();
         for (i, (_, id)) in stack.iter().copied().enumerate() {
             if i > 0 {
                 out.push_str(", ");
             }
-            out.push_str(&self.format(id));
+            out.push_str(&self.format(id, struct_qual, module_qual));
         }
         out.push(']');
         out
     }
 
-    pub fn format_signature(&self, signature: &GSignature) -> String {
+    pub fn format_signature(
+        &self,
+        signature: &GSignature,
+        struct_qual: &HashMap<&str, Vec<&str>>,
+        module_qual: &HashMap<&str, Vec<&str>>,
+    ) -> String {
         let mut out = String::new();
-        out.push_str(&self.format_types(&signature.params));
+        out.push_str(&self.format_types(&signature.params, struct_qual, module_qual));
         out.push_str(" -> ");
-        out.push_str(&self.format_types(&signature.returns));
+        out.push_str(&self.format_types(&signature.returns, struct_qual, module_qual));
         out
     }
 }
