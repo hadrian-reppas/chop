@@ -5,9 +5,9 @@ use bimap::BiMap;
 use petgraph::algo::toposort;
 use petgraph::Graph;
 
-use crate::ast::{Item, Name, PType};
+use crate::ast::{Name, PType, QualifiedName};
 use crate::codegen;
-use crate::error::{Error, Note};
+use crate::error::Error;
 use crate::lex::Span;
 
 #[repr(transparent)]
@@ -237,26 +237,42 @@ impl Types {
         struct_qual: &HashMap<&'static str, Vec<&'static str>>,
         module_qual: &HashMap<&'static str, Vec<&'static str>>,
     ) -> Result<GTypeId, Error> {
-        let name = ty.name.name;
-        let depth = ty.stars.map_or(0, |s| s.name.len());
-        let (generic_params, qualified) =
-            if ty.name.module.is_none() && generics.iter().any(|g| g.name == name.name) {
-                if ty.generics.is_some() {
-                    return Err(Error::Type(
-                        name.span,
-                        "generics cannot have generic parameters".to_string(),
-                        vec![],
-                    ));
+        let span = ty.name.span();
+        let name = span.text;
+        let (generic_params, qualified) = if let QualifiedName::Straight(name) = ty.name
+            && generics.iter().any(|g| g.name == name.name)
+        {
+            if ty.generics.is_some() {
+                return Err(Error::Type(
+                    name.span,
+                    "generics cannot have generic parameters".to_string(),
+                    vec![],
+                ));
+            }
+            (Vec::new(), Vec::new())
+        } else if ty.name.is_just("int")
+            || ty.name.is_just("float")
+            || ty.name.is_just("byte")
+            || ty.name.is_just("bool")
+        {
+            (Vec::new(), Vec::new())
+        } else {
+            let (generic_count, qual_struct) = match ty.name {
+                QualifiedName::Straight(name) => {
+                    if let Some(qual_struct) = struct_qual.get(name.name) {
+                        (
+                            *self.generic_counts.get(qual_struct).unwrap(),
+                            qual_struct.clone(),
+                        )
+                    } else {
+                        return Err(Error::Type(
+                            name.span,
+                            format!("no type '{}' in scope", name.name),
+                            vec![],
+                        ));
+                    }
                 }
-                (Vec::new(), Vec::new())
-            } else if ty.name.is_just("int")
-                || ty.name.is_just("float")
-                || ty.name.is_just("byte")
-                || ty.name.is_just("bool")
-            {
-                (Vec::new(), Vec::new())
-            } else {
-                let (generic_count, qual_struct) = if let Some((module, _, _)) = ty.name.module {
+                QualifiedName::Qualified(module, name) => {
                     if let Some(qual_module) = module_qual.get(module.name) {
                         let mut qual_struct = qual_module.clone();
                         qual_struct.push(name.name);
@@ -276,69 +292,61 @@ impl Types {
                             vec![],
                         ));
                     }
-                } else if let Some(qual_struct) = struct_qual.get(name.name) {
+                }
+            };
+            if generic_count == 0 {
+                if ty.generics.is_some() {
+                    return Err(Error::Type(
+                        span,
+                        format!("type '{}' does not have generic parameters", name),
+                        vec![],
+                    ));
+                }
+                (Vec::new(), qual_struct)
+            } else if let Some(gens) = &ty.generics {
+                if gens.types.len() == generic_count {
                     (
-                        *self.generic_counts.get(qual_struct).unwrap(),
+                        gens.types
+                            .iter()
+                            .map(|ty| self.convert(ty, generics, struct_qual, module_qual))
+                            .collect::<Result<_, _>>()?,
                         qual_struct.clone(),
                     )
                 } else {
                     return Err(Error::Type(
-                        name.span,
-                        format!("no type '{}' in scope", name.name),
-                        vec![],
-                    ));
-                };
-                if generic_count == 0 {
-                    if ty.generics.is_some() {
-                        return Err(Error::Type(
-                            name.span,
-                            format!("type '{}' does not have generic parameters", name.name),
-                            vec![],
-                        ));
-                    }
-                    (Vec::new(), qual_struct)
-                } else if let Some(gens) = &ty.generics {
-                    if gens.types.len() == generic_count {
-                        (
-                            gens.types
-                                .iter()
-                                .map(|ty| self.convert(ty, generics, struct_qual, module_qual))
-                                .collect::<Result<_, _>>()?,
-                            qual_struct.clone(),
-                        )
-                    } else {
-                        return Err(Error::Type(
-                            name.span,
-                            format!(
-                                "type '{}' expects {} generic parameter{} (found {})",
-                                name.name,
-                                generic_count,
-                                if generic_count == 1 { "" } else { "s" },
-                                gens.types.len(),
-                            ),
-                            vec![],
-                        ));
-                    }
-                } else {
-                    return Err(Error::Type(
-                        name.span,
+                        span,
                         format!(
-                            "type '{}' expects {} generic parameter{} (found 0)",
-                            name.name,
+                            "type '{}' expects {} generic parameter{} (found {})",
+                            name,
                             generic_count,
                             if generic_count == 1 { "" } else { "s" },
+                            gens.types.len(),
                         ),
                         vec![],
                     ));
                 }
-            };
-        let gtype = match name.name {
+            } else {
+                return Err(Error::Type(
+                    span,
+                    format!(
+                        "type '{}' expects {} generic parameter{} (found 0)",
+                        name,
+                        generic_count,
+                        if generic_count == 1 { "" } else { "s" },
+                    ),
+                    vec![],
+                ));
+            }
+        };
+
+        let depth = ty.stars.map_or(0, |s| s.name.len());
+        let gtype = match name {
             "int" => GType::Int(depth),
             "float" => GType::Float(depth),
             "byte" => GType::Byte(depth),
             "bool" => GType::Bool(depth),
             _ => {
-                if let Some(index) = generics.iter().position(|g| g.name == name.name) {
+                if let Some(index) = generics.iter().position(|g| g.name == name) {
                     GType::Generic(depth, index)
                 } else {
                     GType::Custom(depth, qualified, generic_params)
@@ -496,10 +504,6 @@ impl Types {
 
     pub fn byte_ptr_ptr(&mut self) -> GTypeId {
         self.get_or_insert(GType::Byte(2))
-    }
-
-    pub fn overlap(&mut self, a: GTypeId, b: GTypeId) -> bool {
-        self.bind(a, b).is_ok()
     }
 
     pub fn ref_n(&mut self, id: GTypeId, n: usize) -> GTypeId {

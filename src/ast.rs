@@ -1,7 +1,6 @@
 use std::fmt;
 
 use crate::lex::{Span, Token};
-use std::hash::{Hash, Hasher};
 
 #[derive(Clone, Copy)]
 pub struct Name {
@@ -26,15 +25,29 @@ impl Name {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct QualifiedName {
-    pub name: Name,
-    pub module: Option<(Name, Span, Span)>,
+#[derive(Debug, Clone, Copy)]
+pub enum QualifiedName {
+    Straight(Name),
+    Qualified(Name, Name),
 }
 
 impl QualifiedName {
     pub fn is_just(&self, name: &str) -> bool {
-        self.module.is_none() && self.name.name == name
+        match self {
+            QualifiedName::Straight(n) => n.name == name,
+            QualifiedName::Qualified(_, _) => false,
+        }
+    }
+
+    pub fn span(&self) -> Span {
+        self.name().span
+    }
+
+    pub fn name(&self) -> Name {
+        match self {
+            QualifiedName::Straight(name) => *name,
+            QualifiedName::Qualified(_, name) => *name,
+        }
     }
 }
 
@@ -358,7 +371,7 @@ impl Op {
             | Op::Assert(span)
             | Op::Abort(span, _)
             | Op::Expr(_, span) => *span,
-            Op::Name(qname) => qname.name.span,
+            Op::Name(qname) => qname.span(),
         }
     }
 }

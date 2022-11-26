@@ -69,7 +69,7 @@ impl From<Span> for QualifiedName {
             name: span.text,
             span,
         };
-        QualifiedName { name, module: None }
+        QualifiedName::Straight(name)
     }
 }
 

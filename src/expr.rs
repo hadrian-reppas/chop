@@ -88,7 +88,7 @@ impl Tok {
             | Tok::RShift(span)
             | Tok::Not(span)
             | Tok::Group(_, span) => *span,
-            Tok::Name(name) => name.name.span,
+            Tok::Name(qname) => qname.span(),
         }
     }
 }
@@ -114,22 +114,13 @@ fn convert(tokens: &mut Tokens) -> Result<Vec<Tok>, Error> {
             Token::String(s, span) => toks.push(Tok::String(s, span)),
             Token::Name(span) => {
                 let first = span.into();
-                let name = if tokens.peek().is_colon() {
-                    let colon1 = tokens.next()?.span();
-                    let colon2 = parse_colon(tokens)?;
+                let tok = if tokens.peek().is_colon() {
+                    tokens.next()?.span();
+                    parse_colon(tokens)?;
                     let second = parse_name(tokens, false)?;
-                    QualifiedName {
-                        name: second,
-                        module: Some((first, colon1, colon2)),
-                    }
+                    Tok::Name(QualifiedName::Qualified(first, second))
                 } else {
-                    QualifiedName {
-                        name: first,
-                        module: None,
-                    }
-                };
-                if name.module.is_none() {
-                    toks.push(match name.name.name {
+                    match first.name {
                         "+" => Tok::Add(span),
                         "&" => Tok::And(span),
                         "/" => Tok::Divide(span),
@@ -147,11 +138,10 @@ fn convert(tokens: &mut Tokens) -> Result<Vec<Tok>, Error> {
                         "!" => Tok::Not(span),
                         "<<" => Tok::LShift(span),
                         ">>" => Tok::RShift(span),
-                        _ => Tok::Name(name),
-                    });
-                } else {
-                    toks.push(Tok::Name(name));
-                }
+                        _ => Tok::Name(QualifiedName::Straight(first)),
+                    }
+                };
+                toks.push(tok);
             }
             Token::LParen(span) => {
                 toks.push(Tok::LParen(span));

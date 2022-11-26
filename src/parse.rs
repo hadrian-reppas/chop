@@ -328,8 +328,8 @@ fn parse_import(tokens: &mut Tokens) -> Result<Item, Error> {
 fn parse_qualified_name(tokens: &mut Tokens, is_type: bool) -> Result<QualifiedName, Error> {
     let first = parse_name(tokens, false)?;
     if tokens.peek().is_colon() {
-        let colon1 = tokens.next()?.span();
-        let colon2 = parse_colon(tokens)?;
+        tokens.next()?.span();
+        parse_colon(tokens)?;
         let second = parse_name(tokens, false)?;
         if first.is_normal() {
             if is_type && !second.is_normal() {
@@ -338,10 +338,7 @@ fn parse_qualified_name(tokens: &mut Tokens, is_type: bool) -> Result<QualifiedN
                     "expected a normal name".to_string(),
                 ))
             } else {
-                Ok(QualifiedName {
-                    name: second,
-                    module: Some((first, colon1, colon2)),
-                })
+                Ok(QualifiedName::Qualified(first, second))
             }
         } else {
             Err(Error::Parse(
@@ -355,10 +352,7 @@ fn parse_qualified_name(tokens: &mut Tokens, is_type: bool) -> Result<QualifiedN
             "expected a normal name".to_string(),
         ))
     } else {
-        Ok(QualifiedName {
-            name: first,
-            module: None,
-        })
+        Ok(QualifiedName::Straight(first))
     }
 }
 
@@ -373,6 +367,7 @@ pub fn parse_colon(tokens: &mut Tokens) -> Result<Span, Error> {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 enum QualifiedNameOrPtr {
     QualifiedName(QualifiedName),
     Ptr(Name),
@@ -390,7 +385,7 @@ fn parse_type(tokens: &mut Tokens) -> Result<PType, Error> {
         }
         QualifiedNameOrPtr::Ptr(stars) => {
             let second = parse_qualified_name(tokens, true)?;
-            if second.name.is_normal() {
+            if second.name().is_normal() {
                 let generics = parse_type_generics(tokens)?;
                 Ok(PType {
                     stars: Some(stars),
@@ -399,7 +394,7 @@ fn parse_type(tokens: &mut Tokens) -> Result<PType, Error> {
                 })
             } else {
                 Err(Error::Parse(
-                    second.name.span,
+                    second.span(),
                     "type names must be normal".to_string(),
                 ))
             }
@@ -411,14 +406,13 @@ fn parse_qualified_name_or_ptr(tokens: &mut Tokens) -> Result<QualifiedNameOrPtr
     let first = parse_name(tokens, false)?;
     if first.is_normal() {
         if tokens.peek().is_colon() {
-            let colon1 = tokens.next()?.span();
-            let colon2 = parse_colon(tokens)?;
+            tokens.next()?.span();
+            parse_colon(tokens)?;
             let second = parse_name(tokens, false)?;
             if first.is_normal() {
-                Ok(QualifiedNameOrPtr::QualifiedName(QualifiedName {
-                    name: second,
-                    module: Some((first, colon1, colon2)),
-                }))
+                Ok(QualifiedNameOrPtr::QualifiedName(QualifiedName::Qualified(
+                    first, second,
+                )))
             } else {
                 Err(Error::Parse(
                     first.span,
@@ -426,10 +420,9 @@ fn parse_qualified_name_or_ptr(tokens: &mut Tokens) -> Result<QualifiedNameOrPtr
                 ))
             }
         } else {
-            Ok(QualifiedNameOrPtr::QualifiedName(QualifiedName {
-                name: first,
-                module: None,
-            }))
+            Ok(QualifiedNameOrPtr::QualifiedName(QualifiedName::Straight(
+                first,
+            )))
         }
     } else if first.is_ptr() {
         Ok(QualifiedNameOrPtr::Ptr(first))

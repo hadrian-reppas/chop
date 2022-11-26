@@ -174,7 +174,6 @@ impl Context {
                                         Some(*span),
                                         format!("'{}' was defined here", name.name),
                                     ),
-                                    _ => unreachable!(),
                                 };
                                 return Err(Error::Import(
                                     Some(name.span),
@@ -242,8 +241,6 @@ impl Context {
                 _ => {}
             }
         }
-        dbg!(prefix);
-        dbg!(&self.struct_qual);
         Ok(())
     }
 
@@ -454,8 +451,6 @@ impl Context {
                 full_path.pop();
             }
         }
-        dbg!(prefix);
-        dbg!(&self.function_qual);
         Ok(())
     }
 
@@ -597,182 +592,6 @@ impl Context {
         }
         Ok(())
     }
-
-    /*
-    fn init_signatures(
-        &mut self,
-        units: &HashMap<Vec<&'static str>, Vec<Item>>,
-        main_unit_prefix: &[&str],
-    ) -> Result<(), Error> {
-        for (prefix, unit) in units {
-            let is_main_unit = prefix == main_unit_prefix;
-            for item in unit {
-                for (name, signature) in self.get_signatures(item, prefix, is_main_unit)? {
-                    self.insert_signature(name, signature)?;
-                }
-            }
-        }
-        self.check_for_recursive_struct_defs(unit)?;
-        if let Some(mains) = self.signatures.get("main") {
-            if mains.len() == 1 {
-                let GSignature {
-                    params,
-                    returns,
-                    kind,
-                } = mains[0].clone();
-
-                if !params.is_empty() && params != [self.types.int(), self.types.byte_ptr_ptr()] {
-                    Err(Error::Type(
-                        kind.span().unwrap(),
-                        format!(
-                            "'main' must have parameters {}[]{} or {}[int, **byte]{}",
-                            color!(Blue),
-                            reset!(),
-                            color!(Blue),
-                            reset!(),
-                        ),
-                        vec![Note::new(
-                            None,
-                            format!(
-                                "'main' has signature {}{} -> {}{}",
-                                color!(Blue),
-                                self.types.format_types(&params),
-                                self.types.format_types(&returns),
-                                reset!(),
-                            ),
-                        )],
-                    ))
-                } else if !returns.is_empty() && returns != [self.types.int()] {
-                    Err(Error::Type(
-                        kind.span().unwrap(),
-                        format!(
-                            "'main' must return {}[]{} or {}[int]{}",
-                            color!(Blue),
-                            reset!(),
-                            color!(Blue),
-                            reset!(),
-                        ),
-                        vec![Note::new(
-                            None,
-                            format!(
-                                "'main' has signature {}{} -> {}{}",
-                                color!(Blue),
-                                self.types.format_types(&params),
-                                self.types.format_types(&returns),
-                                reset!(),
-                            ),
-                        )],
-                    ))
-                } else {
-                    Ok(())
-                }
-            } else {
-                Err(Error::Main(
-                    "multiple functions named 'main'".to_string(),
-                    mains
-                        .iter()
-                        .map(|s| {
-                            Note::new(
-                                Some(s.kind.span().unwrap()),
-                                "'main' defined here".to_string(),
-                            )
-                        })
-                        .collect(),
-                ))
-            }
-        } else {
-            Err(Error::Main("no function named 'main'".to_string(), vec![]))
-        }
-    }
-
-    fn check_for_recursive_struct_defs(&self, unit: &[Item]) -> Result<(), Error> {
-        let mut graph = Graph::new();
-        let mut map = HashMap::new();
-        macro_rules! get_id {
-            ($name:expr) => {
-                if let Some(id) = map.get($name) {
-                    *id
-                } else {
-                    let id = graph.add_node($name);
-                    map.insert($name, id);
-                    id
-                }
-            };
-        }
-        for (name, fields) in &self.struct_fields {
-            let name_id = get_id!(*name);
-            for (_, ty) in fields {
-                if let Some(cname) = self.types.nonptr_custom_name(*ty) {
-                    let cname_id = get_id!(cname);
-                    graph.add_edge(name_id, cname_id, ());
-                }
-            }
-        }
-        if let Err(start_id) = toposort(&graph, None).map_err(|c| c.node_id()) {
-            let mut stack = vec![start_id];
-            let mut prev = HashMap::new();
-            while let Some(mut id) = stack.pop() {
-                for neighbor_id in graph.neighbors(id) {
-                    if neighbor_id == start_id {
-                        let mut names = vec![*graph.node_weight(id).unwrap()];
-                        while let Some(prev_id) = prev.get(&id) {
-                            id = *prev_id;
-                            names.insert(0, *graph.node_weight(id).unwrap());
-                        }
-                        let name_set: HashSet<_> = names.iter().collect();
-                        let mut items = unit.iter();
-                        let span = loop {
-                            match items.next().unwrap() {
-                                Item::Struct { name, .. } if name_set.contains(&name.name) => {
-                                    break name.span;
-                                }
-                                _ => {}
-                            }
-                        };
-                        let mut rot = 0;
-                        for (i, name) in names.iter().enumerate() {
-                            if *name == span.text {
-                                rot = i;
-                                break;
-                            }
-                        }
-                        let mut front: Vec<_> = names.drain(..rot).collect();
-                        names.append(&mut front);
-                        let msg = match names.len() {
-                            1 => format!("struct '{}' is defined recursively", names[0]),
-                            2 => format!(
-                                "structs '{}' and '{}' are defined recursively",
-                                names[0], names[1]
-                            ),
-                            _ => {
-                                let mut msg = "structs ".to_string();
-                                #[allow(clippy::needless_range_loop)]
-                                for i in 0..(names.len() - 1) {
-                                    if i > 0 {
-                                        msg.push_str(", '");
-                                    } else {
-                                        msg.push('\'');
-                                    }
-                                    msg.push_str(names[i]);
-                                    msg.push('\'');
-                                }
-                                msg.push_str(" and '");
-                                msg.push_str(names.last().unwrap());
-                                msg.push_str("' are defined recursively");
-                                msg
-                            }
-                        };
-                        return Err(Error::Type(span, msg, vec![]));
-                    }
-                    prev.insert(neighbor_id, id);
-                    stack.push(neighbor_id);
-                }
-            }
-            unreachable!();
-        }
-        Ok(())
-    }
-    */
 
     fn check_item(
         &mut self,
@@ -1755,19 +1574,24 @@ impl Context {
                 color!(Blue),
                 self.types.format_stack(stack),
                 reset!(),
-                qname.name.span.location(),
+                qname.span().location(),
             );
             return Ok(());
         }
 
-        if qname.module.is_none() {
-            if let Some((var, ty)) = self.get_let_bind(qname.name.name) {
+        if let QualifiedName::Straight(name) = qname {
+            if let Some((var, ty)) = self.get_let_bind(name.name) {
                 stack.push((var, ty));
                 return Ok(());
             }
         }
 
-        let (qual_fn, signature, binds, index) = self.get_qsbi(stack, qname)?;
+        let NameInfo {
+            qualified,
+            signature,
+            binds,
+            index,
+        } = self.get_qsbi(stack, qname)?;
         let mut param_vars = Vec::new();
         for _ in 0..signature.params.len() {
             let (var, ty) = stack.pop().unwrap();
@@ -1790,7 +1614,7 @@ impl Context {
             ));
         } else {
             self.program_context.push_op(ProgramOp::Call(
-                qual_fn,
+                qualified,
                 index,
                 param_vars,
                 return_vars,
@@ -1813,21 +1637,85 @@ impl Context {
         &mut self,
         stack: &[(usize, GTypeId)],
         name: &QualifiedName,
-    ) -> Result<(Vec<&'static str>, GSignature, Vec<GTypeId>, usize), Error> {
-        if let Some((module, _, _)) = name.module {
-            if let Some(qual_module) = self.module_qual.get(module.name) {
-                let qual_fn = make_names(qual_module, name.name.name);
-                if let Some(signatures) = self.signatures.get(&qual_fn) {
-                    for (index, signature) in self.signatures[&qual_fn].iter().enumerate() {
-                        if let Some(binds) = get_binds(&mut self.types, stack, signature) {
-                            self.call_graph
-                                .insert(qual_fn.clone(), index, binds.clone());
-                            return Ok((qual_fn, signature.clone(), binds, index));
+    ) -> Result<NameInfo, Error> {
+        match name {
+            QualifiedName::Qualified(module, name) => {
+                if let Some(qual_module) = self.module_qual.get(module.name) {
+                    let qualified = make_names(qual_module, name.name);
+                    if let Some(signatures) = self.signatures.get(&qualified) {
+                        for (index, signature) in self.signatures[&qualified].iter().enumerate() {
+                            if let Some(binds) = get_binds(&mut self.types, stack, signature) {
+                                self.call_graph
+                                    .insert(qualified.clone(), index, binds.clone());
+                                return Ok(NameInfo {
+                                    qualified,
+                                    signature: signature.clone(),
+                                    binds,
+                                    index,
+                                });
+                            }
+                        }
+                        Err(Error::Type(
+                            name.span,
+                            format!("no variant of '{}' matches the stack", name.name),
+                            Some(Note::new(
+                                None,
+                                format!(
+                                    "stack is {}{}{}",
+                                    color!(Blue),
+                                    self.types.format_stack(stack),
+                                    reset!(),
+                                ),
+                            ))
+                            .into_iter()
+                            .chain(signatures.iter().map(|s| {
+                                Note::new(
+                                    None,
+                                    format!(
+                                        "'{}' has signature {}{}{}",
+                                        name.name,
+                                        color!(Blue),
+                                        self.types.format_signature(s),
+                                        reset!(),
+                                    ),
+                                )
+                            }))
+                            .collect(),
+                        ))
+                    } else {
+                        Err(Error::Type(
+                            name.span,
+                            format!("no function '{}' in module '{}'", name.name, module.name),
+                            vec![],
+                        ))
+                    }
+                } else {
+                    Err(Error::Type(
+                        module.span,
+                        format!("no module '{}' in scope", module.name),
+                        vec![],
+                    ))
+                }
+            }
+            QualifiedName::Straight(name) => {
+                if let Some(qual_fns) = self.function_qual.get(name.name) {
+                    for qual_fn in qual_fns {
+                        for (index, signature) in self.signatures[qual_fn].iter().enumerate() {
+                            if let Some(binds) = get_binds(&mut self.types, stack, signature) {
+                                self.call_graph
+                                    .insert(qual_fn.clone(), index, binds.clone());
+                                return Ok(NameInfo {
+                                    qualified: qual_fn.clone(),
+                                    signature: signature.clone(),
+                                    binds,
+                                    index,
+                                });
+                            }
                         }
                     }
                     Err(Error::Type(
-                        name.name.span,
-                        format!("no variant of '{}' matches the stack", name.name.name),
+                        name.span,
+                        format!("no variant of '{}' matches the stack", name.name),
                         Some(Note::new(
                             None,
                             format!(
@@ -1838,12 +1726,12 @@ impl Context {
                             ),
                         ))
                         .into_iter()
-                        .chain(signatures.iter().map(|s| {
+                        .chain(qual_fns.iter().flat_map(|q| &self.signatures[q]).map(|s| {
                             Note::new(
                                 None,
                                 format!(
                                     "'{}' has signature {}{}{}",
-                                    name.name.name,
+                                    name.name,
                                     color!(Blue),
                                     self.types.format_signature(s),
                                     reset!(),
@@ -1854,98 +1742,13 @@ impl Context {
                     ))
                 } else {
                     Err(Error::Type(
-                        name.name.span,
-                        format!(
-                            "no function '{}' in module '{}'",
-                            name.name.name, module.name,
-                        ),
+                        name.span,
+                        format!("no function '{}' in scope", name.name),
                         vec![],
                     ))
                 }
-            } else {
-                Err(Error::Type(
-                    module.span,
-                    format!("no module '{}' in scope", module.name),
-                    vec![],
-                ))
             }
-        } else if let Some(qual_fns) = self.function_qual.get(name.name.name) {
-            for qual_fn in qual_fns {
-                for (index, signature) in self.signatures[qual_fn].iter().enumerate() {
-                    if let Some(binds) = get_binds(&mut self.types, stack, signature) {
-                        self.call_graph
-                            .insert(qual_fn.clone(), index, binds.clone());
-                        return Ok((qual_fn.clone(), signature.clone(), binds, index));
-                    }
-                }
-            }
-            Err(Error::Type(
-                name.name.span,
-                format!("no variant of '{}' matches the stack", name.name.name),
-                Some(Note::new(
-                    None,
-                    format!(
-                        "stack is {}{}{}",
-                        color!(Blue),
-                        self.types.format_stack(stack),
-                        reset!(),
-                    ),
-                ))
-                .into_iter()
-                .chain(qual_fns.iter().flat_map(|q| &self.signatures[q]).map(|s| {
-                    Note::new(
-                        None,
-                        format!(
-                            "'{}' has signature {}{}{}",
-                            name.name.name,
-                            color!(Blue),
-                            self.types.format_signature(s),
-                            reset!(),
-                        ),
-                    )
-                }))
-                .collect(),
-            ))
-        } else {
-            Err(Error::Type(
-                name.name.span,
-                format!("no function '{}' in scope", name.name.name),
-                vec![],
-            ))
         }
-        /*
-        if let Some(signatures) = self.signatures.get(name.name) {
-            for (index, signature) in signatures.iter().enumerate() {
-                if let Some(binds) = get_binds(&mut self.types, stack, signature) {
-                    self.call_graph.insert(name.name, index, binds.clone());
-                    return Ok((signature.clone(), binds, index));
-                }
-            }
-            let mut notes = vec![Note::new(
-                None,
-                format!(
-                    "stack is {}{}{}",
-                    color!(Blue),
-                    self.types.format_stack(stack),
-                    reset!()
-                ),
-            )];
-            for signature in signatures {
-                notes.push(c);
-            }
-            Err(Error::Type(
-                name.span,
-                format!("no variant of '{}' matches the stack", name.name),
-                notes,
-            ))
-        } else {
-            Err(Error::Type(
-                name.span,
-                format!("symbol '{}' does not exists", name.name),
-                vec![],
-            ))
-        }
-        */
     }
 
     // TODO: functions that take nothing and return a single value should be
@@ -1954,7 +1757,9 @@ impl Context {
         macro_rules! binop {
             ($op:expr, $left:ident, $right:ident, $span:expr) => {{
                 let stack = vec![(0, self.check_expr($left)?), (0, self.check_expr($right)?)];
-                let (_, signature, binds, _) = self.get_qsbi(&stack, &$span.into())?;
+                let NameInfo {
+                    signature, binds, ..
+                } = self.get_qsbi(&stack, &$span.into())?;
                 if signature.returns.len() == 1 {
                     Ok(self.types.substitute(signature.returns[0], &binds))
                 } else {
@@ -1985,7 +1790,9 @@ impl Context {
         macro_rules! uop {
             ($op:expr, $expr:ident, $span:expr) => {{
                 let stack = vec![(0, self.check_expr($expr)?)];
-                let (_, signature, binds, _) = self.get_qsbi(&stack, &$span.into())?;
+                let NameInfo {
+                    signature, binds, ..
+                } = self.get_qsbi(&stack, &$span.into())?;
                 if signature.returns.len() == 1 {
                     Ok(self.types.substitute(signature.returns[0], &binds))
                 } else {
@@ -2020,20 +1827,24 @@ impl Context {
             Expr::Char(_, _) => Ok(self.types.int()),
             Expr::Byte(_, _) => Ok(self.types.byte()),
             Expr::String(_, _) => Ok(self.types.byte_ptr()),
-            Expr::Name(qname) => {
-                if qname.module.is_none() && let Some((_, ty)) = self.get_let_bind(qname.name.name) {
-                    Ok(ty)
-                } else {
-                    Err(Error::Type(
-                        qname.name.span,
-                        format!("variable '{}' does not exist", qname.name.name),
-                        vec![Note::new(
-                            None,
-                            "names in expressions must be let variables".to_string(),
-                        )],
-                    ))
+            Expr::Name(qname) => match qname {
+                QualifiedName::Straight(name) => {
+                    if let Some((_, ty)) = self.get_let_bind(name.name) {
+                        Ok(ty)
+                    } else {
+                        Err(Error::Type(
+                            name.span,
+                            "names in expressions must be let variables (for now)".to_string(),
+                            vec![],
+                        ))
+                    }
                 }
-            }
+                QualifiedName::Qualified(module, _) => Err(Error::Type(
+                    module.span,
+                    "names in expressions must be let variables (for now)".to_string(),
+                    vec![],
+                )),
+            },
             Expr::Add(left, right, span) => binop!("+", left, right, *span),
             Expr::And(left, right, span) => binop!("&", left, right, *span),
             Expr::Divide(left, right, span) => binop!("/", left, right, *span),
@@ -2057,12 +1868,11 @@ impl Context {
                     name: "neg",
                     span: *span,
                 };
-                let qneg = QualifiedName {
-                    name,
-                    module: None,
-                };
+                let qneg = QualifiedName::Straight(name);
                 let (signature, binds) = match self.get_qsbi(&stack, &qneg) {
-                    Ok((_, s, b, _)) => (s, b),
+                    Ok(NameInfo {
+                        signature, binds, ..
+                    }) => (signature, binds),
                     Err(mut err) => {
                         err.insert_note(Note::new(
                             None,
@@ -2406,7 +2216,6 @@ impl Context {
         name: Vec<&'static str>,
         signature: GSignature,
     ) -> Result<(), Error> {
-        println!("insert '{}'", name.join("::")); // TODO: REMOVE
         let last = *name.last().unwrap();
         match self.signatures.entry(name) {
             Entry::Occupied(mut o) => {
@@ -2423,10 +2232,15 @@ impl Context {
 }
 
 enum ImportKind {
-    Auto(Span),
-    Builtin,
     Custom(Span),
     Import(Span),
+}
+
+struct NameInfo {
+    qualified: Vec<&'static str>,
+    signature: GSignature,
+    binds: Vec<GTypeId>,
+    index: usize,
 }
 
 fn make_names(prefix: &[&'static str], name: &'static str) -> Vec<&'static str> {
@@ -2503,7 +2317,7 @@ fn flatten_expr(expr: &Expr, ops: &mut Vec<Op>) {
         Expr::Char(val, span) => ops.push(Op::Char(*val, *span)),
         Expr::Byte(val, span) => ops.push(Op::Byte(*val, *span)),
         Expr::String(val, span) => ops.push(Op::String(val.clone(), *span)),
-        Expr::Name(name) => ops.push(Op::Name(name.clone())),
+        Expr::Name(qname) => ops.push(Op::Name(*qname)),
         Expr::Add(left, right, span)
         | Expr::And(left, right, span)
         | Expr::Divide(left, right, span)
@@ -2534,7 +2348,7 @@ fn flatten_expr(expr: &Expr, ops: &mut Vec<Op>) {
                 name: "neg",
                 span: *span,
             };
-            let qname = QualifiedName { name, module: None };
+            let qname = QualifiedName::Straight(name);
             ops.push(Op::Name(qname));
         }
         Expr::Group(group, _) => {
