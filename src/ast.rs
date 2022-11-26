@@ -83,12 +83,15 @@ pub enum Item {
         colon_span: Span,
     },
     Import {
+        path: Vec<Name>,
         names: Vec<Name>,
-        group: Option<ImportGroup>,
-
-        import_span: Span,
-        struct_span: Option<Span>,
-        colon_spans: Vec<(Span, Span)>,
+    },
+    ImportModule {
+        path: Vec<Name>,
+    },
+    ImportStruct {
+        path: Vec<Name>,
+        names: Vec<Name>,
     },
 }
 
@@ -114,18 +117,11 @@ impl fmt::Debug for Item {
                 definition,
                 ..
             } => write!(f, "Global({name:?}, {ty:?}, {definition:?})"),
-            Item::Import { names, .. } => write!(f, "Import({:?})", names),
+            Item::Import { path, names } => write!(f, "Import({path:?}, {names:?})"),
+            Item::ImportModule { path } => write!(f, "ImportModule({path:?})"),
+            Item::ImportStruct { path, names } => write!(f, "ImportStruct({path:?}, {names:?})"),
         }
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct ImportGroup {
-    pub names: Vec<Name>,
-
-    pub colon_spans: (Span, Span),
-    pub lbrace_span: Span,
-    pub rbrace_span: Span,
 }
 
 pub struct Definition {

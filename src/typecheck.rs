@@ -5,9 +5,7 @@ use std::mem;
 use petgraph::algo::toposort;
 use petgraph::graph::Graph;
 
-use crate::ast::{
-    ElsePart, Expr, Field, ImportGroup, Item, Name, Op, PType, QualifiedName, Stmt, TypeGenerics,
-};
+use crate::ast::{ElsePart, Expr, Field, Item, Name, Op, PType, QualifiedName, Stmt, TypeGenerics};
 use crate::builtins::{Builtins, BUILTINS};
 use crate::error::{Error, Note};
 use crate::lex::Span;
@@ -147,12 +145,7 @@ impl Context {
         let mut struct_spans = HashMap::new();
         for item in unit {
             match item {
-                Item::Import {
-                    names: path,
-                    group: Some(ImportGroup { names, .. }),
-                    struct_span: Some(_),
-                    ..
-                } => {
+                Item::ImportStruct { path, names } => {
                     let mut full_path = if path[0].name == "std" {
                         Vec::new()
                     } else {
@@ -180,17 +173,27 @@ impl Context {
                                 ));
                             }
                             Entry::Vacant(v) => {
-                                struct_spans.insert(name.name, ImportKind::Import(name.span));
-                                v.insert(full_path.clone());
+                                if self.structs.contains_key(&full_path) {
+                                    struct_spans.insert(name.name, ImportKind::Import(name.span));
+                                    v.insert(full_path.clone());
+                                } else {
+                                    return Err(Error::Import(
+                                        Some(name.span),
+                                        format!(
+                                            "no struct '{}' in module '{}'",
+                                            name.name,
+                                            path.last().unwrap().name
+                                        ),
+                                        vec![],
+                                    ));
+                                }
                             }
                         }
                         full_path.pop();
                     }
                 }
-                Item::Import {
-                    names, group: None, ..
-                } => {
-                    let module = *names.last().unwrap();
+                Item::ImportModule { path } => {
+                    let module = *path.last().unwrap();
                     if let Some(span) = module_spans.get(module.name) {
                         return Err(Error::Import(
                             Some(module.span),
@@ -203,12 +206,12 @@ impl Context {
                     }
                     module_spans.insert(module.name, module.span);
 
-                    let mut full_path = if names[0].name == "std" {
+                    let mut full_path = if path[0].name == "std" {
                         Vec::new()
                     } else {
                         prefix[..prefix.len() - 1].to_vec()
                     };
-                    full_path.extend(names.iter().map(|n| n.name));
+                    full_path.extend(path.iter().map(|n| n.name));
                     self.module_qual.insert(module.name, full_path);
                 }
                 Item::Struct { name, .. } => {
@@ -280,40 +283,28 @@ impl Context {
                 _ => {}
             }
         }
-        fn import_filter(item: &Item) -> Option<(&Vec<Name>, &Vec<Name>)> {
-            if let Item::Import {
-                names: path,
-                group: Some(ImportGroup { names, .. }),
-                struct_span: None,
-                ..
-            } = item
-            {
-                Some((path, names))
-            } else {
-                None
-            }
-        }
         let mut import_spans = HashMap::new();
-        for (path, names) in unit.iter().filter_map(import_filter) {
-            let mut full_path = if path[0].name == "std" {
-                Vec::new()
-            } else {
-                prefix[..prefix.len() - 1].to_vec()
-            };
-            full_path.extend(path.iter().map(|n| n.name));
-            for name in names {
-                full_path.push(name.name);
-                if let Some(import_sigs) = self.signatures.get(&full_path) {
-                    for qual_fn in self.function_qual.get(name.name).into_iter().flatten() {
-                        for existing_sig in &self.signatures[qual_fn] {
-                            for new_sig in import_sigs {
-                                if params_overlap(
-                                    &mut self.types,
-                                    &existing_sig.params,
-                                    &new_sig.params,
-                                ) {
-                                    if let Some(import_span) = import_spans.get(qual_fn) {
-                                        return Err(Error::Import(
+        for item in unit {
+            if let Item::Import { path, names } = item {
+                let mut full_path = if path[0].name == "std" {
+                    Vec::new()
+                } else {
+                    prefix[..prefix.len() - 1].to_vec()
+                };
+                full_path.extend(path.iter().map(|n| n.name));
+                for name in names {
+                    full_path.push(name.name);
+                    if let Some(import_sigs) = self.signatures.get(&full_path) {
+                        for qual_fn in self.function_qual.get(name.name).into_iter().flatten() {
+                            for existing_sig in &self.signatures[qual_fn] {
+                                for new_sig in import_sigs {
+                                    if params_overlap(
+                                        &mut self.types,
+                                        &existing_sig.params,
+                                        &new_sig.params,
+                                    ) {
+                                        if let Some(import_span) = import_spans.get(qual_fn) {
+                                            return Err(Error::Import(
                                             Some(name.span),
                                             format!(
                                                 "imported function '{}' overlaps with a previous import",
@@ -344,8 +335,8 @@ impl Context {
                                                 ),
                                             ],
                                         ));
-                                    } else {
-                                        match existing_sig.kind {
+                                        } else {
+                                            match existing_sig.kind {
                                             Kind::Builtin => return Err(Error::Import(
                                                 Some(name.span),
                                                 "import conflicts with a builtin function".to_string(),
@@ -425,30 +416,31 @@ impl Context {
                                                 ]
                                             )),
                                         }
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                    match self.function_qual.entry(name.name) {
-                        Entry::Occupied(mut o) => o.get_mut().push(full_path.clone()),
-                        Entry::Vacant(v) => {
-                            v.insert(vec![full_path.clone()]);
+                        match self.function_qual.entry(name.name) {
+                            Entry::Occupied(mut o) => o.get_mut().push(full_path.clone()),
+                            Entry::Vacant(v) => {
+                                v.insert(vec![full_path.clone()]);
+                            }
                         }
+                        import_spans.insert(full_path.clone(), name.span);
+                    } else {
+                        return Err(Error::Import(
+                            Some(name.span),
+                            format!(
+                                "no function '{}' in module '{}'",
+                                name.name,
+                                path.last().unwrap().name
+                            ),
+                            vec![],
+                        ));
                     }
-                    import_spans.insert(full_path.clone(), name.span);
-                } else {
-                    return Err(Error::Import(
-                        Some(name.span),
-                        format!(
-                            "no function '{}' in module '{}'",
-                            name.name,
-                            path.last().unwrap().name
-                        ),
-                        vec![],
-                    ));
+                    full_path.pop();
                 }
-                full_path.pop();
             }
         }
         Ok(())
@@ -765,7 +757,7 @@ impl Context {
                     Ok(())
                 }
             }
-            Item::Import { .. } => Ok(()),
+            _ => Ok(()),
         }
     }
 
@@ -2249,7 +2241,7 @@ impl Context {
                     ),
                 ])
             }
-            Item::Import { .. } => Ok(Vec::new()),
+            _ => Ok(Vec::new()),
         }
     }
 

@@ -65,7 +65,7 @@ fn handle_file(
     map: &mut HashMap<Vec<&'static str>, Vec<Item>>,
 ) -> Result<(), Error> {
     map.insert(path.clone(), Vec::new());
-    for names in unit.iter().filter_map(get_names) {
+    for names in unit.iter().filter_map(get_path) {
         let path_suffix: Vec<_> = names.iter().map(|name| name.name).collect();
         let err_span = names.last().unwrap().span;
         if path_suffix[0] == "std" {
@@ -111,7 +111,7 @@ fn handle_std(
 ) -> Result<(), Error> {
     map.insert(path.clone(), Vec::new());
     let mut unit = get_std_unit(&path, err_span)?;
-    for names in unit.iter().filter_map(get_names) {
+    for names in unit.iter().filter_map(get_path) {
         let path: Vec<_> = names.iter().map(|name| name.name).collect();
         if !map.contains_key(&path) {
             handle_std(path, map, names.last().unwrap().span)?;
@@ -121,9 +121,11 @@ fn handle_std(
     Ok(())
 }
 
-fn get_names(item: &Item) -> Option<&Vec<Name>> {
+fn get_path(item: &Item) -> Option<&Vec<Name>> {
     match item {
-        Item::Import { names, .. } => Some(names),
+        Item::Import { path, .. }
+        | Item::ImportStruct { path, .. }
+        | Item::ImportModule { path, .. } => Some(path),
         _ => None,
     }
 }

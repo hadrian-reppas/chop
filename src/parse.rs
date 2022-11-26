@@ -3,8 +3,7 @@ use std::collections::HashSet;
 use lazy_static::lazy_static;
 
 use crate::ast::{
-    Definition, ElsePart, Field, Generics, ImportGroup, Item, Name, Op, PType, QualifiedName, Stmt,
-    TypeGenerics,
+    Definition, ElsePart, Field, Generics, Item, Name, Op, PType, QualifiedName, Stmt, TypeGenerics,
 };
 use crate::error::Error;
 use crate::expr;
@@ -273,38 +272,38 @@ fn parse_global(tokens: &mut Tokens) -> Result<Item, Error> {
 }
 
 fn parse_import(tokens: &mut Tokens) -> Result<Item, Error> {
-    let import_span = tokens.next()?.span();
+    tokens.next()?.span();
     let struct_span = if tokens.peek().is_struct() {
         Some(tokens.next()?.span())
     } else {
         None
     };
-    let mut names = vec![parse_name(tokens, false)?];
-    let mut colon_spans = Vec::new();
+    let name = parse_name(tokens, false)?;
+    if !name.is_normal() {
+        return Err(Error::Parse(name.span, "expected normal name".to_string()));
+    }
+    let mut path = vec![name];
     while tokens.peek().is_colon() {
-        colon_spans.push((tokens.next()?.span(), parse_colon(tokens)?));
+        tokens.next()?;
+        parse_colon(tokens)?;
         if tokens.peek().is_lbrace() {
-            let lbrace_span = tokens.next()?.span();
-            let mut group_names = Vec::new();
+            tokens.next()?.span();
+            let mut names = Vec::new();
             while !tokens.peek().is_rbrace() {
-                group_names.push(parse_name(tokens, false)?);
+                names.push(parse_name(tokens, false)?);
             }
-            let rbrace_span = tokens.next()?.span();
-            let group = ImportGroup {
-                names: group_names,
-                colon_spans: colon_spans.pop().unwrap(),
-                lbrace_span,
-                rbrace_span,
-            };
-            return Ok(Item::Import {
-                names,
-                group: Some(group),
-                import_span,
-                struct_span,
-                colon_spans,
-            });
+            tokens.next()?.span();
+            if struct_span.is_some() {
+                return Ok(Item::ImportStruct { path, names });
+            } else {
+                return Ok(Item::Import { path, names });
+            }
         } else {
-            names.push(parse_name(tokens, false)?);
+            let name = parse_name(tokens, false)?;
+            if !name.is_normal() {
+                return Err(Error::Parse(name.span, "expected normal name".to_string()));
+            }
+            path.push(name);
         }
     }
     if let Some(span) = struct_span {
@@ -313,13 +312,7 @@ fn parse_import(tokens: &mut Tokens) -> Result<Item, Error> {
             "import struct items must contain an import group".to_string(),
         ))
     } else {
-        Ok(Item::Import {
-            names,
-            group: None,
-            import_span,
-            struct_span,
-            colon_spans,
-        })
+        Ok(Item::ImportModule { path })
     }
 }
 
