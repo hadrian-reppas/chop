@@ -144,61 +144,25 @@ lazy_static! {
         cmp!(">="),
         (
             "!",
-            vec![
-                sig!(BOOL => BOOL),
-                sig!(BYTE => BYTE),
-                sig!(INT => INT),
-            ]
+            vec![sig!(BOOL => BOOL), sig!(BYTE => BYTE), sig!(INT => INT),]
         ),
-        (
-            "neg",
-            vec![
-                sig!(INT => INT),
-                sig!(FLOAT => FLOAT),
-            ]
-        ),
+        ("neg", vec![sig!(INT => INT), sig!(FLOAT => FLOAT),]),
         (".", vec![sig!(gen!(0) => gen!(0) gen!(0))]),
         ("~", vec![sig!(gen!(0) =>)]),
         ("@", vec![sig!(gen!(0) => gen!(0) genp!(0))]),
-        (
-            "to_byte",
-            vec![
-                sig!(INT => BYTE),
-                sig!(FLOAT => BYTE),
-            ]
-        ),
+        ("to_byte", vec![sig!(INT => BYTE), sig!(FLOAT => BYTE),]),
         (
             "to_int",
-            vec![
-                sig!(FLOAT => INT),
-                sig!(BYTE => INT),
-                sig!(genp!(0) => INT),
-            ]
+            vec![sig!(FLOAT => INT), sig!(BYTE => INT), sig!(genp!(0) => INT),]
         ),
-        (
-            "to_float",
-            vec![
-                sig!(INT => FLOAT),
-                sig!(BYTE => FLOAT),
-            ]
-        ),
+        ("to_float", vec![sig!(INT => FLOAT), sig!(BYTE => FLOAT),]),
         (
             "put",
-            vec![
-                sig!(INT =>),
-                sig!(FLOAT =>),
-                sig!(BYTE =>),
-                sig!(BOOL =>),
-            ]
+            vec![sig!(INT =>), sig!(FLOAT =>), sig!(BYTE =>), sig!(BOOL =>),]
         ),
         (
             "putln",
-            vec![
-                sig!(INT =>),
-                sig!(FLOAT =>),
-                sig!(BYTE =>),
-                sig!(BOOL =>),
-            ]
+            vec![sig!(INT =>), sig!(FLOAT =>), sig!(BYTE =>), sig!(BOOL =>),]
         ),
         ("puts", vec![sig!(ptr!(BYTE) =>)]),
         ("putlns", vec![sig!(ptr!(BYTE) =>)]),
@@ -223,7 +187,7 @@ lazy_static! {
         ("write_to_file", vec![sig!(ptr!(BYTE) ptr!(BYTE) => BOOL)]),
         ("append_to_file", vec![sig!(ptr!(BYTE) ptr!(BYTE) => BOOL)]),
         ("time", vec![sig!(=> FLOAT)]),
+        ("stdin", vec![sig!(=> ptr!(BYTE))]),
         ("DEBUG_STACK", vec![sig!(=>)]),
-        // TODO: stdin
     ]);
 }

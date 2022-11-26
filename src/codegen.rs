@@ -628,6 +628,16 @@ impl Generator {
     clock_gettime(CLOCK_REALTIME, &ts);
     *hr0 = ts.tv_sec + ts.tv_nsec/1000000000.0;\n",
             ),
+            "stdin" => self.code.push_str(
+                "    char* buf = NULL;
+    size_t n = 0;
+    if (getline(&buf, &n, stdin) == -1) {
+        free(buf);
+        *hr0 = NULL;
+    } else {
+        *hr0 = (uint8_t*) buf;
+    }",
+            ),
             _ => unreachable!(),
         }
         self.code.push_str("}\n");

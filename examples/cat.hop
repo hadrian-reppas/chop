@@ -10,7 +10,7 @@ fn main int **byte -> int {
         if . 0 cast_to[*byte] == {
             ~ 1
         } else {
-            putlns 0
+            . putlns free 0
         }
     }
 }

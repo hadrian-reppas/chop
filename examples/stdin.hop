@@ -1,0 +1,7 @@
+import std::ptr::{is_null}
+
+fn main {
+    "Enter your name: " puts
+    stdin . is_null ! assert
+    "Hello, " puts puts
+}
