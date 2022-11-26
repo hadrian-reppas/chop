@@ -1,3 +1,5 @@
+use std::fmt::{Debug, Formatter};
+
 use crate::lex::Span;
 
 #[macro_export]
@@ -22,7 +24,6 @@ macro_rules! reset {
     };
 }
 
-#[derive(Debug)]
 pub enum Error {
     Io(String),
     Lex(Span, String),
@@ -32,7 +33,12 @@ pub enum Error {
     Import(Option<Span>, String, Vec<Note>),
 }
 
-#[derive(Debug)]
+impl Debug for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Error()")
+    }
+}
+
 pub struct Note {
     pub span: Option<Span>,
     pub msg: String,

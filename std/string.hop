@@ -1,33 +1,34 @@
-import struct std::vector::{vector}
+import struct std::vector::{Vector}
+import std::vector::{.length .capacity}
 
-struct string {
-    bytes: vector[byte]
+struct String {
+    bytes: Vector[byte]
 }
 
-fn new_string -> string {
-    // TODO
+fn new_string -> String {
+    abort[String] // TODO
 }
 
-fn push *string int {
+fn push *String int {
     if . 128 < {
-        to_byte std_push_one
+        to_byte push_one
     } else if . 2048 < {
-        std_two_bytes std_push_two
+        two_bytes push_two
     } else if . 65536 < {
-        std_three_bytes std_push_three
+        three_bytes push_three
     } else {
-        std_four_bytes std_push_four
+        four_bytes push_four
     }
 }
 
-fn push *string *byte {
+fn push *String *byte {
     ~ ~ abort
 }
 
-fn std_push_one *string byte {
+fn push_one *String byte {
     let s b {
-        if s .length * 2 + s .capacity * >= {
-            s std_grow_string
+        if s .bytes .length * 2 + s .capacity * >= {
+            s grow_string
         }
         s .bytes * s .length * + b write
         s .bytes * s .length * + 1 + 0 to_byte write
@@ -35,10 +36,10 @@ fn std_push_one *string byte {
     }
 }
 
-fn std_push_two *string byte byte {
+fn push_two *String byte byte {
     let s b1 b2 {
         if s .length * 3 + s .capacity * >= {
-            s std_grow_string
+            s grow_string
         }
         s .bytes * s .length * + b1 write
         s .bytes * s .length * + 1 + b2 write
@@ -47,10 +48,10 @@ fn std_push_two *string byte byte {
     }
 }
 
-fn std_push_three *string byte byte byte {
+fn push_three *String byte byte byte {
     let s b1 b2 b3 {
         if s .length * 4 + s .capacity * >= {
-            s std_grow_string
+            s grow_string
         }
         s .bytes * s .length * + b1 write
         s .bytes * s .length * + 1 + b2 write
@@ -60,10 +61,10 @@ fn std_push_three *string byte byte byte {
     }
 }
 
-fn std_push_four *string byte byte byte byte {
+fn push_four *String byte byte byte byte {
     let s b1 b2 b3 b4 {
         if s .length * 5 + s .capacity * >= {
-            s std_grow_string
+            s grow_string
         }
         s .bytes * s .length * + b1 write
         s .bytes * s .length * + 1 + b2 write
@@ -74,14 +75,14 @@ fn std_push_four *string byte byte byte byte {
     }
 }
 
-fn std_two_bytes int -> byte byte {
+fn two_bytes int -> byte byte {
     let c {
         c 6 >> 31 & 192 | to_byte
         c 63 & 128 | to_byte
     }
 }
 
-fn std_three_bytes int -> byte byte byte {
+fn three_bytes int -> byte byte byte {
     let c {
         c 12 >> 15 & 224 | to_byte
         c 6 >> 63 & 128 | to_byte
@@ -89,7 +90,7 @@ fn std_three_bytes int -> byte byte byte {
     }
 }
 
-fn std_four_bytes int -> byte byte byte byte {
+fn four_bytes int -> byte byte byte byte {
     let c {
         c 18 >> 7 & 240 | to_byte
         c 12 >> 63 & 128 | to_byte
@@ -98,7 +99,7 @@ fn std_four_bytes int -> byte byte byte byte {
     }
 }
 
-fn std_grow_string *string {
+fn grow_string *String {
     ..capacity *
     if . 0 == {
         ~
@@ -115,6 +116,6 @@ fn std_grow_string *string {
     }
 }
 
-fn free_string string {
+fn free_string String {
     .bytes free
 }

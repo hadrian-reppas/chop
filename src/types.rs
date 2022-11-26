@@ -1,5 +1,4 @@
 use std::collections::{hash_map, HashMap, HashSet};
-use std::fmt;
 
 use bimap::BiMap;
 use petgraph::algo::toposort;
@@ -10,12 +9,10 @@ use crate::codegen;
 use crate::error::Error;
 use crate::lex::Span;
 
-#[repr(transparent)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)] // TODO: REMOVE Debug
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TypeId(usize);
 
-#[repr(transparent)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)] // TODO: Remove Debug
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct GTypeId(usize);
 
 #[derive(Clone, Copy)]
@@ -27,13 +24,6 @@ pub enum Kind {
     Global(Span),
     GlobalWrite(Span),
     GlobalPtr(Span),
-}
-
-// TODO: REMOVE
-impl fmt::Debug for Kind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Kind()")
-    }
 }
 
 impl Kind {
@@ -81,7 +71,6 @@ pub enum GType {
     Generic(usize, usize),
 }
 
-// TODO: REMOVE
 impl GType {
     pub fn ref_n(mut self, n: usize) -> GType {
         match &mut self {
@@ -128,7 +117,6 @@ pub enum Type {
     Custom(usize, Vec<&'static str>, Vec<TypeId>),
 }
 
-// TODO: REMOVE
 impl Type {
     pub fn ref_n(mut self, n: usize) -> Type {
         match &mut self {
@@ -591,60 +579,6 @@ impl Types {
             indices.extend(self.generic_indices(*id));
         }
         indices
-    }
-
-    pub fn display(&self, id: GTypeId) {
-        match self.gtypes.get_by_right(&id).unwrap() {
-            GType::Int(depth) => print!("{}Int{}", "Ptr(".repeat(*depth), ")".repeat(*depth)),
-            GType::Float(depth) => print!("{}Float{}", "Ptr(".repeat(*depth), ")".repeat(*depth)),
-            GType::Byte(depth) => print!("{}Byte{}", "Ptr(".repeat(*depth), ")".repeat(*depth)),
-            GType::Bool(depth) => print!("{}Bool{}", "Ptr(".repeat(*depth), ")".repeat(*depth)),
-            GType::Custom(depth, name, generics) => {
-                print!("{}Custom({:?}, ", "Ptr(".repeat(*depth), name);
-                if generics.is_empty() {
-                    print!("[]){}", ")".repeat(*depth));
-                } else {
-                    print!("[");
-                    for (i, id) in generics.iter().enumerate() {
-                        if i > 0 {
-                            print!(", ");
-                        }
-                        self.display(*id);
-                    }
-                    print!("]){}", ")".repeat(*depth));
-                }
-            }
-            GType::Generic(depth, index) => print!(
-                "{}Gen({}){}",
-                "Ptr(".repeat(*depth),
-                index,
-                ")".repeat(*depth),
-            ),
-        }
-    }
-
-    pub fn display_concrete(&self, id: TypeId) {
-        match self.types.get_by_right(&id).unwrap() {
-            Type::Int(depth) => print!("{}Int{}", "Ptr(".repeat(*depth), ")".repeat(*depth)),
-            Type::Float(depth) => print!("{}Float{}", "Ptr(".repeat(*depth), ")".repeat(*depth)),
-            Type::Byte(depth) => print!("{}Byte{}", "Ptr(".repeat(*depth), ")".repeat(*depth)),
-            Type::Bool(depth) => print!("{}Bool{}", "Ptr(".repeat(*depth), ")".repeat(*depth)),
-            Type::Custom(depth, name, generics) => {
-                print!("{}Custom({:?}, ", "Ptr(".repeat(*depth), name);
-                if generics.is_empty() {
-                    print!("[]){}", ")".repeat(*depth));
-                } else {
-                    print!("[");
-                    for (i, id) in generics.iter().enumerate() {
-                        if i > 0 {
-                            print!(", ");
-                        }
-                        self.display_concrete(*id);
-                    }
-                    print!("]){}", ")".repeat(*depth));
-                }
-            }
-        }
     }
 
     pub fn generate(&self, id: TypeId) -> String {

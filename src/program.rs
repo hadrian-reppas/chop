@@ -3,7 +3,7 @@ use std::mem;
 
 use crate::{
     lex::Span,
-    types::{GTypeId, TypeId, Types},
+    types::{GTypeId, TypeId},
 };
 
 pub struct ProgramContext {
@@ -259,7 +259,6 @@ enum State {
     Paused,
 }
 
-#[derive(Debug)]
 pub struct Program {
     pub structs: Vec<ProgramStruct>,
     pub functions: Vec<ProgramFn>,
@@ -274,51 +273,19 @@ impl Program {
             globals: Vec::new(),
         }
     }
-
-    pub fn display(&self, types: &Types) {
-        for global in &self.globals {
-            global.display(types);
-        }
-        for struct_def in &self.structs {
-            struct_def.display(types);
-        }
-        for function in &self.functions {
-            function.display(types);
-        }
-    }
 }
 
-#[derive(Debug)]
 pub struct ProgramStruct {
     pub generic_count: usize,
     pub name: &'static str,
     pub members: Vec<ProgramMember>,
 }
 
-impl ProgramStruct {
-    fn display(&self, types: &Types) {
-        print!("Struct({:?}, {}, ", self.name, self.generic_count);
-        if self.members.is_empty() {
-            println!("[])");
-        } else {
-            println!("[");
-            for member in &self.members {
-                print!("    ({:?}, ", member.name);
-                types.display(member.type_id);
-                println!("),");
-            }
-            println!("])");
-        }
-    }
-}
-
-#[derive(Debug)]
 pub struct ProgramMember {
     pub name: &'static str,
     pub type_id: GTypeId,
 }
 
-#[derive(Debug)]
 pub struct ProgramFn {
     pub name: Vec<&'static str>,
     pub index: usize,
@@ -330,99 +297,21 @@ pub struct ProgramFn {
     pub return_vars: Vec<usize>,
 }
 
-impl ProgramFn {
-    fn display(&self, types: &Types) {
-        println!(
-            "Function({:?}, {}, {},",
-            self.name, self.index, self.generic_count
-        );
-        print!("    [");
-        for (i, type_id) in self.params.iter().enumerate() {
-            if i > 0 {
-                print!(", ");
-            }
-            types.display(*type_id);
-        }
-        println!("],");
-        print!("    [");
-        for (i, type_id) in self.returns.iter().enumerate() {
-            if i > 0 {
-                print!(", ");
-            }
-            types.display(*type_id);
-        }
-        println!("],");
-        display_vars(&self.vars, types);
-        if self.body.is_empty() {
-            println!("    [],");
-        } else {
-            println!("    [");
-            for stmt in &self.body {
-                stmt.display(types, 2);
-            }
-            println!("    ],");
-        }
-        println!("    {:?},\n)", self.return_vars);
-    }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ProgramGlobal {
     pub name: Vec<&'static str>,
     pub type_id: TypeId,
     pub init: Option<ProgramGlobalInit>,
 }
 
-impl ProgramGlobal {
-    fn display(&self, types: &Types) {
-        print!("Global({:?}, ", self.name);
-        types.display_concrete(self.type_id);
-        if let Some(init) = &self.init {
-            print!(", ");
-            init.display(types);
-            println!(")");
-        } else {
-            println!(", None)");
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ProgramGlobalInit {
     pub ops: Vec<ProgramOp>,
     pub var: usize,
     pub vars: HashMap<GTypeId, Vec<usize>>,
 }
 
-impl ProgramGlobalInit {
-    fn display(&self, types: &Types) {
-        println!("Init(");
-        display_vars(&self.vars, types);
-        println!("    [");
-        for op in &self.ops {
-            op.display(types, 2);
-            println!(",");
-        }
-        println!("    ],");
-        print!("    {},\n)", self.var);
-    }
-}
-
-fn display_vars(vars: &HashMap<GTypeId, Vec<usize>>, types: &Types) {
-    if vars.is_empty() {
-        println!("    Vars([]),");
-    } else {
-        println!("    Vars([");
-        for (id, vars) in vars {
-            print!("        (");
-            types.display(*id);
-            println!(", {:?}),", vars);
-        }
-        println!("    ]),");
-    }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum ProgramOp {
     Int(usize, i64),
     Float(usize, f64),
@@ -447,60 +336,6 @@ pub enum ProgramOp {
     CastTo(usize, usize, GTypeId),
 }
 
-impl ProgramOp {
-    fn display(&self, types: &Types, depth: usize) {
-        print!("{}", "    ".repeat(depth));
-        match self {
-            ProgramOp::Int(var, val) => print!("IntLit({var}, {val})"),
-            ProgramOp::Float(var, val) => print!("FloatLit({var}, {val:?})"),
-            ProgramOp::Bool(var, val) => print!("BoolLit({var}, {val})"),
-            ProgramOp::Byte(var, val) => print!("ByteLit({var}, {val})"),
-            ProgramOp::String(var, val) => print!("StringLit({var}, {val:?})"),
-            ProgramOp::Call(name, index, params, returns, _) => {
-                print!("Call({name:?}, {index}, {params:?}, {returns:?})");
-            }
-            ProgramOp::Ref(var, old_var, type_id) => {
-                print!("Ref({var}, {old_var}, ");
-                types.display(*type_id);
-                print!(")");
-            }
-            ProgramOp::Assert(var, _) => print!("Assert({var})"),
-            ProgramOp::Abort(_) => print!("Abort"),
-            ProgramOp::SizeOf(var, type_id) => {
-                print!("SizeOf({var}, ");
-                types.display(*type_id);
-                print!(")");
-            }
-            ProgramOp::Alloc(var, type_id) => {
-                print!("Alloc({var}, ");
-                types.display(*type_id);
-                print!(")");
-            }
-            ProgramOp::Zalloc(var, type_id) => {
-                print!("Zalloc({var}, ");
-                types.display(*type_id);
-                print!(")");
-            }
-            ProgramOp::AllocArr(var, len_var, type_id) => {
-                print!("AllocArr({var}, {len_var}, ");
-                types.display(*type_id);
-                print!(")");
-            }
-            ProgramOp::ZallocArr(var, len_var, type_id) => {
-                print!("ZallocArr({var}, {len_var}, ");
-                types.display(*type_id);
-                print!(")");
-            }
-            ProgramOp::CastTo(var, old_var, type_id) => {
-                print!("CastTo({var}, {old_var}, ");
-                types.display(*type_id);
-                print!(")");
-            }
-        }
-    }
-}
-
-#[derive(Debug)]
 pub enum ProgramStmt {
     Op(ProgramOp),
     If {
@@ -521,78 +356,4 @@ pub enum ProgramStmt {
         body: Vec<ProgramStmt>,
         resolve: Vec<(usize, usize, GTypeId)>,
     },
-}
-
-impl ProgramStmt {
-    fn display(&self, types: &Types, depth: usize) {
-        print!("{}", "    ".repeat(depth));
-        match self {
-            ProgramStmt::Op(op) => {
-                op.display(types, 0);
-                println!(",");
-            }
-            ProgramStmt::If {
-                test_var,
-                body,
-                else_body,
-                resolve,
-            } => {
-                print!("If({test_var}, [");
-                if body.is_empty() {
-                    println!("],");
-                } else {
-                    println!();
-                    for stmt in body {
-                        stmt.display(types, depth + 2);
-                    }
-                    println!("{}],", "    ".repeat(depth + 1));
-                }
-                print!("{}[", "    ".repeat(depth + 1));
-                if else_body.is_empty() {
-                    println!("],");
-                } else {
-                    println!();
-                    for stmt in else_body {
-                        stmt.display(types, depth + 2);
-                    }
-                    println!("{}],", "    ".repeat(depth + 1));
-                }
-                println!("{}{resolve:?},", "    ".repeat(depth + 1));
-                println!("{}),", "    ".repeat(depth));
-            }
-            ProgramStmt::For {
-                iter_var,
-                low_var,
-                high_var,
-                body,
-                resolve,
-            } => {
-                println!("For({iter_var}, {low_var}, {high_var}, [");
-                for stmt in body {
-                    stmt.display(types, depth + 2);
-                }
-                println!("{}],", "    ".repeat(depth + 1));
-                println!("{}{resolve:?},", "    ".repeat(depth + 1));
-                println!("{}),", "    ".repeat(depth));
-            }
-            ProgramStmt::While {
-                test_var,
-                body,
-                resolve,
-            } => {
-                print!("While({test_var}, [");
-                if body.is_empty() {
-                    println!("],");
-                } else {
-                    println!();
-                    for stmt in body {
-                        stmt.display(types, depth + 2);
-                    }
-                    println!("{}],", "    ".repeat(depth + 1));
-                }
-                println!("{}{resolve:?},", "    ".repeat(depth + 1));
-                println!("{}),", "    ".repeat(depth));
-            }
-        }
-    }
 }

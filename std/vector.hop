@@ -1,16 +1,16 @@
-import std::prelude
+import std::prelude::{swap rot}
 
-struct vector[T] {
+struct Vector[T] {
     pointer: *T
     length: int
     capacity: int
 }
 
-fn new_vector[T] *T -> vector[T] {
+fn new_vector[T] *T -> Vector[T] {
     0 0 vector
 }
 
-fn push[T] *vector[T] T {
+fn push[T] *Vector[T] T {
     swap ..length read swap ..capacity read rot
     if == {
         . std_realloc_vector
@@ -19,7 +19,7 @@ fn push[T] *vector[T] T {
     .length . read 1 + write
 }
 
-fn index[T] *vector[T] int -> T {
+fn index[T] *Vector[T] int -> T {
     let vec i {
         0 i <= assert
         i vec .length read < assert
@@ -27,13 +27,13 @@ fn index[T] *vector[T] int -> T {
     }
 }
 
-fn pop[T] *vector[T] -> T {
+fn pop[T] *Vector[T] -> T {
     ..length read 0 > assert
     ..length . read 1 - write
     ..length read swap .pointer read + read
 }
 
-fn free_vector[T] vector[T] {
+fn free_vector[T] Vector[T] {
     if ..capacity 0 > {
         .pointer free
     } else {
@@ -41,7 +41,7 @@ fn free_vector[T] vector[T] {
     }
 }
 
-fn std_realloc_vector[T] *vector[T] {
+fn realloc_vector[T] *Vector[T] {
     if ..capacity read 0 == {
         ..capacity 10 write
         .pointer 10 alloc_arr[T] write

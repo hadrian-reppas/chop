@@ -1,4 +1,4 @@
-use std::{fmt, fs};
+use std::fs;
 
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -63,7 +63,7 @@ impl From<Span> for QualifiedName {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum Token {
     Int(i64, Span),
     Float(f64, Span),
@@ -231,18 +231,6 @@ impl Token {
                 | Token::CastTo(_)
                 | Token::Assert(_)
                 | Token::Abort(_)
-        )
-    }
-}
-
-impl fmt::Debug for Span {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Span({:?}, {}, {})",
-            self.text,
-            self.line + 1,
-            self.column + 1
         )
     }
 }

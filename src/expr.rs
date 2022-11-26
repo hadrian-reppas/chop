@@ -24,7 +24,6 @@ const NEGATE_BP: usize = 40;
 const NOT_BP: usize = 40;
 const DEREF_BP: usize = 40;
 
-#[derive(Debug)]
 enum Tok {
     Int(i64, Span),
     Float(f64, Span),

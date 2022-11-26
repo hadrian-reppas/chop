@@ -1,17 +1,9 @@
-use std::fmt;
-
 use crate::lex::{Span, Token};
 
 #[derive(Clone, Copy)]
 pub struct Name {
     pub name: &'static str,
     pub span: Span,
-}
-
-impl fmt::Debug for Name {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Name({})", self.name)
-    }
 }
 
 impl Name {
@@ -25,7 +17,7 @@ impl Name {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub enum QualifiedName {
     Straight(Name),
     Qualified(Name, Name),
@@ -84,44 +76,9 @@ pub enum Item {
     },
 }
 
-impl fmt::Debug for Item {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Item::Function {
-                name,
-                params,
-                returns,
-                body,
-                ..
-            } => write!(f, "Function({name:?}, {params:?}, {returns:?}, {body:?})"),
-            Item::Struct {
-                name,
-                generics,
-                fields,
-                ..
-            } => write!(f, "Struct({name:?}, {generics:?}, {fields:?})"),
-            Item::Global {
-                name,
-                ty,
-                definition,
-                ..
-            } => write!(f, "Global({name:?}, {ty:?}, {definition:?})"),
-            Item::Import { path, names } => write!(f, "Import({path:?}, {names:?})"),
-            Item::ImportModule { path } => write!(f, "ImportModule({path:?})"),
-            Item::ImportStruct { path, names } => write!(f, "ImportStruct({path:?}, {names:?})"),
-        }
-    }
-}
-
 pub struct Definition {
     pub group: Vec<Op>,
     pub rbrace_span: Span,
-}
-
-impl fmt::Debug for Definition {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Definition({:?})", self.group)
-    }
 }
 
 pub struct Field {
@@ -129,21 +86,9 @@ pub struct Field {
     pub ty: PType,
 }
 
-impl fmt::Debug for Field {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}: {:?}", self.name.name, self.ty)
-    }
-}
-
 #[derive(Clone)]
 pub struct Generics {
     pub names: Vec<Name>,
-}
-
-impl fmt::Debug for Generics {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Generics({:?})", self.names)
-    }
 }
 
 #[derive(Clone)]
@@ -153,25 +98,9 @@ pub struct PType {
     pub generics: Option<TypeGenerics>,
 }
 
-impl fmt::Debug for PType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "PType({:?}, {:?}, {:?})",
-            self.name, self.stars, self.generics
-        )
-    }
-}
-
 #[derive(Clone)]
 pub struct TypeGenerics {
     pub types: Vec<PType>,
-}
-
-impl fmt::Debug for TypeGenerics {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TypeGenerics({:?})", self.types)
-    }
 }
 
 pub type Group = Vec<Op>;
@@ -209,25 +138,6 @@ pub enum Stmt {
     },
 }
 
-impl fmt::Debug for Stmt {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Stmt::Group(group, _) => write!(f, "Group({group:?})"),
-            Stmt::If {
-                test,
-                body,
-                else_part,
-                ..
-            } => write!(f, "If({test:?}, {body:?}, {else_part:?})"),
-            Stmt::While { test, body, .. } => write!(f, "While({test:?}, {body:?})"),
-            Stmt::For {
-                low, high, body, ..
-            } => write!(f, "For({low:?}, {high:?}, {body:?})"),
-            Stmt::Let { names, body, .. } => write!(f, "Let({names:?}, {body:?})"),
-        }
-    }
-}
-
 impl Stmt {
     pub fn brace_spans(&self) -> (Span, Span) {
         match self {
@@ -255,12 +165,6 @@ pub struct ElsePart {
     pub rbrace_span: Span,
 }
 
-impl fmt::Debug for ElsePart {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Else({:?})", self.body)
-    }
-}
-
 #[derive(Clone)]
 pub enum Op {
     Int(i64, Span),
@@ -279,29 +183,6 @@ pub enum Op {
     Assert(Span),
     Abort(Span, Vec<PType>),
     Expr(Expr, Span),
-}
-
-impl fmt::Debug for Op {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Op::Int(i, _) => write!(f, "Int({i})"),
-            Op::Float(x, _) => write!(f, "Float({x})"),
-            Op::Bool(b, _) => write!(f, "Bool({b})"),
-            Op::Char(c, _) => write!(f, "Char({c:?})"),
-            Op::String(s, _) => write!(f, "String({s:?})"),
-            Op::Byte(b, _) => write!(f, "Byte({b})"),
-            Op::Name(n) => write!(f, "Name({n:?})"),
-            Op::SizeOf(ty, _, _, _) => write!(f, "SizeOf({ty:?})"),
-            Op::Alloc(ty, _, _, _) => write!(f, "Alloc({ty:?})"),
-            Op::Zalloc(ty, _, _, _) => write!(f, "Zalloc({ty:?})"),
-            Op::AllocArr(ty, _, _, _) => write!(f, "AllocArr({ty:?})"),
-            Op::ZallocArr(ty, _, _, _) => write!(f, "ZallocArr({ty:?})"),
-            Op::CastTo(ty, _, _, _) => write!(f, "CastTo({ty:?})"),
-            Op::Assert(_) => write!(f, "Assert()"),
-            Op::Abort(_, types) => write!(f, "Abort({types:?})"),
-            Op::Expr(e, _) => write!(f, "{e:?}"),
-        }
-    }
 }
 
 impl Op {
@@ -369,39 +250,4 @@ pub enum Expr {
     Deref(Box<Expr>, Span),
     Group(Vec<Op>, Span),
     Call(QualifiedName, Vec<Expr>),
-}
-
-impl fmt::Debug for Expr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Expr::Int(i, _) => write!(f, "Int({i})"),
-            Expr::Float(x, _) => write!(f, "Float({x})"),
-            Expr::Bool(b, _) => write!(f, "Bool({b})"),
-            Expr::Char(c, _) => write!(f, "Char({c:?})"),
-            Expr::String(s, _) => write!(f, "String({s:?})"),
-            Expr::Byte(b, _) => write!(f, "Byte({b})"),
-            Expr::Name(name) => write!(f, "Name({name:?})"),
-            Expr::Add(left, right, _) => write!(f, "Add({left:?}, {right:?})"),
-            Expr::And(left, right, _) => write!(f, "And({left:?}, {right:?})"),
-            Expr::Divide(left, right, _) => write!(f, "Divide({left:?}, {right:?})"),
-            Expr::Equal(left, right, _) => write!(f, "Equal({left:?}, {right:?})"),
-            Expr::GreaterEqual(left, right, _) => write!(f, "GreaterEqual({left:?}, {right:?})"),
-            Expr::GreaterThan(left, right, _) => write!(f, "GreaterThan({left:?}, {right:?})"),
-            Expr::LessEqual(left, right, _) => write!(f, "LessEqual({left:?}, {right:?})"),
-            Expr::LessThan(left, right, _) => write!(f, "LessThan({left:?}, {right:?})"),
-            Expr::Modulo(left, right, _) => write!(f, "Modulo({left:?}, {right:?})"),
-            Expr::Multiply(left, right, _) => write!(f, "Multiply({left:?}, {right:?})"),
-            Expr::NotEqual(left, right, _) => write!(f, "NotEqual({left:?}, {right:?})"),
-            Expr::Or(left, right, _) => write!(f, "Or({left:?}, {right:?})"),
-            Expr::Subtract(left, right, _) => write!(f, "Subtract({left:?}, {right:?})"),
-            Expr::Xor(left, right, _) => write!(f, "Xor({left:?}, {right:?})"),
-            Expr::LShift(left, right, _) => write!(f, "LShift({left:?}, {right:?})"),
-            Expr::RShift(left, right, _) => write!(f, "RShift({left:?}, {right:?})"),
-            Expr::Not(expr, _) => write!(f, "Not({expr:?})"),
-            Expr::Negate(expr, _) => write!(f, "Negate({expr:?})"),
-            Expr::Deref(expr, _) => write!(f, "Deref({expr:?})"),
-            Expr::Group(group, _) => write!(f, "Group({group:?})"),
-            Expr::Call(name, args) => write!(f, "Call({name:?}, {args:?})"),
-        }
-    }
 }

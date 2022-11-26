@@ -2493,10 +2493,3 @@ pub struct ProgramInfo {
     pub types: Types,
     pub main_unit_prefix: Vec<&'static str>,
 }
-
-impl ProgramInfo {
-    #[allow(dead_code)]
-    pub fn display(&self) {
-        self.program.display(&self.types);
-    }
-}
