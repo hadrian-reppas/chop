@@ -875,7 +875,7 @@ fn escape_string(s: &str) -> String {
     let mut out = "\"".to_string();
     let mut prev_esc = false;
     for c in s.chars() {
-        if c.is_ascii_alphanumeric() || c == ' ' || c == '_' {
+        if c.is_ascii_graphic() || c == ' ' {
             if prev_esc && c.is_ascii_hexdigit() {
                 out.push_str(&format!("\\x{:01$x}", c as u32, 2));
             } else {

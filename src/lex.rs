@@ -92,6 +92,7 @@ pub enum Token {
     LBrack(Span),
     RBrack(Span),
     Colon(Span),
+    Comma(Span),
 
     Fn(Span),
     If(Span),
@@ -133,6 +134,7 @@ impl Token {
             | Token::LBrack(span)
             | Token::RBrack(span)
             | Token::Colon(span)
+            | Token::Comma(span)
             | Token::Fn(span)
             | Token::If(span)
             | Token::Else(span)
@@ -386,6 +388,8 @@ impl TokenIter {
             return Ok(Token::RBrack(self.make_span(1)));
         } else if self.suffix.starts_with(':') {
             return Ok(Token::Colon(self.make_span(1)));
+        } else if self.suffix.starts_with(',') {
+            return Ok(Token::Comma(self.make_span(1)));
         } else if self.suffix.starts_with('"') {
             return self.lex_string();
         } else if self.suffix.starts_with('\'') {
@@ -637,6 +641,7 @@ fn is_symbol_continue(suffix: &str) -> bool {
         && !suffix.starts_with('[')
         && !suffix.starts_with(']')
         && !suffix.starts_with(':')
+        && !suffix.starts_with(',')
         && !suffix.starts_with('"')
         && !suffix.starts_with('\'')
         && !suffix.starts_with("//")

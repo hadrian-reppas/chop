@@ -5,8 +5,6 @@ use crate::error::Error;
 use crate::lex::{Span, Token, Tokens};
 use crate::parse::{parse_colon, parse_group, parse_name};
 
-// TODO: parse function calls
-
 const OR_BP: usize = 6;
 const XOR_BP: usize = 8;
 const AND_BP: usize = 10;
@@ -26,6 +24,7 @@ const NEGATE_BP: usize = 40;
 const NOT_BP: usize = 40;
 const DEREF_BP: usize = 40;
 
+#[derive(Debug)]
 enum Tok {
     Int(i64, Span),
     Float(f64, Span),
@@ -38,6 +37,7 @@ enum Tok {
 
     LParen(Span),
     RParen(Span),
+    Comma(Span),
 
     Add(Span),
     And(Span),
@@ -70,6 +70,7 @@ impl Tok {
             | Tok::String(_, span)
             | Tok::LParen(span)
             | Tok::RParen(span)
+            | Tok::Comma(span)
             | Tok::Add(span)
             | Tok::And(span)
             | Tok::Divide(span)
@@ -95,10 +96,15 @@ impl Tok {
 
 pub fn parse(tokens: &mut Tokens) -> Result<(Expr, Span), Error> {
     let mut tok_vec = convert(tokens)?;
-    let rparen = tok_vec.pop().unwrap();
+    let rparen_span = tok_vec.pop().unwrap().span();
     tok_vec.remove(0);
     let mut tokens = tok_vec.into_iter().peekable();
-    Ok((pratt_parse(&mut tokens, 0)?, rparen.span()))
+    let expr = pratt_parse(&mut tokens, 0, rparen_span)?;
+    if let Some(extra) = tokens.next() {
+        Err(Error::Parse(extra.span(), "unexpected token".to_string()))
+    } else {
+        Ok((expr, rparen_span))
+    }
 }
 
 fn convert(tokens: &mut Tokens) -> Result<Vec<Tok>, Error> {
@@ -151,6 +157,7 @@ fn convert(tokens: &mut Tokens) -> Result<Vec<Tok>, Error> {
                 toks.push(Tok::RParen(span));
                 depth -= 1;
             }
+            Token::Comma(span) => toks.push(Tok::Comma(span)),
             Token::LBrack(_) => {
                 let group = parse_group(tokens, false)?;
                 if !tokens.peek().is_rbrack() {
@@ -173,59 +180,109 @@ fn convert(tokens: &mut Tokens) -> Result<Vec<Tok>, Error> {
     Ok(toks)
 }
 
-fn pratt_parse(tokens: &mut Peekable<impl Iterator<Item = Tok>>, bp: usize) -> Result<Expr, Error> {
-    let mut lhs = match tokens.next().unwrap() {
-        Tok::Int(i, span) => Expr::Int(i, span),
-        Tok::Float(f, span) => Expr::Float(f, span),
-        Tok::Bool(b, span) => Expr::Bool(b, span),
-        Tok::Char(c, span) => Expr::Char(c, span),
-        Tok::Byte(b, span) => Expr::Byte(b, span),
-        Tok::String(s, span) => Expr::String(s, span),
-        Tok::Name(name) => Expr::Name(name),
-        Tok::Group(group, span) => Expr::Group(group, span),
-        Tok::Subtract(span) => Expr::Negate(Box::new(pratt_parse(tokens, NEGATE_BP)?), span),
-        Tok::Not(span) => Expr::Not(Box::new(pratt_parse(tokens, NOT_BP)?), span),
-        Tok::Multiply(span) => Expr::Deref(Box::new(pratt_parse(tokens, DEREF_BP)?), span),
-        Tok::LParen(span) => {
-            let lhs = pratt_parse(tokens, 0)?;
+fn pratt_parse(
+    tokens: &mut Peekable<impl Iterator<Item = Tok>>,
+    bp: usize,
+    rparen_span: Span,
+) -> Result<Expr, Error> {
+    let mut lhs = match tokens.next() {
+        Some(Tok::Int(i, span)) => Expr::Int(i, span),
+        Some(Tok::Float(f, span)) => Expr::Float(f, span),
+        Some(Tok::Bool(b, span)) => Expr::Bool(b, span),
+        Some(Tok::Char(c, span)) => Expr::Char(c, span),
+        Some(Tok::Byte(b, span)) => Expr::Byte(b, span),
+        Some(Tok::String(s, span)) => Expr::String(s, span),
+        Some(Tok::Name(name)) => Expr::Name(name),
+        Some(Tok::Group(group, span)) => Expr::Group(group, span),
+        Some(Tok::Subtract(span)) => {
+            Expr::Negate(Box::new(pratt_parse(tokens, NEGATE_BP, rparen_span)?), span)
+        }
+        Some(Tok::Not(span)) => {
+            Expr::Not(Box::new(pratt_parse(tokens, NOT_BP, rparen_span)?), span)
+        }
+        Some(Tok::Multiply(span)) => {
+            Expr::Deref(Box::new(pratt_parse(tokens, DEREF_BP, rparen_span)?), span)
+        }
+        Some(Tok::LParen(span)) => {
+            let lhs = pratt_parse(tokens, 0, rparen_span)?;
             if !matches!(tokens.peek(), Some(Tok::RParen(_))) {
                 return Err(Error::Parse(span, "expected ')'".to_string()));
             }
+            tokens.next();
             lhs
         }
-        token => return Err(Error::Parse(token.span(), "unexpected token".to_string())),
+        Some(token) => return Err(Error::Parse(token.span(), "unexpected token".to_string())),
+        None => {
+            return Err(Error::Parse(
+                rparen_span,
+                "expected an expression".to_string(),
+            ))
+        }
     };
 
     macro_rules! expr {
-        ($name:ident, $bp:expr, $token:expr) => {{
+        ($name:ident, $bp:expr) => {{
             if $bp < bp {
                 break;
             }
-            let token = $token.clone();
-            tokens.next();
-            Expr::$name(Box::new(lhs), Box::new(pratt_parse(tokens, $bp)?), token)
+            let span = tokens.next().unwrap().span();
+            Expr::$name(
+                Box::new(lhs),
+                Box::new(pratt_parse(tokens, $bp, rparen_span)?),
+                span,
+            )
         }};
     }
 
     loop {
         lhs = match tokens.peek() {
-            Some(Tok::Add(token)) => expr!(Add, ADD_BP, token),
-            Some(Tok::And(token)) => expr!(And, AND_BP, token),
-            Some(Tok::Divide(token)) => expr!(Divide, DIVIDE_BP, token),
-            Some(Tok::Equal(token)) => expr!(Equal, EQUAL_BP, token),
-            Some(Tok::GreaterEqual(token)) => expr!(GreaterEqual, GREATER_EQUAL_BP, token),
-            Some(Tok::GreaterThan(token)) => expr!(GreaterThan, GREATER_THAN_BP, token),
-            Some(Tok::LessEqual(token)) => expr!(LessEqual, LESS_EQUAL_BP, token),
-            Some(Tok::LessThan(token)) => expr!(LessThan, LESS_THAN_BP, token),
-            Some(Tok::Modulo(token)) => expr!(Modulo, MODULO_BP, token),
-            Some(Tok::Multiply(token)) => expr!(Multiply, MULTIPLY_BP, token),
-            Some(Tok::NotEqual(token)) => expr!(NotEqual, NOT_EQUAL_BP, token),
-            Some(Tok::Or(token)) => expr!(Or, OR_BP, token),
-            Some(Tok::Subtract(token)) => expr!(Subtract, SUBTRACT_BP, token),
-            Some(Tok::Xor(token)) => expr!(Xor, XOR_BP, token),
-            Some(Tok::LShift(token)) => expr!(LShift, SHIFT_BP, token),
-            Some(Tok::RShift(token)) => expr!(RShift, SHIFT_BP, token),
-            Some(Tok::RParen(_)) | None => break,
+            Some(Tok::Add(_)) => expr!(Add, ADD_BP),
+            Some(Tok::And(_)) => expr!(And, AND_BP),
+            Some(Tok::Divide(_)) => expr!(Divide, DIVIDE_BP),
+            Some(Tok::Equal(_)) => expr!(Equal, EQUAL_BP),
+            Some(Tok::GreaterEqual(_)) => expr!(GreaterEqual, GREATER_EQUAL_BP),
+            Some(Tok::GreaterThan(_)) => expr!(GreaterThan, GREATER_THAN_BP),
+            Some(Tok::LessEqual(_)) => expr!(LessEqual, LESS_EQUAL_BP),
+            Some(Tok::LessThan(_)) => expr!(LessThan, LESS_THAN_BP),
+            Some(Tok::Modulo(_)) => expr!(Modulo, MODULO_BP),
+            Some(Tok::Multiply(_)) => expr!(Multiply, MULTIPLY_BP),
+            Some(Tok::NotEqual(_)) => expr!(NotEqual, NOT_EQUAL_BP),
+            Some(Tok::Or(_)) => expr!(Or, OR_BP),
+            Some(Tok::Subtract(_)) => expr!(Subtract, SUBTRACT_BP),
+            Some(Tok::Xor(_)) => expr!(Xor, XOR_BP),
+            Some(Tok::LShift(_)) => expr!(LShift, SHIFT_BP),
+            Some(Tok::RShift(_)) => expr!(RShift, SHIFT_BP),
+            Some(Tok::LParen(_)) => {
+                let span = tokens.next().unwrap().span();
+                let name = if let Expr::Name(name) = lhs {
+                    name
+                } else {
+                    return Err(Error::Parse(span, "unexpected token".to_string()));
+                };
+                let mut args = Vec::new();
+                if matches!(tokens.peek(), Some(Tok::RParen(_))) {
+                    tokens.next();
+                    Expr::Call(name, args)
+                } else {
+                    loop {
+                        args.push(pratt_parse(tokens, 0, rparen_span)?);
+                        if matches!(tokens.peek(), Some(Tok::RParen(_))) {
+                            tokens.next();
+                            break Expr::Call(name, args);
+                        } else if matches!(tokens.peek(), Some(Tok::Comma(_))) {
+                            tokens.next();
+                        } else if let Some(token) = tokens.peek() {
+                            return Err(Error::Parse(token.span(), "unexpected token".to_string()));
+                        } else {
+                            return Err(Error::Parse(
+                                rparen_span,
+                                "expected ',' or ')'".to_string(),
+                            ));
+                        }
+                    }
+                }
+            }
+            Some(Tok::RParen(_)) | Some(Tok::Comma(_)) | None => break,
             Some(token) => return Err(Error::Parse(token.span(), "unexpected token".to_string())),
         }
     }

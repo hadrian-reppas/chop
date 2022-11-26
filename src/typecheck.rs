@@ -1948,6 +1948,37 @@ impl Context {
                     )),
                 }
             }
+            Expr::Call(name, args) => {
+                let mut stack = Vec::new();
+                for arg in args {
+                    stack.push((0, self.check_expr(arg)?));
+                }
+                let NameInfo { signature, binds, .. } = self.get_qsbi(&stack, name)?;
+                if signature.returns.len() == 1 {
+                    Ok(self.types.substitute(signature.returns[0], &binds))
+                } else {
+                    Err(Error::Type(
+                        name.span(),
+                        "expression functions must return a single value".to_string(),
+                        vec![
+                            Note::new(
+                                None,
+                                format!("'{}' returns {} values", name.name().name, signature.returns.len()),
+                            ),
+                            Note::new(
+                                None,
+                                format!(
+                                    "'{}' has signature {}{}{}",
+                                    name.name().name,
+                                    color!(Blue),
+                                    self.types.format_signature(&signature),
+                                    reset!()
+                                ),
+                            ),
+                        ],
+                    ))
+                }
+            },
         }
     }
 
@@ -2369,6 +2400,12 @@ fn flatten_expr(expr: &Expr, ops: &mut Vec<Op>) {
                     op => ops.push(op.clone()),
                 }
             }
+        }
+        Expr::Call(name, args) => {
+            for arg in args {
+                flatten_expr(arg, ops);
+            }
+            ops.push(Op::Name(*name));
         }
     }
 }

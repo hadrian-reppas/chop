@@ -405,6 +405,7 @@ pub enum Expr {
     Negate(Box<Expr>, Span),
     Deref(Box<Expr>, Span),
     Group(Vec<Op>, Span),
+    Call(QualifiedName, Vec<Expr>),
 }
 
 impl fmt::Debug for Expr {
@@ -437,6 +438,7 @@ impl fmt::Debug for Expr {
             Expr::Negate(expr, _) => write!(f, "Negate({expr:?})"),
             Expr::Deref(expr, _) => write!(f, "Deref({expr:?})"),
             Expr::Group(group, _) => write!(f, "Group({group:?})"),
+            Expr::Call(name, args) => write!(f, "Call({name:?}, {args:?})"),
         }
     }
 }
