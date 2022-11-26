@@ -1,0 +1,13 @@
+import std::string
+import std::string::{push}
+
+fn pop_string_ptr *string::string {
+    ~
+} 
+
+fn main {
+    string::new_string
+    @ pop_string_ptr
+    @ 'a' push
+    ~
+}

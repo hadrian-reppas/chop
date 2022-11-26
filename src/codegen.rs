@@ -20,14 +20,15 @@ const PRELUDE: &str = "\
 struct Generator {
     program: Program,
     call_graph: HashMap<FnInfo, HashSet<CallInfo>>,
-    signatures: HashMap<&'static str, Vec<GSignature>>,
-    struct_fields: HashMap<&'static str, Vec<(&'static str, GTypeId)>>,
+    signatures: HashMap<Vec<&'static str>, Vec<GSignature>>,
+    struct_fields: HashMap<Vec<&'static str>, Vec<(&'static str, GTypeId)>>,
     types: Types,
     #[allow(clippy::type_complexity)]
     concrete: HashMap<
-        (&'static str, usize),
+        (Vec<&'static str>, usize),
         HashMap<Vec<TypeId>, (usize, Kind, Vec<TypeId>, Vec<TypeId>)>,
     >,
+    main_unit_prefix: Vec<&'static str>,
     code: String,
     depth: usize,
     counter: usize,
@@ -40,6 +41,7 @@ pub fn generate(info: ProgramInfo) -> String {
         signatures,
         struct_fields,
         types,
+        main_unit_prefix,
     } = info;
     let mut context = Generator {
         program,
@@ -48,6 +50,7 @@ pub fn generate(info: ProgramInfo) -> String {
         struct_fields,
         types,
         concrete: HashMap::new(),
+        main_unit_prefix,
         code: PRELUDE.to_string(),
         depth: 0,
         counter: 0,
@@ -59,12 +62,14 @@ pub fn generate(info: ProgramInfo) -> String {
 impl Generator {
     fn generate(&mut self) {
         let mut done = HashSet::new();
-        self.get_concrete_signatures("main", 0, Vec::new(), &mut done);
+        let mut main = self.main_unit_prefix.to_vec();
+        main.push("main");
+        self.get_concrete_signatures(&main, 0, Vec::new(), &mut done);
 
         for (name, map) in &self.types.custom_map {
             for id in map.values() {
                 self.code
-                    .push_str(&format!("struct hs_{}_{id};\n", escape_name(name)));
+                    .push_str(&format!("struct hs_{}_{id};\n", escape_names(name)));
             }
         }
 
@@ -72,7 +77,7 @@ impl Generator {
         let cloned_map = self.types.custom_map.clone();
         for (name, fields) in &self.struct_fields {
             for (binds, id) in cloned_map.get(name).into_iter().flatten() {
-                let mut code = format!("struct hs_{}_{id} {{\n", escape_name(name));
+                let mut code = format!("struct hs_{}_{id} {{\n", escape_names(name));
                 let mut ftypes = Vec::new();
                 for (fname, gtype) in fields {
                     let id = self.types.substitute_concrete(*gtype, binds);
@@ -98,7 +103,7 @@ impl Generator {
             self.code.push_str(&format!(
                 "{} hg_{};\n",
                 self.types.generate(global.type_id),
-                escape_name(global.name),
+                escape_names(&global.name),
             ));
         }
 
@@ -113,7 +118,7 @@ impl Generator {
         for ((name, _), map) in &concrete {
             for (params, (id, kind, returns, _)) in map {
                 match kind {
-                    Kind::Builtin => self.generate_builtin(name, *id, params, returns),
+                    Kind::Builtin => self.generate_builtin(name[0], *id, params, returns),
                     Kind::Custom(_) => {}
                     Kind::Constructor(_) => self.generate_constructor(name, *id, params, returns),
                     Kind::Member(_) => self.generate_member(name, *id, params, returns),
@@ -127,12 +132,12 @@ impl Generator {
         let functions = mem::take(&mut self.program.functions);
         for function in functions {
             for (params, (id, _, returns, binds)) in concrete
-                .get(&(function.name, function.index))
+                .get(&(function.name.clone(), function.index))
                 .into_iter()
                 .flatten()
             {
                 self.generate_custom(
-                    function.name,
+                    &function.name,
                     *id,
                     binds,
                     params,
@@ -166,16 +171,19 @@ impl Generator {
                 }
                 self.code.push_str(&format!(
                     "        hg_{} = hv{};\n",
-                    escape_name(global.name),
+                    escape_names(&global.name),
                     init.var,
                 ));
                 self.code.push_str("    }\n");
             }
         }
 
-        let main_signature = &self.signatures["main"][0];
+        let mut main = self.main_unit_prefix.to_vec();
+        main.push("main");
+        let main_signature = &self.signatures[&main][0];
 
-        self.code.push_str("    hf_main_0(");
+        self.code
+            .push_str(&format!("    hf_{}_0(", escape_names(&main)));
         if !main_signature.params.is_empty() {
             self.code.push_str("argc, (uint8_t**) argv");
         }
@@ -189,9 +197,15 @@ impl Generator {
         self.code.push_str(");\n    return (int) code;\n}\n");
     }
 
-    fn generate_topline(&mut self, name: &str, id: usize, params: &[TypeId], returns: &[TypeId]) {
+    fn generate_topline(
+        &mut self,
+        name: &[&str],
+        id: usize,
+        params: &[TypeId],
+        returns: &[TypeId],
+    ) {
         self.code.push_str("void hf_");
-        self.code.push_str(&escape_name(name));
+        self.code.push_str(&escape_names(name));
         self.code.push_str(&format!("_{}(", id));
 
         for (i, param) in params.iter().enumerate() {
@@ -217,7 +231,7 @@ impl Generator {
     #[allow(clippy::too_many_arguments)]
     fn generate_custom(
         &mut self,
-        name: &str,
+        name: &[&str],
         id: usize,
         binds: &[TypeId],
         params: &[TypeId],
@@ -301,7 +315,7 @@ impl Generator {
             ProgramOp::Call(name, index, params, returns, call_binds) => {
                 let id = self.get_id(name, *index, call_binds, binds);
                 self.code
-                    .push_str(&format!("hf_{}_{id}(", escape_name(name)));
+                    .push_str(&format!("hf_{}_{id}(", escape_names(name)));
                 for (i, param) in params.iter().enumerate() {
                     if i > 0 {
                         self.code.push_str(", ");
@@ -470,7 +484,7 @@ impl Generator {
     }
 
     fn generate_builtin(&mut self, name: &str, id: usize, params: &[TypeId], returns: &[TypeId]) {
-        self.generate_topline(name, id, params, returns);
+        self.generate_topline(&[name], id, params, returns);
         match name {
             "+" => self.code.push_str("    *hr0 = hv0 + hv1;\n"),
             "-" => self.code.push_str("    *hr0 = hv0 - hv1;\n"),
@@ -621,7 +635,7 @@ impl Generator {
 
     fn generate_constructor(
         &mut self,
-        name: &str,
+        name: &[&str],
         id: usize,
         params: &[TypeId],
         returns: &[TypeId],
@@ -634,11 +648,11 @@ impl Generator {
         self.code.push_str("}\n");
     }
 
-    fn generate_member(&mut self, name: &str, id: usize, params: &[TypeId], returns: &[TypeId]) {
+    fn generate_member(&mut self, name: &[&str], id: usize, params: &[TypeId], returns: &[TypeId]) {
         self.generate_topline(name, id, params, returns);
-        let (field_name, ddot) = match name.strip_prefix("..") {
+        let (field_name, ddot) = match name.last().unwrap().strip_prefix("..") {
             Some(field_name) => (field_name, true),
-            None => (name.strip_prefix('.').unwrap(), false),
+            None => (name.last().unwrap().strip_prefix('.').unwrap(), false),
         };
         if self.types.concrete_depth(params[0]) == 0 {
             if ddot {
@@ -667,49 +681,51 @@ impl Generator {
         }
     }
 
-    fn generate_global(&mut self, name: &str, id: usize, params: &[TypeId], returns: &[TypeId]) {
+    fn generate_global(&mut self, name: &[&str], id: usize, params: &[TypeId], returns: &[TypeId]) {
         self.generate_topline(name, id, params, returns);
         self.code
-            .push_str(&format!("    *hr0 = hg_{};\n}}\n", escape_name(name)));
+            .push_str(&format!("    *hr0 = hg_{};\n}}\n", escape_names(name)));
     }
 
     fn generate_global_write(
         &mut self,
-        name: &str,
+        name: &[&str],
         id: usize,
         params: &[TypeId],
         returns: &[TypeId],
     ) {
-        let global_name = name.strip_prefix("write_").unwrap();
+        let global_name = name.last().unwrap().strip_prefix("write_").unwrap();
+        let mut qname = name[..name.len() - 1].to_vec();
+        qname.push(global_name);
         self.generate_topline(name, id, params, returns);
         self.code
-            .push_str(&format!("    hg_{} = hv0;\n}}\n", escape_name(global_name)));
+            .push_str(&format!("    hg_{} = hv0;\n}}\n", escape_names(&qname)));
     }
 
     fn generate_global_ptr(
         &mut self,
-        name: &str,
+        name: &[&str],
         id: usize,
         params: &[TypeId],
         returns: &[TypeId],
     ) {
-        let global_name = name.strip_suffix("_ptr").unwrap();
+        let global_name = name.last().unwrap().strip_suffix("_ptr").unwrap();
+        let mut qname = name[..name.len() - 1].to_vec();
+        qname.push(global_name);
         self.generate_topline(name, id, params, returns);
-        self.code.push_str(&format!(
-            "    *hr0 = &hg_{};\n}}\n",
-            escape_name(global_name),
-        ));
+        self.code
+            .push_str(&format!("    *hr0 = &hg_{};\n}}\n", escape_names(&qname)));
     }
 
     fn get_declaration(
         &self,
-        name: &str,
+        name: &[&str],
         id: usize,
         params: &[TypeId],
         returns: &[TypeId],
     ) -> String {
         let mut out = "void hf_".to_string();
-        out.push_str(&escape_name(name));
+        out.push_str(&escape_names(name));
         out.push_str(&format!("_{}(", id));
 
         for (i, param) in params.iter().enumerate() {
@@ -733,7 +749,7 @@ impl Generator {
 
     fn get_id(
         &mut self,
-        name: &str,
+        name: &[&str],
         index: usize,
         binds: &[GTypeId],
         fn_binds: &[TypeId],
@@ -747,24 +763,25 @@ impl Generator {
             .into_iter()
             .map(|id| self.types.substitute_concrete(id, fn_binds))
             .collect();
-        self.concrete[&(name, index)][&params].0
+        let vec = name.to_vec();
+        self.concrete[&(vec, index)][&params].0
     }
 
     fn get_concrete_signatures(
         &mut self,
-        name: &'static str,
+        name: &[&'static str],
         index: usize,
         binds: Vec<TypeId>,
-        done: &mut HashSet<(&'static str, usize, Vec<TypeId>)>,
+        done: &mut HashSet<(Vec<&'static str>, usize, Vec<TypeId>)>,
     ) {
-        let tup = (name, index, binds);
+        let tup = (name.to_vec(), index, binds);
         if done.contains(&tup) {
             return;
         }
-        let (_, _, binds) = tup;
-        done.insert((name, index, binds.clone()));
+        let (name, _, binds) = tup;
+        done.insert((name.clone(), index, binds.clone()));
 
-        let signature = &self.signatures[name][index];
+        let signature = &self.signatures[&name][index];
         let params: Vec<_> = signature
             .params
             .iter()
@@ -777,7 +794,7 @@ impl Generator {
             .collect();
 
         self.counter += 1;
-        match self.concrete.entry((name, index)) {
+        match self.concrete.entry((name.clone(), index)) {
             hash_map::Entry::Vacant(v) => {
                 v.insert(HashMap::from([(
                     params,
@@ -804,7 +821,7 @@ impl Generator {
                 .iter()
                 .map(|id| self.types.substitute_concrete(*id, &binds))
                 .collect();
-            self.get_concrete_signatures(call_name, call_index, converted_binds, done);
+            self.get_concrete_signatures(&call_name, call_index, converted_binds, done);
         }
     }
 
@@ -830,6 +847,25 @@ pub fn escape_name(name: &str) -> String {
             out.push_str("__");
         } else {
             out.push_str(&format!("_{}_", c as u32));
+        }
+    }
+    out
+}
+
+pub fn escape_names(names: &[&str]) -> String {
+    let mut out = String::new();
+    for (i, name) in names.iter().enumerate() {
+        if i > 0 {
+            out.push_str("_58_");
+        }
+        for c in name.chars() {
+            if c.is_ascii_alphanumeric() {
+                out.push(c);
+            } else if c == '_' {
+                out.push_str("__");
+            } else {
+                out.push_str(&format!("_{}_", c as u32));
+            }
         }
     }
     out

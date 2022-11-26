@@ -1,4 +1,4 @@
-import std : vector
+import struct std::vector::{vector}
 
 struct string {
     bytes: vector[byte]

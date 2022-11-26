@@ -15,20 +15,6 @@ impl fmt::Debug for Name {
     }
 }
 
-impl PartialEq for Name {
-    fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
-    }
-}
-
-impl Eq for Name {}
-
-impl Hash for Name {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.name.hash(state);
-    }
-}
-
 impl Name {
     pub fn is_normal(&self) -> bool {
         let c = self.name.chars().next().unwrap();
@@ -40,7 +26,17 @@ impl Name {
     }
 }
 
-pub type Unit = Vec<Item>;
+#[derive(Debug, Clone)]
+pub struct QualifiedName {
+    pub name: Name,
+    pub module: Option<(Name, Span, Span)>,
+}
+
+impl QualifiedName {
+    pub fn is_just(&self, name: &str) -> bool {
+        self.module.is_none() && self.name.name == name
+    }
+}
 
 #[allow(clippy::large_enum_variant)]
 pub enum Item {
@@ -74,10 +70,12 @@ pub enum Item {
         colon_span: Span,
     },
     Import {
-        path: Vec<Name>,
+        names: Vec<Name>,
+        group: Option<ImportGroup>,
 
         import_span: Span,
-        colon_spans: Vec<Span>,
+        struct_span: Option<Span>,
+        colon_spans: Vec<(Span, Span)>,
     },
 }
 
@@ -103,9 +101,18 @@ impl fmt::Debug for Item {
                 definition,
                 ..
             } => write!(f, "Global({name:?}, {ty:?}, {definition:?})"),
-            Item::Import { path, .. } => write!(f, "Import({:?})", path),
+            Item::Import { names, .. } => write!(f, "Import({:?})", names),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct ImportGroup {
+    pub names: Vec<Name>,
+
+    pub colon_spans: (Span, Span),
+    pub lbrace_span: Span,
+    pub rbrace_span: Span,
 }
 
 pub struct Definition {
@@ -151,7 +158,7 @@ impl fmt::Debug for Generics {
 #[derive(Clone)]
 pub struct PType {
     pub stars: Option<Name>,
-    pub name: Name,
+    pub name: QualifiedName,
     pub generics: Option<TypeGenerics>,
 }
 
@@ -286,7 +293,7 @@ pub enum Op {
     Char(char, Span),
     String(String, Span),
     Byte(u8, Span),
-    Name(Name),
+    Name(QualifiedName),
     SizeOf(PType, Span, Span, Span),
     Alloc(PType, Span, Span, Span),
     Zalloc(PType, Span, Span, Span),
@@ -330,10 +337,6 @@ impl Op {
             Token::Char(c, span) => Op::Char(c, span),
             Token::String(s, span) => Op::String(s, span),
             Token::Byte(b, span) => Op::Byte(b, span),
-            Token::Name(span) => Op::Name(Name {
-                name: span.text,
-                span,
-            }),
             _ => panic!(),
         }
     }
@@ -355,7 +358,7 @@ impl Op {
             | Op::Assert(span)
             | Op::Abort(span, _)
             | Op::Expr(_, span) => *span,
-            Op::Name(name) => name.span,
+            Op::Name(qname) => qname.name.span,
         }
     }
 }
@@ -368,7 +371,7 @@ pub enum Expr {
     Char(char, Span),
     String(String, Span),
     Byte(u8, Span),
-    Name(Name),
+    Name(QualifiedName),
     Add(Box<Expr>, Box<Expr>, Span),
     And(Box<Expr>, Box<Expr>, Span),
     Divide(Box<Expr>, Box<Expr>, Span),

@@ -1,4 +1,4 @@
-import std : prelude
+import std::prelude
 
 struct vector[T] {
     pointer: *T

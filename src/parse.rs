@@ -3,7 +3,8 @@ use std::collections::HashSet;
 use lazy_static::lazy_static;
 
 use crate::ast::{
-    Definition, ElsePart, Field, Generics, Item, Name, Op, PType, Stmt, TypeGenerics, Unit,
+    Definition, ElsePart, Field, Generics, ImportGroup, Item, Name, Op, PType, QualifiedName, Stmt,
+    TypeGenerics,
 };
 use crate::error::Error;
 use crate::expr;
@@ -14,7 +15,9 @@ lazy_static! {
         HashSet::from(["byte", "int", "float", "bool", "ptr", "_"]);
 }
 
-pub fn parse(mut tokens: Tokens) -> Result<Unit, Error> {
+// TODO: import path::to::file::{ _ } imports all functions/structs in that file
+
+pub fn parse(mut tokens: Tokens) -> Result<Vec<Item>, Error> {
     let mut items = Vec::new();
     loop {
         match tokens.peek() {
@@ -28,12 +31,12 @@ pub fn parse(mut tokens: Tokens) -> Result<Unit, Error> {
     }
 }
 
-pub fn parse_file(path: &str) -> Result<Unit, Error> {
+pub fn parse_file(path: &str) -> Result<Vec<Item>, Error> {
     let tokens = Tokens::from_file(path)?;
     parse(tokens)
 }
 
-fn parse_name(tokens: &mut Tokens, is_let_bind: bool) -> Result<Name, Error> {
+pub fn parse_name(tokens: &mut Tokens, is_let_bind: bool) -> Result<Name, Error> {
     if tokens.peek().is_name() {
         let span = tokens.next()?.span();
         if !is_let_bind && span.text == "_" {
@@ -273,48 +276,165 @@ fn parse_global(tokens: &mut Tokens) -> Result<Item, Error> {
 
 fn parse_import(tokens: &mut Tokens) -> Result<Item, Error> {
     let import_span = tokens.next()?.span();
-    let mut path = vec![parse_name(tokens, false)?];
+    let struct_span = if tokens.peek().is_struct() {
+        Some(tokens.next()?.span())
+    } else {
+        None
+    };
+    let mut names = vec![parse_name(tokens, false)?];
     let mut colon_spans = Vec::new();
     while tokens.peek().is_colon() {
-        colon_spans.push(tokens.next()?.span());
-        path.push(parse_name(tokens, false)?);
+        colon_spans.push((tokens.next()?.span(), parse_colon(tokens)?));
+        if tokens.peek().is_lbrace() {
+            let lbrace_span = tokens.next()?.span();
+            let mut group_names = Vec::new();
+            while !tokens.peek().is_rbrace() {
+                group_names.push(parse_name(tokens, false)?);
+            }
+            let rbrace_span = tokens.next()?.span();
+            let group = ImportGroup {
+                names: group_names,
+                colon_spans: colon_spans.pop().unwrap(),
+                lbrace_span,
+                rbrace_span,
+            };
+            return Ok(Item::Import {
+                names,
+                group: Some(group),
+                import_span,
+                struct_span,
+                colon_spans,
+            });
+        } else {
+            names.push(parse_name(tokens, false)?);
+        }
     }
-    Ok(Item::Import {
-        path,
-        import_span,
-        colon_spans,
-    })
+    if let Some(span) = struct_span {
+        Err(Error::Parse(
+            span,
+            "import struct items must contain an import group".to_string(),
+        ))
+    } else {
+        Ok(Item::Import {
+            names,
+            group: None,
+            import_span,
+            struct_span,
+            colon_spans,
+        })
+    }
+}
+
+fn parse_qualified_name(tokens: &mut Tokens, is_type: bool) -> Result<QualifiedName, Error> {
+    let first = parse_name(tokens, false)?;
+    if tokens.peek().is_colon() {
+        let colon1 = tokens.next()?.span();
+        let colon2 = parse_colon(tokens)?;
+        let second = parse_name(tokens, false)?;
+        if first.is_normal() {
+            if is_type && !second.is_normal() {
+                Err(Error::Parse(
+                    second.span,
+                    "expected a normal name".to_string(),
+                ))
+            } else {
+                Ok(QualifiedName {
+                    name: second,
+                    module: Some((first, colon1, colon2)),
+                })
+            }
+        } else {
+            Err(Error::Parse(
+                first.span,
+                "expected a normal name".to_string(),
+            ))
+        }
+    } else if is_type && !first.is_normal() {
+        Err(Error::Parse(
+            first.span,
+            "expected a normal name".to_string(),
+        ))
+    } else {
+        Ok(QualifiedName {
+            name: first,
+            module: None,
+        })
+    }
+}
+
+pub fn parse_colon(tokens: &mut Tokens) -> Result<Span, Error> {
+    if tokens.peek().is_colon() {
+        Ok(tokens.next()?.span())
+    } else {
+        Err(Error::Parse(
+            tokens.peek().span(),
+            "expected ':'".to_string(),
+        ))
+    }
+}
+
+enum QualifiedNameOrPtr {
+    QualifiedName(QualifiedName),
+    Ptr(Name),
 }
 
 fn parse_type(tokens: &mut Tokens) -> Result<PType, Error> {
-    let first = parse_name(tokens, false)?;
-    if first.is_normal() {
-        let generics = parse_type_generics(tokens)?;
-        Ok(PType {
-            stars: None,
-            name: first,
-            generics,
-        })
-    } else if first.is_ptr() {
-        let second = parse_name(tokens, false)?;
-        if second.is_normal() {
+    match parse_qualified_name_or_ptr(tokens)? {
+        QualifiedNameOrPtr::QualifiedName(name) => {
             let generics = parse_type_generics(tokens)?;
             Ok(PType {
-                stars: Some(first),
-                name: second,
+                stars: None,
+                name,
                 generics,
             })
-        } else {
-            Err(Error::Parse(
-                second.span,
-                "type names must be normal".to_string(),
-            ))
         }
+        QualifiedNameOrPtr::Ptr(stars) => {
+            let second = parse_qualified_name(tokens, true)?;
+            if second.name.is_normal() {
+                let generics = parse_type_generics(tokens)?;
+                Ok(PType {
+                    stars: Some(stars),
+                    name: second,
+                    generics,
+                })
+            } else {
+                Err(Error::Parse(
+                    second.name.span,
+                    "type names must be normal".to_string(),
+                ))
+            }
+        }
+    }
+}
+
+fn parse_qualified_name_or_ptr(tokens: &mut Tokens) -> Result<QualifiedNameOrPtr, Error> {
+    let first = parse_name(tokens, false)?;
+    if first.is_normal() {
+        if tokens.peek().is_colon() {
+            let colon1 = tokens.next()?.span();
+            let colon2 = parse_colon(tokens)?;
+            let second = parse_name(tokens, false)?;
+            if first.is_normal() {
+                Ok(QualifiedNameOrPtr::QualifiedName(QualifiedName {
+                    name: second,
+                    module: Some((first, colon1, colon2)),
+                }))
+            } else {
+                Err(Error::Parse(
+                    first.span,
+                    "expected a normal name".to_string(),
+                ))
+            }
+        } else {
+            Ok(QualifiedNameOrPtr::QualifiedName(QualifiedName {
+                name: first,
+                module: None,
+            }))
+        }
+    } else if first.is_ptr() {
+        Ok(QualifiedNameOrPtr::Ptr(first))
     } else {
-        Err(Error::Parse(
-            first.span,
-            "type names must be normal".to_string(),
-        ))
+        Err(Error::Parse(first.span, "expected a type".to_string()))
     }
 }
 
@@ -377,7 +497,12 @@ pub fn parse_group(tokens: &mut Tokens, is_if_test: bool) -> Result<Vec<Op>, Err
         || tokens.peek().is_special_kw()
     {
         if tokens.peek().is_standalone() {
-            group.push(Op::from_token(tokens.next()?));
+            if tokens.peek().is_name() {
+                let qname = parse_qualified_name(tokens, false)?;
+                group.push(Op::Name(qname));
+            } else {
+                group.push(Op::from_token(tokens.next()?));
+            }
         } else if tokens.peek().is_lparen() {
             let (expr, span) = expr::parse(tokens)?;
             group.push(Op::Expr(expr, span));

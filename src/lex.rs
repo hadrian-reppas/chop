@@ -3,7 +3,13 @@ use std::{fmt, fs};
 use lazy_static::lazy_static;
 use regex::Regex;
 
-use crate::{ast::Name, error::Error};
+use crate::{
+    ast::{Name, QualifiedName},
+    error::Error,
+};
+
+// TODO: consider @global_name instead of global_name_ptr?
+// TODO: consider something like #global_name instead of write_global_name?
 
 #[derive(Clone, Copy)]
 pub struct Span {
@@ -12,7 +18,6 @@ pub struct Span {
     pub column: usize,
     pub code: &'static str,
     pub file: &'static str,
-    pub is_std: bool,
 }
 
 impl Span {
@@ -41,7 +46,6 @@ impl Span {
             column: 0,
             code: "",
             file: "",
-            is_std: false,
         }
     }
 
@@ -56,6 +60,16 @@ impl From<Span> for Name {
             name: span.text,
             span,
         }
+    }
+}
+
+impl From<Span> for QualifiedName {
+    fn from(span: Span) -> QualifiedName {
+        let name = Name {
+            name: span.text,
+            span,
+        };
+        QualifiedName { name, module: None }
     }
 }
 
@@ -173,6 +187,10 @@ impl Token {
         matches!(self, Token::Colon(_))
     }
 
+    pub fn is_struct(&self) -> bool {
+        matches!(self, Token::Struct(_))
+    }
+
     pub fn is_if(&self) -> bool {
         matches!(self, Token::If(_))
     }
@@ -270,7 +288,6 @@ struct TokenIter {
     column: usize,
     code: &'static str,
     file: &'static str,
-    is_std: bool,
 }
 
 impl TokenIter {
@@ -284,7 +301,6 @@ impl TokenIter {
                 column: 0,
                 code,
                 file,
-                is_std: false,
             })
         } else {
             Err(Error::Io(format!("cannot open {}", path)))
@@ -298,7 +314,6 @@ impl TokenIter {
             column: 0,
             code,
             file,
-            is_std: true,
         }
     }
 
@@ -310,7 +325,6 @@ impl TokenIter {
                 column: self.column,
                 code: self.code,
                 file: self.file,
-                is_std: self.is_std,
             }))
         } else if self.suffix.starts_with(char::is_whitespace) {
             self.skip_whitespace();
@@ -327,7 +341,6 @@ impl TokenIter {
             column: self.column,
             code: self.code,
             file: self.file,
-            is_std: self.is_std,
         };
 
         self.suffix = &self.suffix[len..];

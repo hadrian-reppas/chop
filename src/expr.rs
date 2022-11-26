@@ -1,10 +1,11 @@
 use std::iter::Peekable;
 
-use crate::ast::Expr;
-use crate::ast::{Group, Name};
+use crate::ast::{Expr, Group, QualifiedName};
 use crate::error::Error;
 use crate::lex::{Span, Token, Tokens};
-use crate::parse::parse_group;
+use crate::parse::{parse_colon, parse_group, parse_name};
+
+// TODO: parse function calls
 
 const OR_BP: usize = 6;
 const XOR_BP: usize = 8;
@@ -32,7 +33,7 @@ enum Tok {
     Char(char, Span),
     Byte(u8, Span),
     String(String, Span),
-    Var(Name),
+    Name(QualifiedName),
     Group(Group, Span),
 
     LParen(Span),
@@ -87,7 +88,7 @@ impl Tok {
             | Tok::RShift(span)
             | Tok::Not(span)
             | Tok::Group(_, span) => *span,
-            Tok::Var(name) => name.span,
+            Tok::Name(name) => name.name.span,
         }
     }
 }
@@ -112,26 +113,45 @@ fn convert(tokens: &mut Tokens) -> Result<Vec<Tok>, Error> {
             Token::Byte(b, span) => toks.push(Tok::Byte(b, span)),
             Token::String(s, span) => toks.push(Tok::String(s, span)),
             Token::Name(span) => {
-                toks.push(match span.text {
-                    "+" => Tok::Add(span),
-                    "&" => Tok::And(span),
-                    "/" => Tok::Divide(span),
-                    "==" => Tok::Equal(span),
-                    ">=" => Tok::GreaterEqual(span),
-                    ">" => Tok::GreaterThan(span),
-                    "<=" => Tok::LessEqual(span),
-                    "<" => Tok::LessThan(span),
-                    "%" => Tok::Modulo(span),
-                    "*" => Tok::Multiply(span),
-                    "!=" => Tok::NotEqual(span),
-                    "|" => Tok::Or(span),
-                    "-" => Tok::Subtract(span),
-                    "^" => Tok::Xor(span),
-                    "!" => Tok::Not(span),
-                    "<<" => Tok::LShift(span),
-                    ">>" => Tok::RShift(span),
-                    name => Tok::Var(Name { name, span }),
-                });
+                let first = span.into();
+                let name = if tokens.peek().is_colon() {
+                    let colon1 = tokens.next()?.span();
+                    let colon2 = parse_colon(tokens)?;
+                    let second = parse_name(tokens, false)?;
+                    QualifiedName {
+                        name: second,
+                        module: Some((first, colon1, colon2)),
+                    }
+                } else {
+                    QualifiedName {
+                        name: first,
+                        module: None,
+                    }
+                };
+                if name.module.is_none() {
+                    toks.push(match name.name.name {
+                        "+" => Tok::Add(span),
+                        "&" => Tok::And(span),
+                        "/" => Tok::Divide(span),
+                        "==" => Tok::Equal(span),
+                        ">=" => Tok::GreaterEqual(span),
+                        ">" => Tok::GreaterThan(span),
+                        "<=" => Tok::LessEqual(span),
+                        "<" => Tok::LessThan(span),
+                        "%" => Tok::Modulo(span),
+                        "*" => Tok::Multiply(span),
+                        "!=" => Tok::NotEqual(span),
+                        "|" => Tok::Or(span),
+                        "-" => Tok::Subtract(span),
+                        "^" => Tok::Xor(span),
+                        "!" => Tok::Not(span),
+                        "<<" => Tok::LShift(span),
+                        ">>" => Tok::RShift(span),
+                        _ => Tok::Name(name),
+                    });
+                } else {
+                    toks.push(Tok::Name(name));
+                }
             }
             Token::LParen(span) => {
                 toks.push(Tok::LParen(span));
@@ -171,7 +191,7 @@ fn pratt_parse(tokens: &mut Peekable<impl Iterator<Item = Tok>>, bp: usize) -> R
         Tok::Char(c, span) => Expr::Char(c, span),
         Tok::Byte(b, span) => Expr::Byte(b, span),
         Tok::String(s, span) => Expr::String(s, span),
-        Tok::Var(name) => Expr::Name(name),
+        Tok::Name(name) => Expr::Name(name),
         Tok::Group(group, span) => Expr::Group(group, span),
         Tok::Subtract(span) => Expr::Negate(Box::new(pratt_parse(tokens, NEGATE_BP)?), span),
         Tok::Not(span) => Expr::Not(Box::new(pratt_parse(tokens, NOT_BP)?), span),

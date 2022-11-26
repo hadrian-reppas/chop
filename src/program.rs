@@ -195,7 +195,7 @@ impl ProgramContext {
     pub fn end_fn(
         &mut self,
         stack: &[(usize, GTypeId)],
-        name: &'static str,
+        name: Vec<&'static str>,
         index: usize,
         generic_count: usize,
         params: Vec<GTypeId>,
@@ -232,7 +232,7 @@ impl ProgramContext {
         self.init_vars(&[]);
     }
 
-    pub fn end_global(&mut self, name: &'static str, type_id: TypeId) {
+    pub fn end_global(&mut self, name: Vec<&'static str>, type_id: TypeId) {
         self.program.globals.push(ProgramGlobal {
             name,
             type_id,
@@ -240,7 +240,7 @@ impl ProgramContext {
         });
     }
 
-    pub fn end_global_init(&mut self, name: &'static str, type_id: TypeId, var: usize) {
+    pub fn end_global_init(&mut self, name: Vec<&'static str>, type_id: TypeId, var: usize) {
         self.program.globals.push(ProgramGlobal {
             name,
             type_id,
@@ -320,7 +320,7 @@ pub struct ProgramMember {
 
 #[derive(Debug)]
 pub struct ProgramFn {
-    pub name: &'static str,
+    pub name: Vec<&'static str>,
     pub index: usize,
     pub generic_count: usize,
     pub params: Vec<GTypeId>,
@@ -368,7 +368,7 @@ impl ProgramFn {
 
 #[derive(Debug, Clone)]
 pub struct ProgramGlobal {
-    pub name: &'static str,
+    pub name: Vec<&'static str>,
     pub type_id: TypeId,
     pub init: Option<ProgramGlobalInit>,
 }
@@ -429,7 +429,13 @@ pub enum ProgramOp {
     Bool(usize, bool),
     Byte(usize, u8),
     String(usize, String),
-    Call(&'static str, usize, Vec<usize>, Vec<usize>, Vec<GTypeId>),
+    Call(
+        Vec<&'static str>,
+        usize,
+        Vec<usize>,
+        Vec<usize>,
+        Vec<GTypeId>,
+    ),
     Ref(usize, usize, GTypeId),
     Assert(usize, Span),
     Abort(Span),

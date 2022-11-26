@@ -28,8 +28,8 @@ pub enum Error {
     Lex(Span, String),
     Parse(Span, String),
     Type(Span, String, Vec<Note>),
-    Main(String, Vec<Note>),
-    Import(Span, String),
+    Main(Option<Span>, String, Vec<Note>),
+    Import(Option<Span>, String, Vec<Note>),
 }
 
 #[derive(Debug)]
@@ -61,29 +61,25 @@ impl Error {
             Error::Type(span, msg, notes) => {
                 println!("{}type error:{} {msg}", color!(Red), reset!());
                 print_span(*span);
-                for Note { span, msg } in notes {
-                    if let Some(span) = span {
-                        println!("\n{}note:{} {msg}", color!(Blue), reset!());
-                        print_span(*span);
-                    } else {
-                        print!("\n{}note:{} {msg}", color!(Blue), reset!());
-                    }
-                }
+                print_notes(notes);
             }
-            Error::Main(msg, notes) => {
-                print!("{}entry error:{} {msg}", color!(Red), reset!());
-                for Note { span, msg } in notes {
-                    if let Some(span) = span {
-                        println!("\n{}note:{} {msg}", color!(Blue), reset!());
-                        print_span(*span);
-                    } else {
-                        print!("\n{}note:{} {msg}", color!(Blue), reset!());
-                    }
+            Error::Main(span, msg, notes) => {
+                if let Some(span) = span {
+                    println!("{}entry error:{} {msg}", color!(Red), reset!());
+                    print_span(*span);
+                } else {
+                    print!("{}entry error:{} {msg}", color!(Red), reset!());
                 }
+                print_notes(notes);
             }
-            Error::Import(span, msg) => {
-                println!("{}import error:{} {msg}", color!(Red), reset!());
-                print_span(*span);
+            Error::Import(span, msg, notes) => {
+                if let Some(span) = span {
+                    println!("{}import error:{} {msg}", color!(Red), reset!());
+                    print_span(*span);
+                } else {
+                    print!("{}import error:{} {msg}", color!(Red), reset!());
+                }
+                print_notes(notes);
             }
         }
     }
@@ -114,7 +110,7 @@ fn print_span(span: Span) {
 
     println!("{} {}|", space, color!(Blue));
     println!("{} | {}{}", line_num, reset!(), span.line());
-    print!(
+    println!(
         "{} {}| {}",
         space,
         color!(Blue),
@@ -132,4 +128,15 @@ fn get_carets(prefix: &str, text: &str) -> String {
         "^".repeat(caret_len),
         reset!()
     )
+}
+
+fn print_notes(notes: &[Note]) {
+    for Note { span, msg } in notes {
+        if let Some(span) = span {
+            println!("\n{}note:{} {msg}", color!(Blue), reset!());
+            print_span(*span);
+        } else {
+            print!("\n{}note:{} {msg}", color!(Blue), reset!());
+        }
+    }
 }

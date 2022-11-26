@@ -1,77 +1,12 @@
-fn swap [T U] T U -> U T {
-    let t u {
-        u t
-    }
-}
+import int_helpers
+import float_helpers::{print_twice}
 
-global alloc_list: list[*byte]
-
-struct A {
-    b: C
-    ptr: *byte
-}
-
-struct list[T] {
-    val: T
-    next: *list[T]
-}
-
-struct C { val: **A }
-
-fn foo list[A] C -> A {
-    ~ .val
-}
-
-fn byte_test -> byte {
-    (1 + - 2) ~
-    1 2 neg + ~
-    (b'\0')
-}
-
-fn swap_ptrs[T U] *T *U -> *U *T {
-    let t_ptr u_ptr {
-        t_ptr cast_to[*U]
-        u_ptr cast_to[*T]
-    }
+fn print_twice bool {
+    . putln putln
 }
 
 fn main {
-    1 2
-    swap . 1 ==
-    if {
-        swap
-    } else {
-
-    }
-    2 == assert
-    1 == assert
-
-    1 2
-    swap . 2 ==
-    if {
-        swap
-    } else {
-
-    }
-    1 == assert
-    2 == assert
-
-    0 to_byte '\0' == assert
-
-    b'1' true swap swap ~ ~
-    "hello" 1.0 swap ~ ~
-    "" generic_swap
-
-    1 @ read ~ ~
-    true @ swap write
-
-    0 cast_to[**A] C
-    0 cast_to[*byte] A
-    0 cast_to[*list[A]] list
-    0 cast_to[**A] C
-    foo ~
-}
-
-fn generic_swap[T] T {
-    . swap ~ ~ 
+    1 int_helpers::print_twice ln 
+    2.0 print_twice ln
+    true print_twice
 }
