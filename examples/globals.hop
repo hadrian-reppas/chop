@@ -1,14 +1,14 @@
-global counter: int { 2 1 + }
-global flag: bool { false }
+global COUNTER: int { 2 1 + }
+global FLAG: bool { false }
 
 fn increment_counter {
-    counter 1 + write_counter 
+    COUNTER 1 + write_COUNTER
 }
 
 fn increment_counter_by_ptr {
-    counter_ptr read 1 +
+    COUNTER_ptr read 1 +
     let new_counter {
-        counter_ptr new_counter write
+        COUNTER_ptr new_counter write
     }
 }
 
@@ -16,10 +16,10 @@ fn main {
     increment_counter
     increment_counter
     increment_counter_by_ptr
-    counter 6 == assert
-    counter putln
+    COUNTER 6 == assert
+    COUNTER putln
 
-    flag_ptr true write
-    flag assert
-    flag putln
+    FLAG_ptr true write
+    FLAG assert
+    FLAG putln
 }

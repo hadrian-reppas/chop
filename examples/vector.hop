@@ -1,6 +1,7 @@
-import std : vector
+import struct std::vector::{Vector}
+import std::vector::{new_vector free_vector push pop}
 
-fn sort_vector *vector[float] {
+fn sort_vector *Vector[float] {
     ~ // TODO
 } 
 

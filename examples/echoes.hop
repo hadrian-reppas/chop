@@ -1,4 +1,4 @@
-import std : prelude
+import std::prelude::{swap under rot}
 
 fn main int **byte {
     for 1 to under {

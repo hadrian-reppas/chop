@@ -1,4 +1,4 @@
-import std : prelude
+import std::prelude::{swap}
 
 fn main int **byte -> int {
     swap

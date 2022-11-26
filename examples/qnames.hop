@@ -1,7 +1,7 @@
 import std::string
 import std::string::{push}
 
-fn pop_string_ptr *string::string {
+fn pop_string_ptr *string::String {
     ~
 } 
 

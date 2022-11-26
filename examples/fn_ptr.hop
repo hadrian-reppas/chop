@@ -1,11 +1,11 @@
-import std : prelude
+import std::prelude::{swap}
 
-global epsilon: float { 0.001 }
+global EPSILON: float { 0.001 }
 
 fn let slope_at_zero f: fn(float -> float) -> float {
-    epsilon f call
+    EPSILON f call
     0.0 f call
-    - epsilon /
+    - EPSILON /
 }
 
 fn square float -> float {

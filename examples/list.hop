@@ -1,5 +1,0 @@
-import std : list
-
-fn main {
-    // TODO
-}

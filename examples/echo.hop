@@ -1,15 +1,15 @@
-import std : prelude
+import std::prelude::{swap}
 
-global buf: buffer[byte] { 0 cast_to[*byte] 0 buffer }
+global buf: Buffer[byte] { 0 cast_to[*byte] 0 Buffer }
 
-struct buffer[T] {
-    ptr: *T
-    len: int
+struct Buffer[T] {
+    ptr: *T,
+    len: int,
 }
 
-fn make_buffer[T] *T int -> buffer[T] {
+fn make_buffer[T] *T int -> Buffer[T] {
     let ptr len {
-        len alloc_arr[T] . ptr len copy len buffer
+        len alloc_arr[T] . ptr len copy len Buffer
     }
 }
 
