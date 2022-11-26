@@ -1,0 +1,37 @@
+import struct std::list::{List}
+import std::list::{singleton_list push ..value .next free_list pop}
+import std::ptr::{is_null}
+
+fn main {
+    2 singleton_list
+    @ 3 push
+    @ 5 push
+    @ 7 push
+    @ 11 push
+
+    . print_int_list
+
+    ln ln
+
+    "pop " puts @ pop putln
+    "pop " puts @ pop putln
+    "pop " puts @ pop putln
+
+    ln
+
+    . print_int_list ln
+
+    free_list
+}
+
+fn print_int_list *List[int] {
+    if . is_null {
+        ~ "NULL" puts
+    } else {
+        "List(" puts
+        ..value read put
+        ", " puts
+        .next read print_int_list
+        ')' putc
+    }
+}

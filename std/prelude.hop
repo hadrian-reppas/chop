@@ -10,6 +10,12 @@ fn rot[T U V] T U V -> U V T {
     }
 }
 
+fn rotr[T U V] T U V -> V T U {
+    let t u v {
+        v t u
+    }
+}
+
 fn under[T U] T U -> T U T {
     let t u {
         t u t

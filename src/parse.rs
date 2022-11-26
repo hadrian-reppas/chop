@@ -57,15 +57,15 @@ pub fn parse_name(tokens: &mut Tokens, is_let_bind: bool) -> Result<Name, Error>
 
 fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
     tokens.next()?;
+
     let name = parse_name(tokens, false)?;
+    let generics = parse_generics(tokens)?;
 
     let let_span = if tokens.peek().is_let() {
         Some(tokens.next()?.span())
     } else {
         None
     };
-
-    let generics = parse_generics(tokens)?;
 
     let mut params = Vec::new();
     let mut returns = Vec::new();

@@ -1,7 +1,7 @@
 import int_helpers
 import float_helpers::{print_twice}
 import struct pair::{Pair}
-import pair::{Pair .fst .snd}
+import pair::{Pair ..fst .snd}
 
 fn print_twice bool {
     . putln putln
@@ -11,7 +11,7 @@ fn main {
     (double(one) + square(five_halves)) putln
     (one + 2*five_halves) putln
     "Hello, World!" putlns
-    1 2 Pair .snd putln
+    4 2 Pair ..fst put ' ' putc .snd putln
 }
 
 fn one -> int {

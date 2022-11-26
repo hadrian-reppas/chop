@@ -880,10 +880,14 @@ impl Context {
 
         let mut else_stack = stack.clone();
 
+        let free_vars = self.program_context.free_vars.clone();
+
         self.program_context.begin_if();
         for stmt in body {
             self.check_stmt(stack, stmt)?;
         }
+
+        self.program_context.free_vars = free_vars;
 
         self.program_context.begin_else(stack, &else_stack);
         if let Some(else_part) = else_part {

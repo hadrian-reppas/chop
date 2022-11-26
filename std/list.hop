@@ -1,0 +1,42 @@
+import std::ptr::{is_null}
+import std::prelude::{swap rotr}
+
+struct List[T] {
+    value: T
+    next: *List[T]
+}
+
+fn singleton_list[T] let value: T -> *List[T] {
+    alloc[List[T]]
+    ..next 0 cast_to[*List[T]] write
+    ..value value write
+}
+
+fn push[T] let list: **List[T] value: T {
+    alloc[List[T]]
+    ..next list read write
+    ..value value write
+    list swap write
+}
+
+fn pop[T] let list: **List[T] -> T {
+    list read
+    let old_list {
+        old_list read .next
+        old_list read .value
+        let next value {
+            list next write
+            old_list free
+            value
+        }
+    }
+}
+
+fn free_list[T] *List[T] {
+    if . is_null {
+        ~
+    } else {
+        ..next DEBUG_STACK read free_list
+        free
+    }
+}

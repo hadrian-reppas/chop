@@ -9,15 +9,19 @@ use crate::parse::{parse, parse_file};
 const STRING: &str = include_str!("../std/string.hop");
 const PRELUDE: &str = include_str!("../std/prelude.hop");
 const VECTOR: &str = include_str!("../std/vector.hop");
+const LIST: &str = include_str!("../std/list.hop");
+const PTR: &str = include_str!("../std/ptr.hop");
 
 fn get_std_unit(path: &[&'static str], err_span: Span) -> Result<Vec<Item>, Error> {
     match path {
         ["std", "string"] => parse(Tokens::from_str(STRING, "std/string.hop")?),
         ["std", "prelude"] => parse(Tokens::from_str(PRELUDE, "std/prelude.hop")?),
         ["std", "vector"] => parse(Tokens::from_str(VECTOR, "std/vector.hop")?),
+        ["std", "list"] => parse(Tokens::from_str(LIST, "std/list.hop")?),
+        ["std", "ptr"] => parse(Tokens::from_str(PTR, "std/ptr.hop")?),
         _ => Err(Error::Import(
             Some(err_span),
-            format!("cannot find {} in the standard library", path.join("::")),
+            format!("cannot find '{}' in the standard library", path.join("::")),
             vec![],
         )),
     }

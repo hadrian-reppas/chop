@@ -1,7 +1,6 @@
 import std::string::{push free_string new_string ..bytes}
 import struct std::string::{String}
 
-
 fn main {
     new_string
     @ 'a' push

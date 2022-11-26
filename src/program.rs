@@ -55,13 +55,14 @@ impl ProgramContext {
 
     pub fn alloc(&mut self, ty: GTypeId) -> usize {
         if let Some(vars) = self.vars.get_mut(&ty) {
-            if let Some(var) = self.free_vars.get_mut(&ty).unwrap().pop() {
-                var
-            } else {
-                vars.push(self.counter);
-                self.counter += 1;
-                self.counter - 1
+            if let Some(free) = self.free_vars.get_mut(&ty) {
+                if let Some(var) = free.pop() {
+                    return var;
+                }
             }
+            vars.push(self.counter);
+            self.counter += 1;
+            self.counter - 1
         } else {
             self.vars.insert(ty, vec![self.counter]);
             self.free_vars.insert(ty, Vec::new());
@@ -74,7 +75,11 @@ impl ProgramContext {
         if self.let_counts.contains_key(&var) {
             self.to_free.insert(var);
         } else if !self.for_vars.contains(&var) {
-            self.free_vars.get_mut(&ty).unwrap().push(var);
+            if let Some(free) = self.free_vars.get_mut(&ty) {
+                free.push(var);
+            } else {
+                self.free_vars.insert(ty, vec![var]);
+            }
         }
     }
 
