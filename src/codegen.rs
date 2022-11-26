@@ -103,7 +103,7 @@ impl Generator {
             self.code.push_str(&format!(
                 "{} hg_{};\n",
                 self.types.generate(global.type_id),
-                escape_names(&global.name),
+                escape_names(&global.name)
             ));
         }
 
@@ -172,7 +172,7 @@ impl Generator {
                 self.code.push_str(&format!(
                     "        hg_{} = hv{};\n",
                     escape_names(&global.name),
-                    init.var,
+                    init.var
                 ));
                 self.code.push_str("    }\n");
             }
@@ -337,14 +337,14 @@ impl Generator {
                 let msg = format!("assertion failed at {}", span.location());
                 self.code.push_str(&format!(
                     "if (!hv{var}) {{ printf(\"%s\\n\", {}); exit(1); }}\n",
-                    escape_string(&msg),
+                    escape_string(&msg)
                 ));
             }
             ProgramOp::Abort(span) => {
                 let msg = format!("panicked at {}", span.location());
                 self.code.push_str(&format!(
                     "printf(\"%s\\n\", {}); exit(1);\n",
-                    escape_string(&msg),
+                    escape_string(&msg)
                 ));
             }
             ProgramOp::SizeOf(var, id) => {
@@ -356,35 +356,35 @@ impl Generator {
                 let id = self.types.substitute_concrete(*id, binds);
                 self.code.push_str(&format!(
                     "hv{var} = malloc(sizeof({}));\n",
-                    self.types.generate(id),
+                    self.types.generate(id)
                 ));
             }
             ProgramOp::Zalloc(var, id) => {
                 let id = self.types.substitute_concrete(*id, binds);
                 self.code.push_str(&format!(
                     "hv{var} = calloc(1, sizeof({}));\n",
-                    self.types.generate(id),
+                    self.types.generate(id)
                 ));
             }
             ProgramOp::AllocArr(var, len_var, id) => {
                 let id = self.types.substitute_concrete(*id, binds);
                 self.code.push_str(&format!(
                     "hv{var} = malloc(hv{len_var}*sizeof({}));\n",
-                    self.types.generate(id),
+                    self.types.generate(id)
                 ));
             }
             ProgramOp::ZallocArr(var, len_var, id) => {
                 let id = self.types.substitute_concrete(*id, binds);
                 self.code.push_str(&format!(
                     "hv{var} = calloc(hv{len_var}, sizeof({}));\n",
-                    self.types.generate(id),
+                    self.types.generate(id)
                 ));
             }
             ProgramOp::CastTo(var, old_var, id) => {
                 let id = self.types.substitute_concrete(*id, binds);
                 self.code.push_str(&format!(
                     "hv{var} = ({}) hv{old_var};\n",
-                    self.types.generate(id),
+                    self.types.generate(id)
                 ));
             }
         }
@@ -553,7 +553,7 @@ impl Generator {
                 let id = self.types.deref_n_concrete(params[0], 1);
                 self.code.push_str(&format!(
                     "    *hr0 = realloc(hv0, hv1*sizeof({}));\n",
-                    self.types.generate(id),
+                    self.types.generate(id)
                 ));
             }
             "free" => self.code.push_str("    free(hv0);\n"),
@@ -561,7 +561,7 @@ impl Generator {
                 let id = self.types.deref_n_concrete(params[0], 1);
                 self.code.push_str(&format!(
                     "    memmove(hv0, hv1, hv2*sizeof({}));\n",
-                    self.types.generate(id),
+                    self.types.generate(id)
                 ));
             }
             "pow" => self.code.push_str("    *hr0 = pow(hv0, hv1);\n"),
@@ -659,24 +659,24 @@ impl Generator {
                 self.code.push_str("    *hr0 = hv0;\n");
                 self.code.push_str(&format!(
                     "    *hr1 = hv0.hm_{};\n}}\n",
-                    escape_name(field_name),
+                    escape_name(field_name)
                 ));
             } else {
                 self.code.push_str(&format!(
                     "    *hr0 = hv0.hm_{};\n}}\n",
-                    escape_name(field_name),
+                    escape_name(field_name)
                 ));
             }
         } else if ddot {
             self.code.push_str("    *hr0 = hv0;\n");
             self.code.push_str(&format!(
                 "    *hr1 = &(hv0->hm_{});\n}}\n",
-                escape_name(field_name),
+                escape_name(field_name)
             ));
         } else {
             self.code.push_str(&format!(
                 "    *hr0 = &(hv0->hm_{});\n}}\n",
-                escape_name(field_name),
+                escape_name(field_name)
             ));
         }
     }

@@ -334,7 +334,7 @@ impl ProgramFn {
     fn display(&self, types: &Types) {
         println!(
             "Function({:?}, {}, {},",
-            self.name, self.index, self.generic_count,
+            self.name, self.index, self.generic_count
         );
         print!("    [");
         for (i, type_id) in self.params.iter().enumerate() {

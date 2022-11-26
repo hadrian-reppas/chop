@@ -320,7 +320,7 @@ impl Types {
                             name,
                             generic_count,
                             if generic_count == 1 { "" } else { "s" },
-                            gens.types.len(),
+                            gens.types.len()
                         ),
                         vec![],
                     ));
@@ -332,7 +332,7 @@ impl Types {
                         "type '{}' expects {} generic parameter{} (found 0)",
                         name,
                         generic_count,
-                        if generic_count == 1 { "" } else { "s" },
+                        if generic_count == 1 { "" } else { "s" }
                     ),
                     vec![],
                 ));
@@ -658,7 +658,7 @@ impl Types {
                     "struct hs_{}_{}{}",
                     codegen::escape_names(name),
                     self.custom_map[name][generics],
-                    "*".repeat(*depth),
+                    "*".repeat(*depth)
                 )
             }
         }
@@ -684,7 +684,7 @@ impl Types {
                         "{}{}{}",
                         "*".repeat(*depth),
                         name.join("::"),
-                        self.format_types(generics),
+                        self.format_types(generics)
                     )
                 }
             }

@@ -6,7 +6,7 @@ macro_rules! color {
         format!(
             "{}{}",
             termion::color::Fg(termion::color::$color),
-            termion::style::Bold,
+            termion::style::Bold
         )
     };
 }
@@ -17,7 +17,7 @@ macro_rules! reset {
         format!(
             "{}{}",
             termion::color::Fg(termion::color::Reset),
-            termion::style::Reset,
+            termion::style::Reset
         )
     };
 }

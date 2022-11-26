@@ -319,7 +319,7 @@ impl Context {
                                             Some(name.span),
                                             format!(
                                                 "imported function '{}' overlaps with a previous import",
-                                                name.name,
+                                                name.name
                                             ),
                                             vec![
                                                 Note::new(
@@ -332,7 +332,7 @@ impl Context {
                                                         "previously imported signature is {}{}{}",
                                                         color!(Blue),
                                                         self.types.format_signature(existing_sig),
-                                                        reset!(),
+                                                        reset!()
                                                     ),
                                                 ),
                                                 Note::new(
@@ -341,7 +341,7 @@ impl Context {
                                                         "new siganture is {}{}{}",
                                                         color!(Blue),
                                                         self.types.format_signature(new_sig),
-                                                        reset!(),
+                                                        reset!()
                                                     ),
                                                 ),
                                             ],
@@ -357,7 +357,8 @@ impl Context {
                                                         format!("builtin function '{}' has signature {}{}{}",
                                                             name.name,
                                                             color!(Blue),
-                                                            self.types.format_signature(existing_sig), reset!()
+                                                            self.types.format_signature(existing_sig),
+                                                            reset!()
                                                         )
                                                     ),
                                                     Note::new(
@@ -365,7 +366,8 @@ impl Context {
                                                         format!("imported function '{}' has signature {}{}{}",
                                                             name.name,
                                                             color!(Blue),
-                                                            self.types.format_signature(new_sig), reset!()
+                                                            self.types.format_signature(new_sig),
+                                                            reset!()
                                                         )
                                                     ),
                                                 ]
@@ -381,7 +383,7 @@ impl Context {
                                                             name.name,
                                                             color!(Blue),
                                                             self.types.format_signature(existing_sig),
-                                                            reset!(),
+                                                            reset!()
                                                         )
                                                     ),
                                                     Note::new(
@@ -390,7 +392,7 @@ impl Context {
                                                             name.name,
                                                             color!(Blue),
                                                             self.types.format_signature(new_sig),
-                                                            reset!(),
+                                                            reset!()
                                                         )
                                                     ),
                                                 ]
@@ -410,7 +412,7 @@ impl Context {
                                                             name.name,
                                                             color!(Blue),
                                                             self.types.format_signature(existing_sig),
-                                                            reset!(),
+                                                            reset!()
                                                         )
                                                     ),
                                                     Note::new(
@@ -419,7 +421,7 @@ impl Context {
                                                             name.name,
                                                             color!(Blue),
                                                             self.types.format_signature(new_sig),
-                                                            reset!(),
+                                                            reset!()
                                                         )
                                                     ),
                                                 ]
@@ -443,7 +445,7 @@ impl Context {
                         format!(
                             "no function '{}' in module '{}'",
                             name.name,
-                            path.last().unwrap().name,
+                            path.last().unwrap().name
                         ),
                         vec![],
                     ));
@@ -539,7 +541,7 @@ impl Context {
             2 => format!(
                 "structs '{}' and '{}' are defined recursively",
                 structs[0].join("::"),
-                structs[1].join("::"),
+                structs[1].join("::")
             ),
             _ => {
                 let mut msg = "structs ".to_string();
@@ -672,7 +674,7 @@ impl Context {
                                     "expected {}{}{}",
                                     color!(Blue),
                                     self.types.format_types(&returns),
-                                    reset!(),
+                                    reset!()
                                 ),
                             ),
                             Note::new(
@@ -681,7 +683,7 @@ impl Context {
                                     "found {}{}{}",
                                     color!(Blue),
                                     self.types.format_types(&stack_types),
-                                    reset!(),
+                                    reset!()
                                 ),
                             ),
                         ],
@@ -744,7 +746,7 @@ impl Context {
                                         "declared type is {}{}{}",
                                         color!(Blue),
                                         self.types.format(ty),
-                                        reset!(),
+                                        reset!()
                                     ),
                                 ),
                                 Note::new(
@@ -753,7 +755,7 @@ impl Context {
                                         "stack is {}{}{}",
                                         color!(Blue),
                                         self.types.format_stack(&stack),
-                                        reset!(),
+                                        reset!()
                                     ),
                                 ),
                             ],
@@ -845,7 +847,7 @@ impl Context {
                         "stack is {}{}{}",
                         color!(Blue),
                         self.types.format_stack(stack),
-                        reset!(),
+                        reset!()
                     ),
                 )],
             ));
@@ -859,7 +861,7 @@ impl Context {
                 color!(Blue),
                 self.types.format_stack(stack),
                 reset!(),
-                lbrace_span.location(),
+                lbrace_span.location()
             )
         } else {
             format!(
@@ -909,7 +911,7 @@ impl Context {
                                     color!(Blue),
                                     self.types.format_stack(stack),
                                     reset!(),
-                                    rbrace_span.location(),
+                                    rbrace_span.location()
                                 ),
                             )
                         } else {
@@ -920,7 +922,7 @@ impl Context {
                                     color!(Blue),
                                     self.types.format_stack(stack),
                                     reset!(),
-                                    rbrace_span.location(),
+                                    rbrace_span.location()
                                 ),
                             )
                         },
@@ -931,7 +933,7 @@ impl Context {
                                 color!(Blue),
                                 self.types.format_stack(&else_stack),
                                 reset!(),
-                                else_part.rbrace_span.location(),
+                                else_part.rbrace_span.location()
                             ),
                         ),
                     ],
@@ -954,7 +956,7 @@ impl Context {
                                     color!(Blue),
                                     self.types.format_stack(stack),
                                     reset!(),
-                                    rbrace_span.location(),
+                                    rbrace_span.location()
                                 ),
                             )
                         } else {
@@ -965,7 +967,7 @@ impl Context {
                                     color!(Blue),
                                     self.types.format_stack(stack),
                                     reset!(),
-                                    rbrace_span.location(),
+                                    rbrace_span.location()
                                 ),
                             )
                         },
@@ -1011,7 +1013,7 @@ impl Context {
                         "stack is {}{}{}",
                         color!(Blue),
                         self.types.format_stack(stack),
-                        reset!(),
+                        reset!()
                     ),
                 )],
             ));
@@ -1032,7 +1034,7 @@ impl Context {
                             "before test, stack is {}{}{}",
                             color!(Blue),
                             self.types.format_stack(&stack_before),
-                            reset!(),
+                            reset!()
                         ),
                     ),
                     Note::new(
@@ -1041,7 +1043,7 @@ impl Context {
                             "after test, stack is {}{}{}",
                             color!(Blue),
                             self.types.format_stack(stack),
-                            reset!(),
+                            reset!()
                         ),
                     ),
                 ],
@@ -1072,7 +1074,7 @@ impl Context {
                             "before while block, stack is {}{}{}",
                             color!(Blue),
                             self.types.format_stack(&stack_before),
-                            reset!(),
+                            reset!()
                         ),
                     ),
                     Note::new(
@@ -1081,7 +1083,7 @@ impl Context {
                             "after while block, stack is {}{}{}",
                             color!(Blue),
                             self.types.format_stack(stack),
-                            reset!(),
+                            reset!()
                         ),
                     ),
                 ],
@@ -1139,7 +1141,7 @@ impl Context {
                         "stack is {}{}{}",
                         color!(Blue),
                         self.types.format_stack(stack),
-                        reset!(),
+                        reset!()
                     ),
                 )],
             ));
@@ -1160,7 +1162,7 @@ impl Context {
                             "before bound, stack is {}{}{}",
                             color!(Blue),
                             self.types.format_stack(&stack_before),
-                            reset!(),
+                            reset!()
                         ),
                     ),
                     Note::new(
@@ -1169,7 +1171,7 @@ impl Context {
                             "after bound, stack is {}{}{}",
                             color!(Blue),
                             self.types.format_stack(stack),
-                            reset!(),
+                            reset!()
                         ),
                     ),
                 ],
@@ -1192,7 +1194,7 @@ impl Context {
                         "stack is {}{}{}",
                         color!(Blue),
                         self.types.format_stack(stack),
-                        reset!(),
+                        reset!()
                     ),
                 )],
             ));
@@ -1213,7 +1215,7 @@ impl Context {
                             "before bound, stack is {}{}{}",
                             color!(Blue),
                             self.types.format_stack(&stack_before),
-                            reset!(),
+                            reset!()
                         ),
                     ),
                     Note::new(
@@ -1222,7 +1224,7 @@ impl Context {
                             "after bound, stack is {}{}{}",
                             color!(Blue),
                             self.types.format_stack(stack),
-                            reset!(),
+                            reset!()
                         ),
                     ),
                 ],
@@ -1256,7 +1258,7 @@ impl Context {
                             "before for block, stack is {}{}{}",
                             color!(Blue),
                             self.types.format_stack(&stack_before),
-                            reset!(),
+                            reset!()
                         ),
                     ),
                     Note::new(
@@ -1265,7 +1267,7 @@ impl Context {
                             "after for block, stack is {}{}{}",
                             color!(Blue),
                             self.types.format_stack(stack),
-                            reset!(),
+                            reset!()
                         ),
                     ),
                 ],
@@ -1306,7 +1308,7 @@ impl Context {
                     names.len(),
                     if names.len() == 1 { "" } else { "s" },
                     if stack.is_empty() { "" } else { "only " },
-                    stack.len(),
+                    stack.len()
                 ),
                 vec![Note::new(
                     None,
@@ -1314,7 +1316,7 @@ impl Context {
                         "stack is {}{}{}",
                         color!(Blue),
                         self.types.format_stack(stack),
-                        reset!(),
+                        reset!()
                     ),
                 )],
             ));
@@ -1428,7 +1430,7 @@ impl Context {
                                 "stack is {}{}{}",
                                 color!(Blue),
                                 self.types.format_stack(stack),
-                                reset!(),
+                                reset!()
                             ),
                         )],
                     ));
@@ -1458,7 +1460,7 @@ impl Context {
                                 "stack is {}{}{}",
                                 color!(Blue),
                                 self.types.format_stack(stack),
-                                reset!(),
+                                reset!()
                             ),
                         )],
                     ));
@@ -1491,7 +1493,7 @@ impl Context {
                                 "stack is {}{}{}",
                                 color!(Blue),
                                 self.types.format_stack(stack),
-                                reset!(),
+                                reset!()
                             ),
                         )],
                     ));
@@ -1513,7 +1515,7 @@ impl Context {
                                 "cast target is {}{}{}",
                                 color!(Blue),
                                 self.types.format(ty),
-                                reset!(),
+                                reset!()
                             ),
                         )],
                     ));
@@ -1535,7 +1537,7 @@ impl Context {
                                 "stack is {}{}{}",
                                 color!(Blue),
                                 self.types.format_stack(stack),
-                                reset!(),
+                                reset!()
                             ),
                         )],
                     ));
@@ -1574,7 +1576,7 @@ impl Context {
                 color!(Blue),
                 self.types.format_stack(stack),
                 reset!(),
-                qname.span().location(),
+                qname.span().location()
             );
             return Ok(());
         }
@@ -1664,7 +1666,7 @@ impl Context {
                                     "stack is {}{}{}",
                                     color!(Blue),
                                     self.types.format_stack(stack),
-                                    reset!(),
+                                    reset!()
                                 ),
                             ))
                             .into_iter()
@@ -1676,7 +1678,7 @@ impl Context {
                                         name.name,
                                         color!(Blue),
                                         self.types.format_signature(s),
-                                        reset!(),
+                                        reset!()
                                     ),
                                 )
                             }))
@@ -1722,7 +1724,7 @@ impl Context {
                                 "stack is {}{}{}",
                                 color!(Blue),
                                 self.types.format_stack(stack),
-                                reset!(),
+                                reset!()
                             ),
                         ))
                         .into_iter()
@@ -1734,7 +1736,7 @@ impl Context {
                                     name.name,
                                     color!(Blue),
                                     self.types.format_signature(s),
-                                    reset!(),
+                                    reset!()
                                 ),
                             )
                         }))
@@ -1778,7 +1780,7 @@ impl Context {
                                     $op,
                                     color!(Blue),
                                     self.types.format_signature(&signature),
-                                    reset!(),
+                                    reset!()
                                 ),
                             ),
                         ],
@@ -1811,7 +1813,7 @@ impl Context {
                                     $op,
                                     color!(Blue),
                                     self.types.format_signature(&signature),
-                                    reset!(),
+                                    reset!()
                                 ),
                             ),
                         ],
@@ -1902,7 +1904,7 @@ impl Context {
                                     "'neg' has signature {}{}{}",
                                     color!(Blue),
                                     self.types.format_signature(&signature),
-                                    reset!(),
+                                    reset!()
                                 ),
                             ),
                         ],
@@ -2005,7 +2007,7 @@ impl Context {
                                 color!(Blue),
                                 reset!(),
                                 color!(Blue),
-                                reset!(),
+                                reset!()
                             ),
                             vec![Note::new(
                                 None,
@@ -2014,7 +2016,7 @@ impl Context {
                                     color!(Blue),
                                     self.types.format_types(&params),
                                     self.types.format_types(&returns),
-                                    reset!(),
+                                    reset!()
                                 ),
                             )],
                         ));
@@ -2026,7 +2028,7 @@ impl Context {
                                 color!(Blue),
                                 reset!(),
                                 color!(Blue),
-                                reset!(),
+                                reset!()
                             ),
                             vec![Note::new(
                                 None,
@@ -2035,7 +2037,7 @@ impl Context {
                                     color!(Blue),
                                     self.types.format_types(&params),
                                     self.types.format_types(&returns),
-                                    reset!(),
+                                    reset!()
                                 ),
                             )],
                         ));
@@ -2396,7 +2398,7 @@ fn check_for_conflicts(
                     "'{name}' has signature {}{}{}",
                     color!(Blue),
                     types.format_signature(existing),
-                    reset!(),
+                    reset!()
                 ),
             );
             if new_signature.kind.is_auto() {
