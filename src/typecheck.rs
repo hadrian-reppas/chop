@@ -2129,8 +2129,6 @@ impl Context {
                                 generics: None,
                             })
                             .collect(),
-                        lbrack_span: Span::empty(),
-                        rbrack_span: Span::empty(),
                     }),
                 };
                 let struct_ty = self.types.convert(

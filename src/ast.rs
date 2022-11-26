@@ -10,7 +10,7 @@ pub struct Name {
 
 impl fmt::Debug for Name {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.name)
+        write!(f, "Name({})", self.name)
     }
 }
 
@@ -59,28 +59,17 @@ pub enum Item {
         params: Vec<PType>,
         returns: Vec<PType>,
         body: Vec<Stmt>,
-
-        fn_span: Span,
-        arrow_span: Option<Span>,
-        lbrace_span: Span,
         rbrace_span: Span,
     },
     Struct {
         name: Name,
         generics: Option<Generics>,
         fields: Vec<Field>,
-
-        struct_span: Span,
-        lbrace_span: Span,
-        rbrace_span: Span,
     },
     Global {
         name: Name,
         ty: PType,
         definition: Option<Definition>,
-
-        global_span: Span,
-        colon_span: Span,
     },
     Import {
         path: Vec<Name>,
@@ -126,8 +115,6 @@ impl fmt::Debug for Item {
 
 pub struct Definition {
     pub group: Vec<Op>,
-
-    pub lbrace_span: Span,
     pub rbrace_span: Span,
 }
 
@@ -140,8 +127,6 @@ impl fmt::Debug for Definition {
 pub struct Field {
     pub name: Name,
     pub ty: PType,
-
-    pub colon_span: Span,
 }
 
 impl fmt::Debug for Field {
@@ -153,9 +138,6 @@ impl fmt::Debug for Field {
 #[derive(Clone)]
 pub struct Generics {
     pub names: Vec<Name>,
-
-    pub lbrack_span: Span,
-    pub rbrack_span: Span,
 }
 
 impl fmt::Debug for Generics {
@@ -184,9 +166,6 @@ impl fmt::Debug for PType {
 #[derive(Clone)]
 pub struct TypeGenerics {
     pub types: Vec<PType>,
-
-    pub lbrack_span: Span,
-    pub rbrack_span: Span,
 }
 
 impl fmt::Debug for TypeGenerics {
@@ -204,19 +183,14 @@ pub enum Stmt {
     If {
         test: Group,
         body: Vec<Stmt>,
-
-        if_span: Span,
         lbrace_span: Span,
         rbrace_span: Span,
-
         else_part: Option<ElsePart>,
         is_else_if: bool,
     },
     While {
         test: Group,
         body: Vec<Stmt>,
-
-        while_span: Span,
         lbrace_span: Span,
         rbrace_span: Span,
     },
@@ -224,8 +198,6 @@ pub enum Stmt {
         low: Group,
         high: Group,
         body: Vec<Stmt>,
-
-        for_span: Span,
         to_span: Span,
         lbrace_span: Span,
         rbrace_span: Span,
@@ -233,10 +205,7 @@ pub enum Stmt {
     Let {
         names: Vec<Name>,
         body: Vec<Stmt>,
-
         let_span: Span,
-        lbrace_span: Span,
-        rbrace_span: Span,
     },
 }
 
@@ -282,8 +251,6 @@ impl Stmt {
 #[derive(Clone)]
 pub struct ElsePart {
     pub body: Vec<Stmt>,
-
-    pub else_span: Span,
     pub lbrace_span: Span,
     pub rbrace_span: Span,
 }

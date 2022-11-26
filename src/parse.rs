@@ -56,7 +56,7 @@ pub fn parse_name(tokens: &mut Tokens, is_let_bind: bool) -> Result<Name, Error>
 }
 
 fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
-    let fn_span = tokens.next()?.span();
+    tokens.next()?;
     let name = parse_name(tokens, false)?;
 
     let let_span = if tokens.peek().is_let() {
@@ -69,7 +69,6 @@ fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
 
     let mut params = Vec::new();
     let mut returns = Vec::new();
-    let mut arrow_span = None;
     let mut let_names = Vec::new();
 
     while tokens.peek().is_name() {
@@ -86,8 +85,8 @@ fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
         params.push(parse_type(tokens)?);
     }
 
-    let lbrace_span = if tokens.peek().is_arrow() {
-        arrow_span = Some(tokens.next()?.span());
+    if tokens.peek().is_arrow() {
+        tokens.next()?;
         while tokens.peek().is_name() {
             returns.push(parse_type(tokens)?);
         }
@@ -115,8 +114,6 @@ fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
             names: let_names,
             body,
             let_span,
-            lbrace_span,
-            rbrace_span,
         };
         Ok(Item::Function {
             name,
@@ -124,9 +121,6 @@ fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
             params,
             returns,
             body: vec![let_stmt],
-            fn_span,
-            arrow_span,
-            lbrace_span,
             rbrace_span,
         })
     } else {
@@ -136,9 +130,6 @@ fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
             params,
             returns,
             body,
-            fn_span,
-            arrow_span,
-            lbrace_span,
             rbrace_span,
         })
     }
@@ -146,7 +137,7 @@ fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
 
 fn parse_generics(tokens: &mut Tokens) -> Result<Option<Generics>, Error> {
     if tokens.peek().is_lbrack() {
-        let lbrack_span = tokens.next()?.span();
+        tokens.next()?;
 
         let mut names = Vec::new();
         while tokens.peek().is_name() {
@@ -165,20 +156,16 @@ fn parse_generics(tokens: &mut Tokens) -> Result<Option<Generics>, Error> {
             names.push(generic);
         }
 
-        let rbrack_span = parse_rbrack(tokens)?;
+        parse_rbrack(tokens)?;
 
-        Ok(Some(Generics {
-            names,
-            lbrack_span,
-            rbrack_span,
-        }))
+        Ok(Some(Generics { names }))
     } else {
         Ok(None)
     }
 }
 
 fn parse_struct(tokens: &mut Tokens) -> Result<Item, Error> {
-    let struct_span = tokens.next()?.span();
+    tokens.next()?;
     let name = parse_name(tokens, false)?;
     if !name.is_normal() {
         return Err(Error::Parse(
@@ -199,7 +186,7 @@ fn parse_struct(tokens: &mut Tokens) -> Result<Item, Error> {
             "expected '{'".to_string(),
         ));
     }
-    let lbrace_span = tokens.next()?.span();
+    tokens.next()?;
 
     let mut fields = Vec::new();
     while !tokens.peek().is_rbrace() {
@@ -210,29 +197,22 @@ fn parse_struct(tokens: &mut Tokens) -> Result<Item, Error> {
                 "expected ':'".to_string(),
             ));
         }
-        let colon_span = tokens.next()?.span();
+        tokens.next()?;
         let ty = parse_type(tokens)?;
-        fields.push(Field {
-            name,
-            ty,
-            colon_span,
-        });
+        fields.push(Field { name, ty });
     }
 
-    let rbrace_span = tokens.next()?.span();
+    tokens.next()?;
 
     Ok(Item::Struct {
         name,
         generics,
         fields,
-        struct_span,
-        lbrace_span,
-        rbrace_span,
     })
 }
 
 fn parse_global(tokens: &mut Tokens) -> Result<Item, Error> {
-    let global_span = tokens.next()?.span();
+    tokens.next()?;
     let name = parse_name(tokens, false)?;
     if !tokens.peek().is_colon() {
         return Err(Error::Parse(
@@ -240,11 +220,11 @@ fn parse_global(tokens: &mut Tokens) -> Result<Item, Error> {
             "expected ':'".to_string(),
         ));
     }
-    let colon_span = tokens.next()?.span();
+    tokens.next()?;
     let ty = parse_type(tokens)?;
 
     let definition = if tokens.peek().is_lbrace() {
-        let lbrace_span = tokens.next()?.span();
+        tokens.next()?;
         let group = parse_group(tokens, false)?;
         if !tokens.peek().is_rbrace() {
             return Err(Error::Parse(
@@ -253,11 +233,7 @@ fn parse_global(tokens: &mut Tokens) -> Result<Item, Error> {
             ));
         }
         let rbrace_span = tokens.next()?.span();
-        Some(Definition {
-            group,
-            lbrace_span,
-            rbrace_span,
-        })
+        Some(Definition { group, rbrace_span })
     } else {
         None
     };
@@ -266,8 +242,6 @@ fn parse_global(tokens: &mut Tokens) -> Result<Item, Error> {
         name,
         ty,
         definition,
-        global_span,
-        colon_span,
     })
 }
 
@@ -424,20 +398,16 @@ fn parse_qualified_name_or_ptr(tokens: &mut Tokens) -> Result<QualifiedNameOrPtr
 
 fn parse_type_generics(tokens: &mut Tokens) -> Result<Option<TypeGenerics>, Error> {
     if tokens.peek().is_lbrack() {
-        let lbrack_span = tokens.next()?.span();
+        tokens.next()?;
 
         let mut types = Vec::new();
         while !tokens.peek().is_rbrack() {
             types.push(parse_type(tokens)?);
         }
 
-        let rbrack_span = tokens.next()?.span();
+        tokens.next()?;
 
-        Ok(Some(TypeGenerics {
-            types,
-            lbrack_span,
-            rbrack_span,
-        }))
+        Ok(Some(TypeGenerics { types }))
     } else {
         Ok(None)
     }
@@ -567,13 +537,13 @@ fn parse_test(tokens: &mut Tokens, is_if_test: bool) -> Result<(Vec<Op>, Span), 
 }
 
 fn parse_if(tokens: &mut Tokens) -> Result<Stmt, Error> {
-    let if_span = tokens.next()?.span();
+    tokens.next()?;
 
     let (test, lbrace_span) = parse_test(tokens, true)?;
     let (body, rbrace_span) = parse_body(tokens)?;
 
     if tokens.peek().is_else() {
-        let else_span = tokens.next()?.span();
+        tokens.next()?;
         match tokens.peek() {
             Token::LBrace(_) => {
                 let else_lbrace_span = tokens.next()?.span();
@@ -581,12 +551,10 @@ fn parse_if(tokens: &mut Tokens) -> Result<Stmt, Error> {
                 Ok(Stmt::If {
                     test,
                     body,
-                    if_span,
                     lbrace_span,
                     rbrace_span,
                     else_part: Some(ElsePart {
                         body: else_body,
-                        else_span,
                         lbrace_span: else_lbrace_span,
                         rbrace_span: else_rbrace_span,
                     }),
@@ -600,12 +568,10 @@ fn parse_if(tokens: &mut Tokens) -> Result<Stmt, Error> {
                 Ok(Stmt::If {
                     test,
                     body,
-                    if_span,
                     lbrace_span,
                     rbrace_span,
                     else_part: Some(ElsePart {
                         body: vec![else_body],
-                        else_span,
                         lbrace_span: else_lbrace_span,
                         rbrace_span: else_rbrace_span,
                     }),
@@ -621,7 +587,6 @@ fn parse_if(tokens: &mut Tokens) -> Result<Stmt, Error> {
         Ok(Stmt::If {
             test,
             body,
-            if_span,
             lbrace_span,
             rbrace_span,
             else_part: None,
@@ -631,21 +596,20 @@ fn parse_if(tokens: &mut Tokens) -> Result<Stmt, Error> {
 }
 
 fn parse_while(tokens: &mut Tokens) -> Result<Stmt, Error> {
-    let while_span = tokens.next()?.span();
+    tokens.next()?;
     let (test, lbrace_span) = parse_test(tokens, false)?;
     let (body, rbrace_span) = parse_body(tokens)?;
 
     Ok(Stmt::While {
         test,
         body,
-        while_span,
         lbrace_span,
         rbrace_span,
     })
 }
 
 fn parse_for(tokens: &mut Tokens) -> Result<Stmt, Error> {
-    let for_span = tokens.next()?.span();
+    tokens.next()?;
 
     let low = parse_group(tokens, false)?;
 
@@ -665,7 +629,6 @@ fn parse_for(tokens: &mut Tokens) -> Result<Stmt, Error> {
         low,
         high,
         body,
-        for_span,
         to_span,
         lbrace_span,
         rbrace_span,
@@ -701,14 +664,12 @@ fn parse_let(tokens: &mut Tokens) -> Result<Stmt, Error> {
         ));
     }
 
-    let lbrace_span = tokens.next()?.span();
-    let (body, rbrace_span) = parse_body(tokens)?;
+    tokens.next()?;
+    let (body, _) = parse_body(tokens)?;
 
     Ok(Stmt::Let {
         names,
         body,
         let_span,
-        lbrace_span,
-        rbrace_span,
     })
 }

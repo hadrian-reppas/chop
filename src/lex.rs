@@ -39,16 +39,6 @@ impl Span {
         }
     }
 
-    pub fn empty() -> Span {
-        Span {
-            text: "",
-            line: 0,
-            column: 0,
-            code: "",
-            file: "",
-        }
-    }
-
     pub fn location(self) -> String {
         format!("{}:{}:{}", self.file, self.line + 1, self.column + 1)
     }
