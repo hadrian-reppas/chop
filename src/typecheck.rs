@@ -16,6 +16,8 @@ use crate::{color, reset};
 // TODO: topological sort on global uses in global inits (check
 //       call graph to find dependencies)
 
+// TODO: consider reintroducing program_context.free() to reuse variables
+
 pub fn check(
     units: &HashMap<Vec<&'static str>, Vec<Item>>,
     main_unit_prefix: &[&'static str],
@@ -880,16 +882,12 @@ impl Context {
 
         let mut else_stack = stack.clone();
 
-        let free_vars = self.program_context.free_vars.clone();
-
         self.program_context.begin_if();
         for stmt in body {
             self.check_stmt(stack, stmt)?;
         }
 
-        self.program_context.free_vars = free_vars;
-
-        self.program_context.begin_else(stack, &else_stack);
+        self.program_context.begin_else();
         if let Some(else_part) = else_part {
             for stmt in &else_part.body {
                 self.check_stmt(&mut else_stack, stmt)?;
@@ -1012,7 +1010,6 @@ impl Context {
             }
         }
         self.program_context.end_if_else(test_var, resolve);
-        self.program_context.free(test_var, bool_id);
 
         Ok(())
     }
@@ -1146,7 +1143,6 @@ impl Context {
             }
         }
         self.program_context.end_while(test_var, resolve);
-        self.program_context.free(test_var, self.types.bool());
 
         mem::swap(stack, &mut stack_before);
 
@@ -1287,7 +1283,6 @@ impl Context {
         let mut stack_before = stack.clone();
         let iter_var = self.program_context.alloc(int_id);
         stack.push((iter_var, int_id));
-        self.program_context.for_vars.insert(iter_var);
 
         self.program_context.begin_for();
         for stmt in body {
@@ -1340,10 +1335,6 @@ impl Context {
         }
         self.program_context
             .end_for(iter_var, low_var, high_var, resolve);
-        self.program_context.for_vars.remove(&iter_var);
-        self.program_context.free(iter_var, int_id);
-        self.program_context.free(low_var, int_id);
-        self.program_context.free(high_var, int_id);
 
         mem::swap(stack, &mut stack_before);
 
@@ -1383,7 +1374,6 @@ impl Context {
         let mut binds = HashMap::new();
         for name in names.iter().rev() {
             let ty = stack.pop().unwrap();
-            self.program_context.alloc_let(ty.0);
             if name.name != "_" {
                 binds.insert(name.name, ty);
             }
@@ -1392,10 +1382,6 @@ impl Context {
 
         for stmt in body {
             self.check_stmt(stack, stmt)?;
-        }
-
-        for (_, (var, ty)) in self.let_binds.pop().unwrap() {
-            self.program_context.free_let(var, ty);
         }
 
         Ok(())
@@ -1671,8 +1657,7 @@ impl Context {
         } = self.get_qsbi(stack, qname)?;
         let mut param_vars = Vec::new();
         for _ in 0..signature.params.len() {
-            let (var, ty) = stack.pop().unwrap();
-            self.program_context.free(var, ty);
+            let (var, _) = stack.pop().unwrap();
             param_vars.push(var);
         }
         param_vars.reverse();
@@ -2580,7 +2565,6 @@ fn check_for_conflicts(
     Ok(())
 }
 
-// TODO: is this correct?
 fn params_overlap(types: &mut Types, params_a: &[GTypeId], params_b: &[GTypeId]) -> bool {
     can_bind(types, params_a, params_b) || can_bind(types, params_b, params_a)
 }

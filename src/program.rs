@@ -1,4 +1,4 @@
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::collections::{hash_map::Entry, HashMap};
 use std::mem;
 
 use crate::{
@@ -11,12 +11,8 @@ pub struct ProgramContext {
     pub wip_init: Vec<ProgramOp>,
     pub wip_bodies: Vec<Vec<ProgramStmt>>,
     pub vars: HashMap<GTypeId, Vec<usize>>,
-    pub free_vars: HashMap<GTypeId, Vec<usize>>,
     pub if_bodies: Vec<Vec<ProgramStmt>>,
     pub counter: usize,
-    pub let_counts: HashMap<usize, usize>,
-    pub for_vars: HashSet<usize>,
-    pub to_free: HashSet<usize>,
     state: State,
 }
 
@@ -27,20 +23,13 @@ impl ProgramContext {
             wip_init: Vec::new(),
             wip_bodies: Vec::new(),
             vars: HashMap::new(),
-            free_vars: HashMap::new(),
             if_bodies: Vec::new(),
             counter: 0,
-            let_counts: HashMap::new(),
-            for_vars: HashSet::new(),
-            to_free: HashSet::new(),
             state: State::Paused,
         }
     }
 
     pub fn init_vars(&mut self, params: &[GTypeId]) {
-        self.free_vars = HashMap::new();
-        self.let_counts = HashMap::new();
-        self.to_free = HashSet::new();
         self.counter = params.len();
         for (i, id) in params.iter().enumerate() {
             match self.vars.entry(*id) {
@@ -49,58 +38,18 @@ impl ProgramContext {
                     v.insert(vec![i]);
                 }
             }
-            self.free_vars.insert(*id, Vec::new());
         }
     }
 
     pub fn alloc(&mut self, ty: GTypeId) -> usize {
         if let Some(vars) = self.vars.get_mut(&ty) {
-            if let Some(free) = self.free_vars.get_mut(&ty) {
-                if let Some(var) = free.pop() {
-                    return var;
-                }
-            }
             vars.push(self.counter);
             self.counter += 1;
             self.counter - 1
         } else {
             self.vars.insert(ty, vec![self.counter]);
-            self.free_vars.insert(ty, Vec::new());
             self.counter += 1;
             self.counter - 1
-        }
-    }
-
-    pub fn free(&mut self, var: usize, ty: GTypeId) {
-        if self.let_counts.contains_key(&var) {
-            self.to_free.insert(var);
-        } else if !self.for_vars.contains(&var) {
-            if let Some(free) = self.free_vars.get_mut(&ty) {
-                free.push(var);
-            } else {
-                self.free_vars.insert(ty, vec![var]);
-            }
-        }
-    }
-
-    pub fn alloc_let(&mut self, var: usize) {
-        if let Some(count) = self.let_counts.get(&var) {
-            self.let_counts.insert(var, count + 1);
-        } else {
-            self.let_counts.insert(var, 1);
-        }
-    }
-
-    pub fn free_let(&mut self, var: usize, ty: GTypeId) {
-        let count = self.let_counts[&var];
-        if count == 1 {
-            self.let_counts.remove(&var);
-            if self.to_free.contains(&var) {
-                self.to_free.remove(&var);
-                self.free_vars.get_mut(&ty).unwrap().push(var);
-            }
-        } else {
-            self.let_counts.insert(var, count - 1);
         }
     }
 
@@ -128,15 +77,9 @@ impl ProgramContext {
         self.begin_body();
     }
 
-    pub fn begin_else(&mut self, stack: &[(usize, GTypeId)], else_stack: &[(usize, GTypeId)]) {
+    pub fn begin_else(&mut self) {
         self.if_bodies
             .push(mem::take(self.wip_bodies.last_mut().unwrap()));
-        let on_stack: HashSet<_> = else_stack.iter().map(|(var, _)| *var).collect();
-        for (var, ty) in stack {
-            if !on_stack.contains(var) {
-                self.free(*var, *ty);
-            }
-        }
     }
 
     pub fn end_if_else(&mut self, test_var: usize, resolve: Vec<(usize, usize, GTypeId)>) {
