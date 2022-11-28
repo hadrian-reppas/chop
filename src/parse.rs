@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use lazy_static::lazy_static;
 
 use crate::ast::{
-    Definition, ElsePart, Field, Generics, Item, Name, Op, PType, QualifiedName, Stmt, TypeGenerics,
+    Definition, ElsePart, Field, Generics, Item, Name, Op, PType, QualifiedName, Stmt,
 };
 use crate::error::Error;
 use crate::expr;
@@ -71,7 +71,7 @@ fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
     let mut returns = Vec::new();
     let mut let_names = Vec::new();
 
-    while tokens.peek().is_name() {
+    while tokens.peek().is_name() || tokens.peek().is_fn() {
         if let_span.is_some() {
             let_names.push(parse_name(tokens, true)?);
             if !tokens.peek().is_colon() {
@@ -87,7 +87,7 @@ fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
 
     if tokens.peek().is_arrow() {
         tokens.next()?;
-        while tokens.peek().is_name() {
+        while tokens.peek().is_name() || tokens.peek().is_fn() {
             returns.push(parse_type(tokens)?);
         }
         if tokens.peek().is_lbrace() {
@@ -103,7 +103,7 @@ fn parse_fn(tokens: &mut Tokens) -> Result<Item, Error> {
     } else {
         return Err(Error::Parse(
             tokens.peek().span(),
-            "expected name, '->' or '{'".to_string(),
+            "expected name, 'fn', '->' or '{'".to_string(),
         ));
     };
 
@@ -333,41 +333,49 @@ pub fn parse_colon(tokens: &mut Tokens) -> Result<Span, Error> {
 }
 
 #[allow(clippy::large_enum_variant)]
-enum QualifiedNameOrPtr {
+enum TypeStart {
     QualifiedName(QualifiedName),
     Ptr(Name),
+    Fn,
 }
 
 fn parse_type(tokens: &mut Tokens) -> Result<PType, Error> {
-    match parse_qualified_name_or_ptr(tokens)? {
-        QualifiedNameOrPtr::QualifiedName(name) => {
+    match parse_type_start(tokens)? {
+        TypeStart::QualifiedName(name) => {
             let generics = parse_type_generics(tokens)?;
-            Ok(PType {
-                stars: None,
-                name,
-                generics,
-            })
+            Ok(PType::Value(None, name, generics))
         }
-        QualifiedNameOrPtr::Ptr(stars) => {
-            let second = parse_qualified_name(tokens, true)?;
-            if second.name().is_normal() {
-                let generics = parse_type_generics(tokens)?;
-                Ok(PType {
-                    stars: Some(stars),
-                    name: second,
-                    generics,
-                })
+        TypeStart::Ptr(stars) => {
+            if tokens.peek().is_name() {
+                let second = parse_qualified_name(tokens, true)?;
+                if second.name().is_normal() {
+                    let generics = parse_type_generics(tokens)?;
+                    Ok(PType::Value(Some(stars), second, generics))
+                } else {
+                    Err(Error::Parse(
+                        second.span(),
+                        "type names must be normal".to_string(),
+                    ))
+                }
+            } else if tokens.peek().is_fn() {
+                tokens.next()?;
+                parse_fn_ptr_body(tokens, Some(stars))
             } else {
                 Err(Error::Parse(
-                    second.span(),
-                    "type names must be normal".to_string(),
+                    tokens.peek().span(),
+                    "expected name or 'fn' token".to_string(),
                 ))
             }
         }
+        TypeStart::Fn => parse_fn_ptr_body(tokens, None),
     }
 }
 
-fn parse_qualified_name_or_ptr(tokens: &mut Tokens) -> Result<QualifiedNameOrPtr, Error> {
+fn parse_type_start(tokens: &mut Tokens) -> Result<TypeStart, Error> {
+    if tokens.peek().is_fn() {
+        tokens.next()?;
+        return Ok(TypeStart::Fn);
+    }
     let first = parse_name(tokens, false)?;
     if first.is_normal() {
         if tokens.peek().is_colon() {
@@ -375,7 +383,7 @@ fn parse_qualified_name_or_ptr(tokens: &mut Tokens) -> Result<QualifiedNameOrPtr
             parse_colon(tokens)?;
             let second = parse_name(tokens, false)?;
             if first.is_normal() {
-                Ok(QualifiedNameOrPtr::QualifiedName(QualifiedName::Qualified(
+                Ok(TypeStart::QualifiedName(QualifiedName::Qualified(
                     first, second,
                 )))
             } else {
@@ -385,18 +393,41 @@ fn parse_qualified_name_or_ptr(tokens: &mut Tokens) -> Result<QualifiedNameOrPtr
                 ))
             }
         } else {
-            Ok(QualifiedNameOrPtr::QualifiedName(QualifiedName::Straight(
-                first,
-            )))
+            Ok(TypeStart::QualifiedName(QualifiedName::Straight(first)))
         }
     } else if first.is_ptr() {
-        Ok(QualifiedNameOrPtr::Ptr(first))
+        Ok(TypeStart::Ptr(first))
     } else {
         Err(Error::Parse(first.span, "expected a type".to_string()))
     }
 }
 
-fn parse_type_generics(tokens: &mut Tokens) -> Result<Option<TypeGenerics>, Error> {
+fn parse_fn_ptr_body(tokens: &mut Tokens, stars: Option<Name>) -> Result<PType, Error> {
+    if !tokens.peek().is_lparen() {
+        return Err(Error::Parse(
+            tokens.peek().span(),
+            "expected '('".to_string(),
+        ));
+    }
+    tokens.next()?;
+    let mut params = Vec::new();
+    while !tokens.peek().is_arrow() && !tokens.peek().is_rparen() {
+        params.push(parse_type(tokens)?);
+    }
+    let returns = if tokens.next()?.is_arrow() {
+        let mut returns = Vec::new();
+        while !tokens.peek().is_rparen() {
+            returns.push(parse_type(tokens)?);
+        }
+        tokens.next()?;
+        returns
+    } else {
+        Vec::new()
+    };
+    Ok(PType::FnPtr(stars, params, returns))
+}
+
+fn parse_type_generics(tokens: &mut Tokens) -> Result<Vec<PType>, Error> {
     if tokens.peek().is_lbrack() {
         tokens.next()?;
 
@@ -404,12 +435,11 @@ fn parse_type_generics(tokens: &mut Tokens) -> Result<Option<TypeGenerics>, Erro
         while !tokens.peek().is_rbrack() {
             types.push(parse_type(tokens)?);
         }
-
         tokens.next()?;
 
-        Ok(Some(TypeGenerics { types }))
+        Ok(types)
     } else {
-        Ok(None)
+        Ok(Vec::new())
     }
 }
 

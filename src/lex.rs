@@ -163,6 +163,10 @@ impl Token {
         matches!(self, Token::LParen(_))
     }
 
+    pub fn is_rparen(&self) -> bool {
+        matches!(self, Token::RParen(_))
+    }
+
     pub fn is_lbrack(&self) -> bool {
         matches!(self, Token::LBrack(_))
     }
@@ -181,6 +185,10 @@ impl Token {
 
     pub fn is_struct(&self) -> bool {
         matches!(self, Token::Struct(_))
+    }
+
+    pub fn is_fn(&self) -> bool {
+        matches!(self, Token::Fn(_))
     }
 
     pub fn is_if(&self) -> bool {
@@ -283,7 +291,7 @@ impl TokenIter {
                 file,
             })
         } else {
-            Err(Error::Io(format!("cannot open {}", path)))
+            Err(Error::Io(format!("cannot open '{}'", path)))
         }
     }
 

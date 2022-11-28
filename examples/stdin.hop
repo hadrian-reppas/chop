@@ -1,7 +1,7 @@
-import std::ptr::{is_null}
+import std::ptr::{non_null}
 
 fn main {
     "Enter your name: " puts
-    stdin . is_null ! assert
-    "Hello, " puts puts
+    stdin . non_null assert
+    "Hello, " puts . puts free
 }

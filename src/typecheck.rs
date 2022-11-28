@@ -5,7 +5,7 @@ use std::mem;
 use petgraph::algo::toposort;
 use petgraph::graph::Graph;
 
-use crate::ast::{ElsePart, Expr, Field, Item, Name, Op, PType, QualifiedName, Stmt, TypeGenerics};
+use crate::ast::{ElsePart, Expr, Field, Item, Name, Op, PType, QualifiedName, Stmt};
 use crate::builtins::{Builtins, BUILTINS};
 use crate::error::{Error, Note};
 use crate::lex::Span;
@@ -2226,21 +2226,16 @@ impl Context {
                     Some(gen) => &gen.names,
                     None => &empty,
                 };
-                let ptype = PType {
-                    stars: None,
-                    name: name.span.into(),
-                    generics: generics.as_ref().map(|generics| TypeGenerics {
-                        types: generics
-                            .names
-                            .iter()
-                            .map(|n| PType {
-                                stars: None,
-                                name: n.span.into(),
-                                generics: None,
-                            })
-                            .collect(),
-                    }),
+                let gen = if let Some(generics) = generics {
+                    generics
+                        .names
+                        .iter()
+                        .map(|name| PType::Value(None, name.span.into(), Vec::new()))
+                        .collect()
+                } else {
+                    Vec::new()
                 };
+                let ptype = PType::Value(None, name.span.into(), gen);
                 let struct_ty = self.types.convert(
                     &ptype,
                     generic_names,

@@ -92,15 +92,9 @@ pub struct Generics {
 }
 
 #[derive(Clone)]
-pub struct PType {
-    pub stars: Option<Name>,
-    pub name: QualifiedName,
-    pub generics: Option<TypeGenerics>,
-}
-
-#[derive(Clone)]
-pub struct TypeGenerics {
-    pub types: Vec<PType>,
+pub enum PType {
+    Value(Option<Name>, QualifiedName, Vec<PType>),
+    FnPtr(Option<Name>, Vec<PType>, Vec<PType>),
 }
 
 pub type Group = Vec<Op>;
