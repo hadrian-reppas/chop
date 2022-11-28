@@ -1836,9 +1836,7 @@ impl Context {
                 let NameInfo {
                     signature, binds, ..
                 } = self.get_qsbi(&stack, &$span.into())?;
-                if signature.returns.len() == 1 {
-                    Ok(self.types.substitute(signature.returns[0], &binds))
-                } else {
+                if signature.returns.len() != 1 {
                     Err(Error::Type(
                         $span,
                         "expression operators must return a single value".to_string(),
@@ -1863,6 +1861,38 @@ impl Context {
                             ),
                         ],
                     ))
+                } else if signature.params.len() != 2 {
+                    Err(Error::Type(
+                        $span,
+                        "binary operators must take 2 values".to_string(),
+                        vec![
+                            Note::new(
+                                None,
+                                format!(
+                                    "'{}' takes {} value{}",
+                                    $op,
+                                    signature.params.len(),
+                                    if signature.params.len() == 1 { "" } else { "s" }
+                                ),
+                            ),
+                            Note::new(
+                                None,
+                                format!(
+                                    "'{}' has signature {}{}{}",
+                                    $op,
+                                    color!(Blue),
+                                    self.types.format_signature(
+                                        &signature,
+                                        &self.struct_qual,
+                                        &self.module_qual
+                                    ),
+                                    reset!()
+                                ),
+                            ),
+                        ],
+                    ))
+                } else {
+                    Ok(self.types.substitute(signature.returns[0], &binds))
                 }
             }};
         }
@@ -1873,9 +1903,7 @@ impl Context {
                 let NameInfo {
                     signature, binds, ..
                 } = self.get_qsbi(&stack, &$span.into())?;
-                if signature.returns.len() == 1 {
-                    Ok(self.types.substitute(signature.returns[0], &binds))
-                } else {
+                if signature.returns.len() != 1 {
                     Err(Error::Type(
                         $span,
                         "expression operators must return a single value".to_string(),
@@ -1900,6 +1928,38 @@ impl Context {
                             ),
                         ],
                     ))
+                } else if signature.params.len() != 1 {
+                    Err(Error::Type(
+                        $span,
+                        "unary operators must take a single value".to_string(),
+                        vec![
+                            Note::new(
+                                None,
+                                format!(
+                                    "'{}' takes {} value{}",
+                                    $op,
+                                    signature.params.len(),
+                                    if signature.params.len() == 1 { "" } else { "s" }
+                                ),
+                            ),
+                            Note::new(
+                                None,
+                                format!(
+                                    "'{}' has signature {}{}{}",
+                                    $op,
+                                    color!(Blue),
+                                    self.types.format_signature(
+                                        &signature,
+                                        &self.struct_qual,
+                                        &self.module_qual
+                                    ),
+                                    reset!()
+                                ),
+                            ),
+                        ],
+                    ))
+                } else {
+                    Ok(self.types.substitute(signature.returns[0], &binds))
                 }
             }};
         }
