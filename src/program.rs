@@ -282,6 +282,8 @@ pub enum ProgramOp {
     AllocArr(usize, usize, GTypeId),
     ZallocArr(usize, usize, GTypeId),
     CastTo(usize, usize, GTypeId),
+    FnPtrCall(usize, Vec<usize>, Vec<usize>),
+    FnRef(usize, Vec<&'static str>, Vec<GTypeId>),
 }
 
 pub enum ProgramStmt {

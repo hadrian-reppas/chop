@@ -50,6 +50,7 @@ pub struct GSignature {
     pub returns: Vec<GTypeId>,
     pub kind: Kind,
     pub is_special: bool,
+    pub generic_count: usize,
 }
 
 impl GSignature {
@@ -58,12 +59,14 @@ impl GSignature {
         returns: Vec<GTypeId>,
         kind: Kind,
         is_special: bool,
+        generic_count: usize,
     ) -> GSignature {
         GSignature {
             params,
             returns,
             kind,
             is_special,
+            generic_count,
         }
     }
 }
@@ -231,6 +234,20 @@ impl Types {
             .deref_n(n)
             .unwrap();
         self.get_or_insert_concrete(ty)
+    }
+
+    pub fn is_fn_ptr(&self, id: GTypeId) -> bool {
+        match self.gtypes.get_by_right(&id).unwrap() {
+            GType::FnPtr(depth, _, _) => *depth == 0,
+            _ => false,
+        }
+    }
+
+    pub fn fn_ptr_types(&self, id: GTypeId) -> (Vec<GTypeId>, Vec<GTypeId>) {
+        match self.gtypes.get_by_right(&id).unwrap() {
+            GType::FnPtr(_, params, returns) => (params.clone(), returns.clone()),
+            _ => unreachable!(),
+        }
     }
 
     pub fn convert(
@@ -619,6 +636,10 @@ impl Types {
         self.types.get_by_right(&id).unwrap().depth()
     }
 
+    pub fn make_fn_ptr_type(&mut self, params: Vec<GTypeId>, returns: Vec<GTypeId>) -> GTypeId {
+        self.get_or_insert(GType::FnPtr(0, params, returns))
+    }
+
     pub fn sort_structs(&mut self, structs: &mut [(String, usize, Vec<TypeId>)]) {
         let mut graph = Graph::new();
         let mut map = HashMap::new();
@@ -705,14 +726,6 @@ impl Types {
         }
     }
 
-    pub fn generic_indices_signature(&self, signature: &GSignature) -> HashSet<usize> {
-        let mut indices = HashSet::new();
-        for id in &signature.params {
-            indices.extend(self.generic_indices(*id));
-        }
-        indices
-    }
-
     pub fn generate(&self, id: TypeId) -> String {
         match self.types.get_by_right(&id).unwrap() {
             Type::Int(depth) => format!("int64_t{}", "*".repeat(*depth)),
@@ -794,7 +807,7 @@ impl Types {
         out
     }
 
-    pub fn is_fn_ptr(&self, id: TypeId) -> bool {
+    pub fn is_fn_ptr_concrete(&self, id: TypeId) -> bool {
         matches!(self.types.get_by_right(&id).unwrap(), Type::FnPtr(_, _, _))
     }
 

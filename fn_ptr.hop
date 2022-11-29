@@ -1,18 +1,12 @@
 global MALLOC: fn(int -> *byte)
 global CRAZY: fn(fn(int) -> fn(byte))
 
-// import std::vector
-// import struct std::hash_map::{HashMap}
-
-fn f[T] *fn(T) -> fn(T) {
-    @ @
-    ~ ~
-    read
+fn apply_deref_fn[T] *T fn(*T -> T) -> T {
+    call
 }
 
 fn main {
-    // vector::new[*byte] call
-    // abort[int int int bool] assert ~ ~ ~
-    0 cast_to[*fn(int)] f
-    ~
+    1 @ read[int] apply_deref_fn putln ~
+    2.4 @ read[float] apply_deref_fn putln ~
+    true @ read[bool] apply_deref_fn putln ~
 }

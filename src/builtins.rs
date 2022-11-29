@@ -4,7 +4,10 @@ use crate::types::GType;
 
 macro_rules! sig {
     ($($params:expr)* => $($returns:expr)*) => {
-        (vec![$($params),*], vec![$($returns),*])
+        (vec![$($params),*], vec![$($returns),*], 0)
+    };
+    ($($params:expr)* => $($returns:expr)*, $count:expr) => {
+        (vec![$($params),*], vec![$($returns),*], $count)
     };
 }
 
@@ -57,7 +60,7 @@ macro_rules! eq {
             sig!(FLOAT INT => BOOL),
             sig!(FLOAT FLOAT => BOOL),
             sig!(BOOL BOOL => BOOL),
-            sig!(genp!(0) genp!(0) => BOOL),
+            sig!(genp!(0) genp!(0) => BOOL, 1),
         ]
     )};
 }
@@ -75,7 +78,7 @@ macro_rules! cmp {
             sig!(FLOAT BYTE => BOOL),
             sig!(FLOAT INT => BOOL),
             sig!(FLOAT FLOAT => BOOL),
-            sig!(genp!(0) genp!(0) => BOOL),
+            sig!(genp!(0) genp!(0) => BOOL, 1),
         ]
     )};
 }
@@ -112,7 +115,7 @@ macro_rules! genp {
     };
 }
 
-type Pair = (Vec<GType>, Vec<GType>);
+type Pair = (Vec<GType>, Vec<GType>, usize);
 type NamePairs = (&'static str, Vec<Pair>);
 pub type Builtins = Vec<NamePairs>;
 
@@ -120,13 +123,13 @@ lazy_static! {
     pub static ref BUILTINS: Builtins = Vec::from([
         arith!(
             "+",
-            sig!(genp!(0) INT => genp!(0)),
-            sig!(INT genp!(0) => genp!(0))
+            sig!(genp!(0) INT => genp!(0), 1),
+            sig!(INT genp!(0) => genp!(0), 1)
         ),
         arith!(
             "-",
-            sig!(genp!(0) INT => genp!(0)),
-            sig!(genp!(0) genp!(0) => INT)
+            sig!(genp!(0) INT => genp!(0), 1),
+            sig!(genp!(0) genp!(0) => INT, 1)
         ),
         arith!("*"),
         arith!("/"),
@@ -147,13 +150,17 @@ lazy_static! {
             vec![sig!(BOOL => BOOL), sig!(BYTE => BYTE), sig!(INT => INT),]
         ),
         ("neg", vec![sig!(INT => INT), sig!(FLOAT => FLOAT),]),
-        (".", vec![sig!(gen!(0) => gen!(0) gen!(0))]),
-        ("~", vec![sig!(gen!(0) =>)]),
-        ("@", vec![sig!(gen!(0) => gen!(0) genp!(0))]),
+        (".", vec![sig!(gen!(0) => gen!(0) gen!(0), 1)]),
+        ("~", vec![sig!(gen!(0) =>, 1)]),
+        ("@", vec![sig!(gen!(0) => gen!(0) genp!(0), 1)]),
         ("to_byte", vec![sig!(INT => BYTE), sig!(FLOAT => BYTE),]),
         (
             "to_int",
-            vec![sig!(FLOAT => INT), sig!(BYTE => INT), sig!(genp!(0) => INT),]
+            vec![
+                sig!(FLOAT => INT),
+                sig!(BYTE => INT),
+                sig!(genp!(0) => INT, 1),
+            ]
         ),
         ("to_float", vec![sig!(INT => FLOAT), sig!(BYTE => FLOAT),]),
         (
@@ -168,15 +175,15 @@ lazy_static! {
         ("putlns", vec![sig!(ptr!(BYTE) =>)]),
         ("putc", vec![sig!(INT =>)]),
         ("putlnc", vec![sig!(INT =>)]),
-        ("putp", vec![sig!(genp!(0) =>)]),
-        ("putlnp", vec![sig!(genp!(0) =>)]),
+        ("putp", vec![sig!(genp!(0) =>, 1)]),
+        ("putlnp", vec![sig!(genp!(0) =>, 1)]),
         ("ln", vec![sig!(=>)]),
-        ("read", vec![sig!(genp!(0) => gen!(0))]),
-        ("write", vec![sig!(genp!(0) gen!(0) =>)]),
+        ("read", vec![sig!(genp!(0) => gen!(0), 1)]),
+        ("write", vec![sig!(genp!(0) gen!(0) =>, 1)]),
         ("exit", vec![sig!(INT =>)]),
-        ("realloc", vec![sig!(genp!(0) INT => genp!(0))]),
-        ("free", vec![sig!(genp!(0) =>)]),
-        ("copy", vec![sig!(genp!(0) genp!(0) INT =>)]),
+        ("realloc", vec![sig!(genp!(0) INT => genp!(0), 1)]),
+        ("free", vec![sig!(genp!(0) =>, 1)]),
+        ("copy", vec![sig!(genp!(0) genp!(0) INT =>, 1)]),
         ("pow", vec![sig!(FLOAT FLOAT => FLOAT)]),
         ("random", vec![sig!(=> FLOAT)]),
         ("strcmp", vec![sig!(ptr!(BYTE) ptr!(BYTE) => INT)]),

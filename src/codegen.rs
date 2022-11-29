@@ -270,7 +270,11 @@ impl Generator {
                 if i == 0 {
                     self.code.push_str(&format!("hv{var}"));
                 } else {
-                    let stars = if self.types.is_fn_ptr(id) { 0 } else { depth };
+                    let stars = if self.types.is_fn_ptr_concrete(id) {
+                        0
+                    } else {
+                        depth
+                    };
                     self.code
                         .push_str(&format!(", {}hv{var}", "*".repeat(stars)));
                 }
@@ -389,6 +393,27 @@ impl Generator {
                     "hv{var} = ({}) hv{old_var};\n",
                     self.types.generate(id)
                 ));
+            }
+            ProgramOp::FnPtrCall(var, params, returns) => {
+                self.code.push_str(&format!("(*hv{var})("));
+                for (i, param) in params.iter().enumerate() {
+                    if i > 0 {
+                        self.code.push_str(", ");
+                    }
+                    self.code.push_str(&format!("hv{param}"));
+                }
+                for (i, ret) in returns.iter().enumerate() {
+                    if i > 0 || !params.is_empty() {
+                        self.code.push_str(", ");
+                    }
+                    self.code.push_str(&format!("&hv{ret}"));
+                }
+                self.code.push_str(");\n");
+            }
+            ProgramOp::FnRef(var, name, fn_binds) => {
+                let id = self.get_id(name, 0, fn_binds, binds);
+                self.code
+                    .push_str(&format!("hv{var} = &hf_{}_{id};\n", escape_names(name)));
             }
         }
     }

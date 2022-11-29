@@ -13,17 +13,6 @@ use crate::program::{Program, ProgramContext, ProgramMember, ProgramOp, ProgramS
 use crate::types::{GSignature, GTypeId, Kind, Types};
 use crate::{color, reset};
 
-// TODO: function pointers:
-//  -- lex 'call' keyword
-//  -- parse 'call' keyword
-//  -- parse bracket expressions
-//  -- allow fuctions to not include all generics in their arguments
-//  -- add 'special' field to GSignature
-//  -- check for overloaded special functions
-//  7. typecheck function pointer calls
-//  8. add ProgramOp::Call
-//  9. generate ProgramOp::Call
-
 // TODO: topological sort on global uses in global inits (check
 //       call graph to find dependencies)
 
@@ -70,7 +59,7 @@ impl Context {
                 (
                     vec![*name],
                     sigs.iter()
-                        .map(|(params, returns)| {
+                        .map(|(params, returns, generic_count)| {
                             GSignature::new(
                                 params
                                     .iter()
@@ -82,6 +71,7 @@ impl Context {
                                     .collect(),
                                 Kind::Builtin,
                                 false,
+                                *generic_count,
                             )
                         })
                         .collect(),
@@ -1553,7 +1543,8 @@ impl Context {
             Op::CastTo(ptype, span, _, _) => {
                 if stack.is_empty()
                     || (self.types.depth(stack.last().unwrap().1) == 0
-                        && stack.last().unwrap().1 != self.types.int())
+                        && stack.last().unwrap().1 != self.types.int()
+                        && !self.types.is_fn_ptr(stack.last().unwrap().1))
                 {
                     return Err(Error::Type(
                         *span,
@@ -1580,7 +1571,8 @@ impl Context {
                     &self.struct_qual,
                     &self.module_qual,
                 )?;
-                if self.types.depth(ty) == 0 && ty != self.types.int() {
+                if self.types.depth(ty) == 0 && ty != self.types.int() && !self.types.is_fn_ptr(ty)
+                {
                     return Err(Error::Type(
                         *span,
                         "cast target must be a pointer or 'int'".to_string(),
@@ -1639,8 +1631,259 @@ impl Context {
                 self.program_context.push_op(ProgramOp::Abort(*span));
                 Ok(())
             }
-            Op::Call(span) => todo!(),
-            Op::NameBrack(qname, ptypes) => todo!(),
+            Op::Call(span) => {
+                if stack.is_empty() || !self.types.is_fn_ptr(stack.last().unwrap().1) {
+                    return Err(Error::Type(
+                        *span,
+                        "'call' keyword expects a function pointer".to_string(),
+                        vec![Note::new(
+                            None,
+                            format!(
+                                "stack is {}{}{}",
+                                color!(Blue),
+                                self.types.format_stack(
+                                    stack,
+                                    &self.struct_qual,
+                                    &self.module_qual,
+                                ),
+                                reset!()
+                            ),
+                        )],
+                    ));
+                }
+                let (fn_ptr_var, fn_ptr_ty) = stack.pop().unwrap();
+                let (params, returns) = self.types.fn_ptr_types(fn_ptr_ty);
+
+                if params.len() <= stack.len()
+                    && params.iter().zip(stack.iter()).all(|(p, (_, s))| p == s)
+                {
+                    let mut param_vars = Vec::new();
+                    for _ in params {
+                        param_vars.push(stack.pop().unwrap().0);
+                    }
+                    param_vars.reverse();
+
+                    let mut return_vars = Vec::new();
+                    for ret in returns {
+                        let var = self.program_context.alloc(ret);
+                        return_vars.push(var);
+                        stack.push((var, ret));
+                    }
+
+                    self.program_context.push_op(ProgramOp::FnPtrCall(
+                        fn_ptr_var,
+                        param_vars,
+                        return_vars,
+                    ));
+
+                    Ok(())
+                } else {
+                    Err(Error::Type(
+                        *span,
+                        "function pointer does not match the stack".to_string(),
+                        vec![
+                            Note::new(
+                                None,
+                                format!(
+                                    "function pointer has type {}{}{}",
+                                    color!(Blue),
+                                    self.types.format(
+                                        fn_ptr_ty,
+                                        &self.struct_qual,
+                                        &self.module_qual
+                                    ),
+                                    reset!()
+                                ),
+                            ),
+                            Note::new(
+                                None,
+                                format!(
+                                    "stack is {}{}{}",
+                                    color!(Blue),
+                                    self.types.format_stack(
+                                        stack,
+                                        &self.struct_qual,
+                                        &self.module_qual
+                                    ),
+                                    reset!()
+                                ),
+                            ),
+                        ],
+                    ))
+                }
+            }
+            Op::NameBrack(qname, ptypes) => match qname {
+                QualifiedName::Straight(name) => {
+                    if let Some(qual_fns) = self.function_qual.get(name.name) {
+                        if qual_fns.len() > 1 || self.signatures[&qual_fns[0]].len() > 1 {
+                            Err(Error::Type(
+                                name.span,
+                                format!("function '{}' is overloaded", name.name),
+                                qual_fns
+                                    .iter()
+                                    .flat_map(|qual| &self.signatures[qual])
+                                    .map(|sig| {
+                                        Note::new(
+                                            None,
+                                            format!(
+                                                "'{}' has signature {}{}{}",
+                                                name.name,
+                                                color!(Blue),
+                                                self.types.format_signature(
+                                                    sig,
+                                                    &self.struct_qual,
+                                                    &self.module_qual,
+                                                ),
+                                                reset!()
+                                            ),
+                                        )
+                                    })
+                                    .collect(),
+                            ))
+                        } else {
+                            let signature = &self.signatures[&qual_fns[0]][0];
+                            if ptypes.len() != signature.generic_count {
+                                return Err(Error::Type(
+                                    name.span,
+                                    format!(
+                                        "function '{}' expects {} generic parameter{} (found {})",
+                                        name.name,
+                                        signature.generic_count,
+                                        if signature.generic_count == 1 {
+                                            ""
+                                        } else {
+                                            "s"
+                                        },
+                                        ptypes.len()
+                                    ),
+                                    vec![],
+                                ));
+                            }
+                            let binds = ptypes
+                                .iter()
+                                .map(|ty| {
+                                    self.types.convert(
+                                        ty,
+                                        &self.generic_names,
+                                        &self.struct_qual,
+                                        &self.module_qual,
+                                    )
+                                })
+                                .collect::<Result<Vec<_>, _>>()?;
+                            let mut params = Vec::new();
+                            for param in &signature.params {
+                                params.push(self.types.substitute(*param, &binds));
+                            }
+                            let mut returns = Vec::new();
+                            for ret in &signature.returns {
+                                returns.push(self.types.substitute(*ret, &binds));
+                            }
+                            let fn_ptr_type = self.types.make_fn_ptr_type(params, returns);
+                            let var = self.program_context.alloc(fn_ptr_type);
+                            self.call_graph
+                                .insert(qual_fns[0].to_vec(), 0, binds.clone());
+                            stack.push((var, fn_ptr_type));
+                            self.program_context.push_op(ProgramOp::FnRef(
+                                var,
+                                qual_fns[0].to_vec(),
+                                binds,
+                            ));
+                            Ok(())
+                        }
+                    } else {
+                        Err(Error::Type(
+                            name.span,
+                            format!("no function '{}' in scope", name.name),
+                            vec![],
+                        ))
+                    }
+                }
+                QualifiedName::Qualified(module, name) => {
+                    if let Some(qual_module) = self.module_qual.get(name.name) {
+                        let mut qual_fn = qual_module.to_vec();
+                        qual_fn.push(name.name);
+                        if let Some(sigs) = self.signatures.get(&qual_fn) {
+                            if sigs.len() > 1 {
+                                Err(Error::Type(
+                                    name.span,
+                                    format!("function '{}' is overloaded", name.name),
+                                    sigs.iter()
+                                        .map(|sig| {
+                                            Note::new(
+                                                None,
+                                                format!(
+                                                    "'{}' has signature {}{}{}",
+                                                    name.name,
+                                                    color!(Blue),
+                                                    self.types.format_signature(
+                                                        sig,
+                                                        &self.struct_qual,
+                                                        &self.module_qual,
+                                                    ),
+                                                    reset!()
+                                                ),
+                                            )
+                                        })
+                                        .collect(),
+                                ))
+                            } else {
+                                let signature = &sigs[0];
+                                if ptypes.len() != signature.generic_count {
+                                    return Err(Error::Type(
+                                        name.span,
+                                        format!(
+                                            "function '{}' expects {} generic parameter{} (found {})",
+                                            name.name,
+                                            signature.generic_count,
+                                            if signature.generic_count == 1 { "" } else { "s" },
+                                            ptypes.len()
+                                        ),
+                                        vec![]
+                                    ));
+                                }
+                                let binds = ptypes
+                                    .iter()
+                                    .map(|ty| {
+                                        self.types.convert(
+                                            ty,
+                                            &self.generic_names,
+                                            &self.struct_qual,
+                                            &self.module_qual,
+                                        )
+                                    })
+                                    .collect::<Result<Vec<_>, _>>()?;
+                                let mut params = Vec::new();
+                                for param in &signature.params {
+                                    params.push(self.types.substitute(*param, &binds));
+                                }
+                                let mut returns = Vec::new();
+                                for ret in &signature.returns {
+                                    returns.push(self.types.substitute(*ret, &binds));
+                                }
+                                let fn_ptr_type = self.types.make_fn_ptr_type(params, returns);
+                                let var = self.program_context.alloc(fn_ptr_type);
+                                self.call_graph.insert(qual_fn.clone(), 0, binds.clone());
+                                stack.push((var, fn_ptr_type));
+                                self.program_context
+                                    .push_op(ProgramOp::FnRef(var, qual_fn, binds));
+                                Ok(())
+                            }
+                        } else {
+                            Err(Error::Type(
+                                name.span,
+                                format!("no function '{}' in module '{}'", name.name, module.name),
+                                vec![],
+                            ))
+                        }
+                    } else {
+                        Err(Error::Type(
+                            module.span,
+                            format!("no module '{}' in scope", module.name),
+                            vec![],
+                        ))
+                    }
+                }
+            },
         }
     }
 
@@ -1676,6 +1919,16 @@ impl Context {
             binds,
             index,
         } = self.get_qsbi(stack, qname)?;
+        if signature.is_special {
+            return Err(Error::Type(
+                qname.span(),
+                format!(
+                    "function '{}' is special and cannot be called direcly",
+                    qname.span().text
+                ),
+                vec![],
+            ));
+        }
         let mut param_vars = Vec::new();
         for _ in 0..signature.params.len() {
             let (var, _) = stack.pop().unwrap();
@@ -2201,7 +2454,7 @@ impl Context {
                             "multiple functions named 'main'".to_string(),
                             vec![Note::new(
                                 sigs[0].kind.span(),
-                                "'main' defined here".to_string(),
+                                "'main' is defined here".to_string(),
                             )],
                         ));
                     } else if !params.is_empty()
@@ -2275,7 +2528,13 @@ impl Context {
 
                 Ok(vec![(
                     make_names(prefix, name.name),
-                    GSignature::new(params, returns, Kind::Custom(name.span), is_special),
+                    GSignature::new(
+                        params,
+                        returns,
+                        Kind::Custom(name.span),
+                        is_special,
+                        generic_names.len(),
+                    ),
                 )])
             }
             Item::Struct {
@@ -2336,7 +2595,13 @@ impl Context {
                     let dot = dotdot.strip_prefix('.').unwrap();
                     signatures.push((
                         make_names(prefix, dot),
-                        GSignature::new(vec![struct_ty], vec![ty], Kind::Member(name.span), false),
+                        GSignature::new(
+                            vec![struct_ty],
+                            vec![ty],
+                            Kind::Member(name.span),
+                            false,
+                            generic_names.len(),
+                        ),
                     ));
                     signatures.push((
                         make_names(prefix, dotdot),
@@ -2345,6 +2610,7 @@ impl Context {
                             vec![struct_ty, ty],
                             Kind::Member(name.span),
                             false,
+                            generic_names.len(),
                         ),
                     ));
                     signatures.push((
@@ -2354,6 +2620,7 @@ impl Context {
                             vec![ty_ptr],
                             Kind::Member(name.span),
                             false,
+                            generic_names.len(),
                         ),
                     ));
                     signatures.push((
@@ -2363,6 +2630,7 @@ impl Context {
                             vec![struct_ty_ptr, ty_ptr],
                             Kind::Member(name.span),
                             false,
+                            generic_names.len(),
                         ),
                     ));
                 }
@@ -2383,6 +2651,7 @@ impl Context {
                         vec![struct_ty],
                         Kind::Constructor(name.span),
                         false,
+                        generic_names.len(),
                     ),
                 ));
                 self.struct_fields.insert(qname, struct_fields);
@@ -2406,11 +2675,11 @@ impl Context {
                 Ok(vec![
                     (
                         make_names(prefix, name.name),
-                        GSignature::new(vec![], vec![ty], Kind::Global(name.span), false),
+                        GSignature::new(vec![], vec![ty], Kind::Global(name.span), false, 0),
                     ),
                     (
                         make_names(prefix, write_name),
-                        GSignature::new(vec![ty], vec![], Kind::GlobalWrite(name.span), false),
+                        GSignature::new(vec![ty], vec![], Kind::GlobalWrite(name.span), false, 0),
                     ),
                     (
                         make_names(prefix, name_ptr),
@@ -2419,6 +2688,7 @@ impl Context {
                             vec![self.types.ref_n(ty, 1)],
                             Kind::GlobalPtr(name.span),
                             false,
+                            0,
                         ),
                     ),
                 ])
@@ -2504,24 +2774,24 @@ fn get_binds(
     if signature.params.len() > stack.len() {
         None
     } else {
-        let mut binds = vec![None; types.generic_indices_signature(signature).len()];
+        let mut binds = HashMap::new();
         for ((_, arg), param) in stack.iter().rev().zip(signature.params.iter().rev()) {
             match types.bind(*param, *arg) {
                 Ok(map) => {
                     for (index, ty) in map {
-                        if let Some(bound) = &binds[index] {
+                        if let Some(bound) = binds.get(&index) {
                             if bound != &ty {
                                 return None;
                             }
                         } else {
-                            binds[index] = Some(ty);
+                            binds.insert(index, ty);
                         }
                     }
                 }
                 Err(_) => return None,
             }
         }
-        Some(binds.into_iter().map(Option::unwrap).collect())
+        Some((0..signature.generic_count).map(|i| binds[&i]).collect())
     }
 }
 
@@ -2607,7 +2877,7 @@ fn check_for_conflicts(
             },
             vec![Note::new(
                 Some(existing_signatures[0].kind.span().unwrap()),
-                format!("'{}' declared here", name),
+                format!("'{}' is defined here", name),
             )],
         ));
     } else if new_signature.is_special {
@@ -2619,7 +2889,7 @@ fn check_for_conflicts(
             ),
             vec![Note::new(
                 Some(existing_signatures[0].kind.span().unwrap()),
-                format!("'{}' declared here", name),
+                format!("'{}' is defined here", name),
             )],
         ));
     }

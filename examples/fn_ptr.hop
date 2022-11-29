@@ -2,7 +2,7 @@ import std::prelude::{swap}
 
 global EPSILON: float { 0.001 }
 
-fn let slope_at_zero f: fn(float -> float) -> float {
+fn slope_at_zero let f: fn(float -> float) -> float {
     EPSILON f call
     0.0 f call
     - EPSILON /
@@ -19,7 +19,7 @@ fn minus_one float -> float {
 fn id[T] T -> T {}
 
 fn main {
-    "f(x) = x^2;   f'(0) = " square[] slope_at_zero putln
-    "f(x) = x - 1; f'(0) = " minus_one[] slope_at_zero putln
-    "f(x) = x;     f'(0) = " id[float] slope_at_zero putln
+    "f(x) = x^2;   f'(0) = " puts square[]    slope_at_zero putln
+    "f(x) = x - 1; f'(0) = " puts minus_one[] slope_at_zero putln
+    "f(x) = x;     f'(0) = " puts id[float]   slope_at_zero putln
 }
