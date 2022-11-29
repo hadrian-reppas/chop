@@ -1,13 +1,4 @@
-fn f
-    fn(int -> *int)
-    **fn(int ->)
-    fn(int)
-    fn())
-    fn(-> int)
-    fn(**fn())
-    fn(fn(->) -> fn(->))
-{
-    ~
-}
+global MALLOC: fn(int -> *byte)
+global CRAZY: fn(fn(int) -> fn(byte))
 
 fn main {}

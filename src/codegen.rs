@@ -73,6 +73,8 @@ impl Generator {
             }
         }
 
+        self.code.push_str(&self.types.generate_fn_ptr_typedefs());
+
         let mut structs = Vec::new();
         let cloned_map = self.types.custom_map.clone();
         for (name, fields) in &self.struct_fields {
@@ -268,8 +270,9 @@ impl Generator {
                 if i == 0 {
                     self.code.push_str(&format!("hv{var}"));
                 } else {
+                    let stars = if self.types.is_fn_ptr(id) { 0 } else { depth };
                     self.code
-                        .push_str(&format!(", {}hv{var}", "*".repeat(depth)));
+                        .push_str(&format!(", {}hv{var}", "*".repeat(stars)));
                 }
             }
             self.code.push_str(";\n");

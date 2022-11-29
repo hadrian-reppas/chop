@@ -69,6 +69,7 @@ pub enum GType {
     Bool(usize),
     Custom(usize, Vec<&'static str>, Vec<GTypeId>),
     Generic(usize, usize),
+    FnPtr(usize, Vec<GTypeId>, Vec<GTypeId>),
 }
 
 impl GType {
@@ -79,31 +80,34 @@ impl GType {
             | GType::Byte(depth)
             | GType::Bool(depth)
             | GType::Custom(depth, _, _)
-            | GType::Generic(depth, _) => *depth += n,
+            | GType::Generic(depth, _)
+            | GType::FnPtr(depth, _, _) => *depth += n,
         }
         self
     }
 
     pub fn deref_n(mut self, n: usize) -> Option<GType> {
         match &mut self {
-            GType::Int(depth) => *depth = depth.checked_sub(n)?,
-            GType::Float(depth) => *depth = depth.checked_sub(n)?,
-            GType::Byte(depth) => *depth = depth.checked_sub(n)?,
-            GType::Bool(depth) => *depth = depth.checked_sub(n)?,
-            GType::Custom(depth, _, _) => *depth = depth.checked_sub(n)?,
-            GType::Generic(depth, _) => *depth = depth.checked_sub(n)?,
+            GType::Int(depth)
+            | GType::Float(depth)
+            | GType::Byte(depth)
+            | GType::Bool(depth)
+            | GType::Custom(depth, _, _)
+            | GType::Generic(depth, _)
+            | GType::FnPtr(depth, _, _) => *depth = depth.checked_sub(n)?,
         }
         Some(self)
     }
 
     pub fn depth(&self) -> usize {
         match self {
-            GType::Int(depth) => *depth,
-            GType::Float(depth) => *depth,
-            GType::Byte(depth) => *depth,
-            GType::Bool(depth) => *depth,
-            GType::Custom(depth, _, _) => *depth,
-            GType::Generic(depth, _) => *depth,
+            GType::Int(depth)
+            | GType::Float(depth)
+            | GType::Byte(depth)
+            | GType::Bool(depth)
+            | GType::Custom(depth, _, _)
+            | GType::Generic(depth, _)
+            | GType::FnPtr(depth, _, _) => *depth,
         }
     }
 }
@@ -115,37 +119,41 @@ pub enum Type {
     Byte(usize),
     Bool(usize),
     Custom(usize, Vec<&'static str>, Vec<TypeId>),
+    FnPtr(usize, Vec<TypeId>, Vec<TypeId>),
 }
 
 impl Type {
     pub fn ref_n(mut self, n: usize) -> Type {
         match &mut self {
-            Type::Int(depth) => *depth += n,
-            Type::Float(depth) => *depth += n,
-            Type::Byte(depth) => *depth += n,
-            Type::Bool(depth) => *depth += n,
-            Type::Custom(depth, _, _) => *depth += n,
+            Type::Int(depth)
+            | Type::Float(depth)
+            | Type::Byte(depth)
+            | Type::Bool(depth)
+            | Type::Custom(depth, _, _)
+            | Type::FnPtr(depth, _, _) => *depth += n,
         }
         self
     }
 
     fn depth(&self) -> usize {
         match self {
-            Type::Int(depth) => *depth,
-            Type::Float(depth) => *depth,
-            Type::Byte(depth) => *depth,
-            Type::Bool(depth) => *depth,
-            Type::Custom(depth, _, _) => *depth,
+            Type::Int(depth)
+            | Type::Float(depth)
+            | Type::Byte(depth)
+            | Type::Bool(depth)
+            | Type::Custom(depth, _, _)
+            | Type::FnPtr(depth, _, _) => *depth,
         }
     }
 
     fn deref_n(mut self, n: usize) -> Option<Type> {
         match &mut self {
-            Type::Int(depth) => *depth = depth.checked_sub(n)?,
-            Type::Float(depth) => *depth = depth.checked_sub(n)?,
-            Type::Byte(depth) => *depth = depth.checked_sub(n)?,
-            Type::Bool(depth) => *depth = depth.checked_sub(n)?,
-            Type::Custom(depth, _, _) => *depth = depth.checked_sub(n)?,
+            Type::Int(depth)
+            | Type::Float(depth)
+            | Type::Byte(depth)
+            | Type::Bool(depth)
+            | Type::Custom(depth, _, _)
+            | Type::FnPtr(depth, _, _) => *depth = depth.checked_sub(n)?,
         }
         Some(self)
     }
@@ -365,7 +373,7 @@ impl Types {
             .iter()
             .map(|ret| self.convert(ret, generics, struct_qual, module_qual))
             .collect::<Result<Vec<_>, _>>()?;
-        todo!();
+        Ok(self.get_or_insert(GType::FnPtr(depth, params, returns)))
     }
 
     pub fn nonptr_custom_name(&self, id: GTypeId) -> Option<&Vec<&'static str>> {
@@ -396,6 +404,21 @@ impl Types {
                 .unwrap()
                 .clone()
                 .ref_n(*depth),
+            GType::FnPtr(depth, params, returns) => {
+                let params = params.clone();
+                let returns = returns.clone();
+                GType::FnPtr(
+                    *depth,
+                    params
+                        .into_iter()
+                        .map(|p| self.substitute(p, binds))
+                        .collect(),
+                    returns
+                        .into_iter()
+                        .map(|r| self.substitute(r, binds))
+                        .collect(),
+                )
+            }
         };
         self.get_or_insert(gtype)
     }
@@ -421,6 +444,21 @@ impl Types {
                 .unwrap()
                 .clone()
                 .ref_n(*depth),
+            GType::FnPtr(depth, params, returns) => {
+                let params = params.clone();
+                let returns = returns.clone();
+                Type::FnPtr(
+                    *depth,
+                    params
+                        .into_iter()
+                        .map(|param| self.substitute_concrete(param, concrete))
+                        .collect(),
+                    returns
+                        .into_iter()
+                        .map(|ret| self.substitute_concrete(ret, concrete))
+                        .collect(),
+                )
+            }
         };
         self.get_or_insert_concrete(ctype)
     }
@@ -473,6 +511,49 @@ impl Types {
                 } else {
                     Err(())
                 }
+            }
+            (
+                GType::FnPtr(a_depth, a_params, a_returns),
+                GType::FnPtr(b_depth, b_params, b_returns),
+            ) => {
+                if a_depth != b_depth
+                    || a_params.len() != b_params.len()
+                    || a_returns.len() != b_returns.len()
+                {
+                    return Err(());
+                }
+                let (a_params, a_returns) = (a_params.clone(), a_returns.clone());
+                let (b_params, b_returns) = (b_params.clone(), b_returns.clone());
+                let mut map = HashMap::new();
+                for (a_id, b_id) in a_params.into_iter().zip(b_params) {
+                    for (index, id) in self.bind(a_id, b_id)? {
+                        match map.entry(index) {
+                            hash_map::Entry::Occupied(o) => {
+                                if *o.get() != id {
+                                    return Err(());
+                                }
+                            }
+                            hash_map::Entry::Vacant(v) => {
+                                v.insert(id);
+                            }
+                        }
+                    }
+                }
+                for (a_id, b_id) in a_returns.into_iter().zip(b_returns) {
+                    for (index, id) in self.bind(a_id, b_id)? {
+                        match map.entry(index) {
+                            hash_map::Entry::Occupied(o) => {
+                                if *o.get() != id {
+                                    return Err(());
+                                }
+                            }
+                            hash_map::Entry::Vacant(v) => {
+                                v.insert(id);
+                            }
+                        }
+                    }
+                }
+                Ok(map)
             }
             _ => Err(()),
         }
@@ -576,6 +657,16 @@ impl Types {
                 indices
             }
             GType::Generic(_, index) => HashSet::from([*index]),
+            GType::FnPtr(_, params, returns) => {
+                let mut indices = HashSet::new();
+                for param in params {
+                    indices.extend(self.generic_indices(*param));
+                }
+                for ret in returns {
+                    indices.extend(self.generic_indices(*ret));
+                }
+                indices
+            }
         }
     }
 
@@ -594,6 +685,16 @@ impl Types {
                 }
             }
             GType::Generic(_, index) => HashSet::from([*index]),
+            GType::FnPtr(_, params, returns) => {
+                let mut indices = HashSet::new();
+                for param in params {
+                    indices.extend(self.generic_indices(*param));
+                }
+                for ret in returns {
+                    indices.extend(self.generic_indices(*ret));
+                }
+                indices
+            }
         }
     }
 
@@ -619,7 +720,75 @@ impl Types {
                     "*".repeat(*depth)
                 )
             }
+            Type::FnPtr(_, _, _) => format!("hfp_{}", id.0),
         }
+    }
+
+    pub fn generate_fn_ptr_typedefs(&mut self) -> String {
+        let mut graph = Graph::new();
+        let mut map = HashMap::new();
+        let mut fn_ptrs = Vec::new();
+        macro_rules! get_id {
+            ($type_id:expr) => {
+                if let Some(id) = map.get($type_id) {
+                    *id
+                } else {
+                    let id = graph.add_node($type_id);
+                    map.insert(*$type_id, id);
+                    id
+                }
+            };
+        }
+        for (ty, id) in &self.types {
+            if let Type::FnPtr(_, params, returns) = ty {
+                let i = get_id!(id);
+                for param in params {
+                    let j = get_id!(param);
+                    graph.add_edge(i, j, ());
+                }
+                for ret in returns {
+                    let j = get_id!(ret);
+                    graph.add_edge(i, j, ());
+                }
+                fn_ptrs.push((ty, id));
+            }
+        }
+        let sort = toposort(&graph, None).unwrap();
+        let typeid_map: HashMap<_, _> = sort
+            .iter()
+            .rev()
+            .enumerate()
+            .map(|(i, id)| (*graph[*id], i))
+            .collect();
+        fn_ptrs.sort_by_key(|(_, id)| typeid_map[*id]);
+
+        let mut out = String::new();
+        for (ty, id) in fn_ptrs {
+            if let Type::FnPtr(depth, params, returns) = ty {
+                out.push_str("typedef void (*");
+                out.push_str(&"*".repeat(*depth));
+                out.push_str(&format!("hfp_{})(", id.0));
+                for (i, param) in params.iter().enumerate() {
+                    if i > 0 {
+                        out.push_str(", ");
+                    }
+                    out.push_str(&self.generate(*param));
+                }
+                for (i, ret) in returns.iter().enumerate() {
+                    if i > 0 || !params.is_empty() {
+                        out.push_str(", ");
+                    }
+                    out.push_str(&self.generate(*ret));
+                    out.push('*');
+                }
+                out.push_str(");\n");
+            }
+        }
+        out
+    }
+
+    pub fn is_fn_ptr(&self, id: TypeId) -> bool {
+        matches!(self.types.get_by_right(&id).unwrap(), Type::FnPtr(_, _, _))
     }
 
     pub fn format(
@@ -666,6 +835,29 @@ impl Types {
                 }
             }
             GType::Generic(depth, index) => format!("{}T{}", "*".repeat(*depth), index),
+            GType::FnPtr(depth, params, returns) => {
+                let mut out = "*".repeat(*depth);
+                out.push_str("fn(");
+                for (i, param) in params.iter().enumerate() {
+                    if i > 0 {
+                        out.push(' ');
+                    }
+                    out.push_str(&self.format(*param, struct_qual, module_qual));
+                }
+                if !returns.is_empty() {
+                    if params.is_empty() {
+                        out.push_str("->");
+                    } else {
+                        out.push_str(" ->");
+                    }
+                    for ret in returns {
+                        out.push(' ');
+                        out.push_str(&self.format(*ret, struct_qual, module_qual));
+                    }
+                }
+                out.push(')');
+                out
+            }
         }
     }
 
