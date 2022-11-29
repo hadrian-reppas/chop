@@ -1,0 +1,9 @@
+import special_helper::{special}
+import special_helper2::{special}
+
+fn special[T] float float float T {}
+fn special[T] int int int {}
+
+fn main {
+    special
+}

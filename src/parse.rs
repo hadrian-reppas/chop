@@ -483,7 +483,17 @@ pub fn parse_group(tokens: &mut Tokens, is_if_test: bool) -> Result<Vec<Op>, Err
         if tokens.peek().is_standalone() {
             if tokens.peek().is_name() {
                 let qname = parse_qualified_name(tokens, false)?;
-                group.push(Op::Name(qname));
+                if tokens.peek().is_lbrack() {
+                    tokens.next()?;
+                    let mut ptypes = Vec::new();
+                    while !tokens.peek().is_rbrack() {
+                        ptypes.push(parse_type(tokens)?);
+                    }
+                    tokens.next()?;
+                    group.push(Op::NameBrack(qname, ptypes));
+                } else {
+                    group.push(Op::Name(qname));
+                }
             } else {
                 group.push(Op::from_token(tokens.next()?));
             }
@@ -520,6 +530,7 @@ pub fn parse_group(tokens: &mut Tokens, is_if_test: bool) -> Result<Vec<Op>, Err
                         group.push(Op::Abort(span, vec![]));
                     }
                 }
+                Token::Call(span) => group.push(Op::Call(span)),
                 _ => unreachable!(),
             }
         }

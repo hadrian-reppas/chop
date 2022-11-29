@@ -176,6 +176,8 @@ pub enum Op {
     CastTo(PType, Span, Span, Span),
     Assert(Span),
     Abort(Span, Vec<PType>),
+    Call(Span),
+    NameBrack(QualifiedName, Vec<PType>),
     Expr(Expr, Span),
 }
 
@@ -208,8 +210,9 @@ impl Op {
             | Op::CastTo(_, span, _, _)
             | Op::Assert(span)
             | Op::Abort(span, _)
+            | Op::Call(span)
             | Op::Expr(_, span) => *span,
-            Op::Name(qname) => qname.span(),
+            Op::Name(qname) | Op::NameBrack(qname, _) => qname.span(),
         }
     }
 }

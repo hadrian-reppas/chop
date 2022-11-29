@@ -102,6 +102,7 @@ pub enum Token {
     CastTo(Span),
     Assert(Span),
     Abort(Span),
+    Call(Span),
 
     Eof(Span),
 }
@@ -143,6 +144,7 @@ impl Token {
             | Token::CastTo(span)
             | Token::Assert(span)
             | Token::Abort(span)
+            | Token::Call(span)
             | Token::Eof(span) => *span,
         }
     }
@@ -239,6 +241,7 @@ impl Token {
                 | Token::CastTo(_)
                 | Token::Assert(_)
                 | Token::Abort(_)
+                | Token::Call(_)
         )
     }
 }
@@ -432,6 +435,7 @@ impl TokenIter {
             "zalloc_arr" => Token::ZallocArr(span),
             "assert" => Token::Assert(span),
             "abort" => Token::Abort(span),
+            "call" => Token::Call(span),
             "true" => Token::Bool(true, span),
             "false" => Token::Bool(false, span),
             _ => Token::Name(span),

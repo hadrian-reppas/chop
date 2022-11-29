@@ -13,6 +13,17 @@ use crate::program::{Program, ProgramContext, ProgramMember, ProgramOp, ProgramS
 use crate::types::{GSignature, GTypeId, Kind, Types};
 use crate::{color, reset};
 
+// TODO: function pointers:
+//  -- lex 'call' keyword
+//  -- parse 'call' keyword
+//  -- parse bracket expressions
+//  -- allow fuctions to not include all generics in their arguments
+//  -- add 'special' field to GSignature
+//  -- check for overloaded special functions
+//  7. typecheck function pointer calls
+//  8. add ProgramOp::Call
+//  9. generate ProgramOp::Call
+
 // TODO: topological sort on global uses in global inits (check
 //       call graph to find dependencies)
 
@@ -70,6 +81,7 @@ impl Context {
                                     .map(|r| types.get_or_insert(r.clone()))
                                     .collect(),
                                 Kind::Builtin,
+                                false,
                             )
                         })
                         .collect(),
@@ -297,96 +309,99 @@ impl Context {
                 for name in names {
                     full_path.push(name.name);
                     if let Some(import_sigs) = self.signatures.get(&full_path) {
-                        for qual_fn in self.function_qual.get(name.name).into_iter().flatten() {
-                            for existing_sig in &self.signatures[qual_fn] {
-                                for new_sig in import_sigs {
-                                    if params_overlap(
-                                        &mut self.types,
-                                        &existing_sig.params,
-                                        &new_sig.params,
-                                    ) {
-                                        if let Some(import_span) = import_spans.get(qual_fn) {
-                                            return Err(Error::Import(
-                                            Some(name.span),
-                                            format!(
-                                                "imported function '{}' overlaps with a previous import",
-                                                name.name
-                                            ),
-                                            vec![
-                                                Note::new(
+                        if let Some(qual_fns) = self.function_qual.get(name.name) {
+                            for qual_fn in qual_fns {
+                                for existing_sig in &self.signatures[qual_fn] {
+                                    for new_sig in import_sigs {
+                                        if signatures_overlap(
+                                            &mut self.types,
+                                            existing_sig,
+                                            new_sig,
+                                        ) {
+                                            if let Some(import_span) = import_spans.get(qual_fn) {
+                                                let mut notes = vec![Note::new(
                                                     Some(*import_span),
                                                     format!("'{}' is imported here", name.name),
-                                                ),
-                                                Note::new(
-                                                    None,
-                                                    format!(
-                                                        "previously imported signature is {}{}{}",
-                                                        color!(Blue),
-                                                        self.types.format_signature(existing_sig, &HashMap::new(), &HashMap::new()),
-                                                        reset!()
-                                                    ),
-                                                ),
-                                                Note::new(
-                                                    None,
-                                                    format!(
-                                                        "new siganture is {}{}{}",
-                                                        color!(Blue),
-                                                        self.types.format_signature(new_sig, &HashMap::new(), &HashMap::new()),
-                                                        reset!()
-                                                    ),
-                                                ),
-                                            ],
-                                        ));
-                                        } else {
-                                            match existing_sig.kind {
-                                            Kind::Builtin => return Err(Error::Import(
-                                                Some(name.span),
-                                                "import conflicts with a builtin function".to_string(),
-                                                vec![
-                                                    Note::new(
+                                                )];
+                                                if existing_sig.is_special {
+                                                    notes.push(Note::new(
                                                         None,
-                                                        format!("builtin function '{}' has signature {}{}{}",
-                                                            name.name,
+                                                        format!("previously imported function '{}' is special", name.name),
+                                                    ));
+                                                } else if new_sig.is_special {
+                                                    notes.push(Note::new(
+                                                        None,
+                                                        format!(
+                                                            "imported function '{}' is special",
+                                                            name.name
+                                                        ),
+                                                    ));
+                                                } else {
+                                                    notes.push(Note::new(
+                                                        None,
+                                                        format!(
+                                                            "previously imported signature is {}{}{}",
                                                             color!(Blue),
                                                             self.types.format_signature(existing_sig, &HashMap::new(), &HashMap::new()),
                                                             reset!()
-                                                        )
-                                                    ),
-                                                    Note::new(
+                                                        ),
+                                                    ));
+                                                    notes.push(Note::new(
                                                         None,
-                                                        format!("imported function '{}' has signature {}{}{}",
-                                                            name.name,
+                                                        format!(
+                                                            "new siganture is {}{}{}",
                                                             color!(Blue),
-                                                            self.types.format_signature(new_sig, &HashMap::new(), &HashMap::new()),
+                                                            self.types.format_signature(
+                                                                new_sig,
+                                                                &HashMap::new(),
+                                                                &HashMap::new()
+                                                            ),
                                                             reset!()
-                                                        )
+                                                        ),
+                                                    ));
+                                                }
+                                                return Err(Error::Import(
+                                                    Some(name.span),
+                                                    format!(
+                                                        "imported function '{}' overlaps with a previous import",
+                                                        name.name
                                                     ),
-                                                ]
-                                            )),
+                                                    notes,
+                                                ));
+                                            } else {
+                                                match existing_sig.kind {
+                                            Kind::Builtin => unreachable!(),
                                             Kind::Custom(span) => return Err(Error::Import(
                                                 Some(name.span),
                                                 "imported function conflicts with a previously defined function".to_string(),
-                                                vec![
-                                                    Note::new(Some(span), format!("'{}' is defined here", name.name)),
-                                                    Note::new(
-                                                        None,
-                                                        format!("definition of '{}' has signature {}{}{}",
-                                                            name.name,
-                                                            color!(Blue),
-                                                            self.types.format_signature(existing_sig, &HashMap::new(), &HashMap::new()),
-                                                            reset!()
-                                                        )
-                                                    ),
-                                                    Note::new(
-                                                        None,
-                                                        format!("imported function '{}' has signature {}{}{}",
-                                                            name.name,
-                                                            color!(Blue),
-                                                            self.types.format_signature(new_sig, &HashMap::new(), &HashMap::new()),
-                                                            reset!()
-                                                        )
-                                                    ),
-                                                ]
+                                                if existing_sig.is_special {
+                                                    vec![
+                                                        Note::new(Some(span), format!("'{}' is defined here", name.name)),
+                                                        Note::new(None, format!("previously defined function '{}' is special", name.name)),
+                                                    ]
+                                                } else {
+                                                    vec![
+                                                        Note::new(Some(span), format!("'{}' is defined here", name.name)),
+                                                        Note::new(
+                                                            None,
+                                                            format!("definition of '{}' has signature {}{}{}",
+                                                                name.name,
+                                                                color!(Blue),
+                                                                self.types.format_signature(existing_sig, &HashMap::new(), &HashMap::new()),
+                                                                reset!()
+                                                            )
+                                                        ),
+                                                        Note::new(
+                                                            None,
+                                                            format!("imported function '{}' has signature {}{}{}",
+                                                                name.name,
+                                                                color!(Blue),
+                                                                self.types.format_signature(new_sig, &HashMap::new(), &HashMap::new()),
+                                                                reset!()
+                                                            )
+                                                        ),
+                                                    ]
+                                                }
                                             )),
                                             Kind::Constructor(span)
                                             | Kind::Member(span)
@@ -418,16 +433,20 @@ impl Context {
                                                 ]
                                             )),
                                         }
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
-                        match self.function_qual.entry(name.name) {
-                            Entry::Occupied(mut o) => o.get_mut().push(full_path.clone()),
-                            Entry::Vacant(v) => {
-                                v.insert(vec![full_path.clone()]);
+                            match self.function_qual.entry(name.name) {
+                                Entry::Occupied(mut o) => o.get_mut().push(full_path.clone()),
+                                Entry::Vacant(v) => {
+                                    v.insert(vec![full_path.clone()]);
+                                }
                             }
+                        } else {
+                            self.function_qual
+                                .insert(name.name, vec![full_path.clone()]);
                         }
                         import_spans.insert(full_path.clone(), name.span);
                     } else {
@@ -1620,6 +1639,8 @@ impl Context {
                 self.program_context.push_op(ProgramOp::Abort(*span));
                 Ok(())
             }
+            Op::Call(span) => todo!(),
+            Op::NameBrack(qname, ptypes) => todo!(),
         }
     }
 
@@ -2250,22 +2271,11 @@ impl Context {
                 for ty in &params {
                     seen.extend(self.types.generic_indices(*ty));
                 }
-                // TODO: Be less strict on generic parameters in arguments.
-                //       If a function does not use all of its generic parameters
-                //       in its arguments, it must be called indirectly with the
-                //       "f[] call" syntax.
-                for (i, name) in generic_names.iter().enumerate() {
-                    if !seen.contains(&i) {
-                        return Err(Error::Parse(
-                            name.span,
-                            format!("generic argument '{}' is never used", name.name),
-                        ));
-                    }
-                }
+                let is_special = seen.len() < generic_names.len();
 
                 Ok(vec![(
                     make_names(prefix, name.name),
-                    GSignature::new(params, returns, Kind::Custom(name.span)),
+                    GSignature::new(params, returns, Kind::Custom(name.span), is_special),
                 )])
             }
             Item::Struct {
@@ -2326,7 +2336,7 @@ impl Context {
                     let dot = dotdot.strip_prefix('.').unwrap();
                     signatures.push((
                         make_names(prefix, dot),
-                        GSignature::new(vec![struct_ty], vec![ty], Kind::Member(name.span)),
+                        GSignature::new(vec![struct_ty], vec![ty], Kind::Member(name.span), false),
                     ));
                     signatures.push((
                         make_names(prefix, dotdot),
@@ -2334,11 +2344,17 @@ impl Context {
                             vec![struct_ty],
                             vec![struct_ty, ty],
                             Kind::Member(name.span),
+                            false,
                         ),
                     ));
                     signatures.push((
                         make_names(prefix, dot),
-                        GSignature::new(vec![struct_ty_ptr], vec![ty_ptr], Kind::Member(name.span)),
+                        GSignature::new(
+                            vec![struct_ty_ptr],
+                            vec![ty_ptr],
+                            Kind::Member(name.span),
+                            false,
+                        ),
                     ));
                     signatures.push((
                         make_names(prefix, dotdot),
@@ -2346,6 +2362,7 @@ impl Context {
                             vec![struct_ty_ptr],
                             vec![struct_ty_ptr, ty_ptr],
                             Kind::Member(name.span),
+                            false,
                         ),
                     ));
                 }
@@ -2365,6 +2382,7 @@ impl Context {
                         constructor_params,
                         vec![struct_ty],
                         Kind::Constructor(name.span),
+                        false,
                     ),
                 ));
                 self.struct_fields.insert(qname, struct_fields);
@@ -2388,11 +2406,11 @@ impl Context {
                 Ok(vec![
                     (
                         make_names(prefix, name.name),
-                        GSignature::new(vec![], vec![ty], Kind::Global(name.span)),
+                        GSignature::new(vec![], vec![ty], Kind::Global(name.span), false),
                     ),
                     (
                         make_names(prefix, write_name),
-                        GSignature::new(vec![ty], vec![], Kind::GlobalWrite(name.span)),
+                        GSignature::new(vec![ty], vec![], Kind::GlobalWrite(name.span), false),
                     ),
                     (
                         make_names(prefix, name_ptr),
@@ -2400,6 +2418,7 @@ impl Context {
                             vec![],
                             vec![self.types.ref_n(ty, 1)],
                             Kind::GlobalPtr(name.span),
+                            false,
                         ),
                     ),
                 ])
@@ -2576,8 +2595,36 @@ fn check_for_conflicts(
     name: &str,
 ) -> Result<(), Error> {
     let span = new_signature.kind.span().unwrap();
+    if existing_signatures[0].is_special {
+        return Err(Error::Type(
+            span,
+            if new_signature.kind.is_auto() {
+                format!(
+                    "autogenerated function '{name}' conflicts with an existing special function"
+                )
+            } else {
+                format!("function '{name}' conflicts with an existing special function")
+            },
+            vec![Note::new(
+                Some(existing_signatures[0].kind.span().unwrap()),
+                format!("'{}' declared here", name),
+            )],
+        ));
+    } else if new_signature.is_special {
+        return Err(Error::Type(
+            span,
+            format!(
+                "special function '{}' conflicts with an existing function",
+                name
+            ),
+            vec![Note::new(
+                Some(existing_signatures[0].kind.span().unwrap()),
+                format!("'{}' declared here", name),
+            )],
+        ));
+    }
     for existing in existing_signatures {
-        if params_overlap(types, &existing.params, &new_signature.params) {
+        if signatures_overlap(types, existing, new_signature) {
             let previous_def = if let Some(existing_span) = existing.kind.span() {
                 if existing.kind.is_auto() {
                     Note::new(
@@ -2620,8 +2667,11 @@ fn check_for_conflicts(
     Ok(())
 }
 
-fn params_overlap(types: &mut Types, params_a: &[GTypeId], params_b: &[GTypeId]) -> bool {
-    can_bind(types, params_a, params_b) || can_bind(types, params_b, params_a)
+fn signatures_overlap(types: &mut Types, sig_a: &GSignature, sig_b: &GSignature) -> bool {
+    sig_a.is_special
+        || sig_b.is_special
+        || can_bind(types, &sig_a.params, &sig_b.params)
+        || can_bind(types, &sig_b.params, &sig_a.params)
 }
 
 fn can_bind(types: &mut Types, params_a: &[GTypeId], params_b: &[GTypeId]) -> bool {

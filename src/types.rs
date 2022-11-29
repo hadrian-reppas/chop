@@ -49,14 +49,21 @@ pub struct GSignature {
     pub params: Vec<GTypeId>,
     pub returns: Vec<GTypeId>,
     pub kind: Kind,
+    pub is_special: bool,
 }
 
 impl GSignature {
-    pub fn new(params: Vec<GTypeId>, returns: Vec<GTypeId>, kind: Kind) -> GSignature {
+    pub fn new(
+        params: Vec<GTypeId>,
+        returns: Vec<GTypeId>,
+        kind: Kind,
+        is_special: bool,
+    ) -> GSignature {
         GSignature {
             params,
             returns,
             kind,
+            is_special,
         }
     }
 }

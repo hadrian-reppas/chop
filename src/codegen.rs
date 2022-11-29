@@ -639,7 +639,7 @@ impl Generator {
         *hr0 = NULL;
     } else {
         *hr0 = (uint8_t*) buf;
-    }",
+    }\n",
             ),
             _ => unreachable!(),
         }
