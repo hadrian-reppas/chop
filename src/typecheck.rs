@@ -1169,8 +1169,6 @@ impl Context {
         lbrace_span: Span,
         rbrace_span: Span,
     ) -> Result<(), Error> {
-        let stack_before = stack.clone();
-
         for op in low {
             self.check_op(stack, op)?;
         }
@@ -1190,42 +1188,6 @@ impl Context {
                         reset!()
                     ),
                 )],
-            ));
-        }
-        if stack.len() != stack_before.len() + 1
-            || stack
-                .iter()
-                .zip(stack_before.iter())
-                .any(|((_, s), (_, b))| s != b)
-        {
-            return Err(Error::Type(
-                to_span,
-                "lower bound should add a single 'int' to the stack".to_string(),
-                vec![
-                    Note::new(
-                        None,
-                        format!(
-                            "before bound, stack is {}{}{}",
-                            color!(Blue),
-                            self.types.format_stack(
-                                &stack_before,
-                                &self.struct_qual,
-                                &self.module_qual
-                            ),
-                            reset!()
-                        ),
-                    ),
-                    Note::new(
-                        None,
-                        format!(
-                            "after bound, stack is {}{}{}",
-                            color!(Blue),
-                            self.types
-                                .format_stack(stack, &self.struct_qual, &self.module_qual),
-                            reset!()
-                        ),
-                    ),
-                ],
             ));
         }
 
@@ -1249,42 +1211,6 @@ impl Context {
                         reset!()
                     ),
                 )],
-            ));
-        }
-        if stack.len() != stack_before.len() + 1
-            || stack
-                .iter()
-                .zip(stack_before.iter())
-                .any(|((_, s), (_, b))| s != b)
-        {
-            return Err(Error::Type(
-                lbrace_span,
-                "upper bound should add a single 'int' to the stack".to_string(),
-                vec![
-                    Note::new(
-                        None,
-                        format!(
-                            "before bound, stack is {}{}{}",
-                            color!(Blue),
-                            self.types.format_stack(
-                                &stack_before,
-                                &self.struct_qual,
-                                &self.module_qual
-                            ),
-                            reset!()
-                        ),
-                    ),
-                    Note::new(
-                        None,
-                        format!(
-                            "after bound, stack is {}{}{}",
-                            color!(Blue),
-                            self.types
-                                .format_stack(stack, &self.struct_qual, &self.module_qual),
-                            reset!()
-                        ),
-                    ),
-                ],
             ));
         }
 
@@ -1919,36 +1845,28 @@ impl Context {
             binds,
             index,
         } = self.get_qsbi(stack, qname)?;
-        if signature.is_special {
-            return Err(Error::Type(
-                qname.span(),
-                format!(
-                    "function '{}' is special and cannot be called direcly",
-                    qname.span().text
-                ),
-                vec![],
-            ));
-        }
-        let mut param_vars = Vec::new();
-        for _ in 0..signature.params.len() {
-            let (var, _) = stack.pop().unwrap();
-            param_vars.push(var);
-        }
-        param_vars.reverse();
-        let mut return_vars = Vec::new();
-        for ret in signature.returns {
-            let ty = self.types.substitute(ret, &binds);
-            let var = self.program_context.alloc(ty);
-            stack.push((var, ty));
-            return_vars.push(var);
-        }
+
         if qname.is_just("@") {
-            self.program_context.push_op(ProgramOp::Ref(
-                return_vars[1],
-                param_vars[0],
-                stack[stack.len() - 2].1,
-            ));
+            let (var, ty) = *stack.last().unwrap();
+            let ref_ty = self.types.ref_n(ty, 1);
+            let ref_var = self.program_context.alloc(ref_ty);
+            stack.push((ref_var, ref_ty));
+            self.program_context
+                .push_op(ProgramOp::Ref(ref_var, var, ty));
         } else {
+            let mut param_vars = Vec::new();
+            for _ in 0..signature.params.len() {
+                let (var, _) = stack.pop().unwrap();
+                param_vars.push(var);
+            }
+            param_vars.reverse();
+            let mut return_vars = Vec::new();
+            for ret in signature.returns {
+                let ty = self.types.substitute(ret, &binds);
+                let var = self.program_context.alloc(ty);
+                stack.push((var, ty));
+                return_vars.push(var);
+            }
             self.program_context.push_op(ProgramOp::Call(
                 qualified,
                 index,
@@ -1980,7 +1898,9 @@ impl Context {
                     let qualified = make_names(qual_module, name.name);
                     if let Some(signatures) = self.signatures.get(&qualified) {
                         for (index, signature) in self.signatures[&qualified].iter().enumerate() {
-                            if let Some(binds) = get_binds(&mut self.types, stack, signature) {
+                            if let Some(binds) =
+                                get_binds(&mut self.types, stack, signature, *name)?
+                            {
                                 self.call_graph
                                     .insert(qualified.clone(), index, binds.clone());
                                 return Ok(NameInfo {
@@ -2045,7 +1965,9 @@ impl Context {
                 if let Some(qual_fns) = self.function_qual.get(name.name) {
                     for qual_fn in qual_fns {
                         for (index, signature) in self.signatures[qual_fn].iter().enumerate() {
-                            if let Some(binds) = get_binds(&mut self.types, stack, signature) {
+                            if let Some(binds) =
+                                get_binds(&mut self.types, stack, signature, *name)?
+                            {
                                 self.call_graph
                                     .insert(qual_fn.clone(), index, binds.clone());
                                 return Ok(NameInfo {
@@ -2770,9 +2692,20 @@ fn get_binds(
     types: &mut Types,
     stack: &[(usize, GTypeId)],
     signature: &GSignature,
-) -> Option<Vec<GTypeId>> {
+    name: Name,
+) -> Result<Option<Vec<GTypeId>>, Error> {
+    if signature.is_special {
+        return Err(Error::Type(
+            name.span,
+            format!(
+                "function '{}' is special and cannot be called direcly",
+                name.name
+            ),
+            vec![],
+        ));
+    }
     if signature.params.len() > stack.len() {
-        None
+        Ok(None)
     } else {
         let mut binds = HashMap::new();
         for ((_, arg), param) in stack.iter().rev().zip(signature.params.iter().rev()) {
@@ -2781,17 +2714,19 @@ fn get_binds(
                     for (index, ty) in map {
                         if let Some(bound) = binds.get(&index) {
                             if bound != &ty {
-                                return None;
+                                return Ok(None);
                             }
                         } else {
                             binds.insert(index, ty);
                         }
                     }
                 }
-                Err(_) => return None,
+                Err(_) => return Ok(None),
             }
         }
-        Some((0..signature.generic_count).map(|i| binds[&i]).collect())
+        Ok(Some(
+            (0..signature.generic_count).map(|i| binds[&i]).collect(),
+        ))
     }
 }
 

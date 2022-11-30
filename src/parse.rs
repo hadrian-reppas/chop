@@ -698,6 +698,32 @@ fn parse_let(tokens: &mut Tokens) -> Result<Stmt, Error> {
             tokens.peek().span(),
             "expected a name".to_string(),
         ));
+    } else if names.len() == 1 && tokens.peek().is_for() {
+        if let Stmt::For {
+            low,
+            high,
+            body,
+            to_span,
+            lbrace_span,
+            rbrace_span,
+        } = parse_for(tokens)?
+        {
+            let new_body = vec![Stmt::Let {
+                names,
+                body,
+                let_span,
+            }];
+            return Ok(Stmt::For {
+                low,
+                high,
+                body: new_body,
+                to_span,
+                lbrace_span,
+                rbrace_span,
+            });
+        } else {
+            unreachable!()
+        }
     } else if !tokens.peek().is_lbrace() {
         return Err(Error::Parse(
             tokens.peek().span(),

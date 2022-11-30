@@ -1,12 +1,27 @@
 import struct std::vector::{Vector}
-import std::vector::{new_vector free_vector push pop}
+import std::vector::{new_vector free push pop index length set}
+import std::prelude::{swap rot}
 
-fn sort_vector *Vector[float] {
-    ~ // TODO
-} 
+fn sort_vector let vector: *Vector[float] {
+    vector length let len {
+        for 0 to len {
+            let i for 0 to len swap - 1 - {
+                if (index(vector, i) > index(vector, i + 1)) {
+                    vector i i 1 + swap_values
+                }
+            }
+        }
+    }
+}
+
+fn swap_values let vector: *Vector[float] i: int j: int {
+    vector i index
+    vector i vector j index set
+    vector j rot set
+}
 
 fn main {
-    0 cast_to[*float] new_vector
+    new_vector[float] call
     for 0 to 20 {
         ~
         @ random push
@@ -15,5 +30,5 @@ fn main {
     for 0 to 20 {
         ~ @ pop putln
     }
-    free_vector
+    free
 }

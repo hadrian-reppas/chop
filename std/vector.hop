@@ -1,4 +1,5 @@
 import std::prelude::{swap rot}
+import std::ptr::{assert_non_null}
 
 struct Vector[T] {
     pointer: *T
@@ -6,25 +7,33 @@ struct Vector[T] {
     capacity: int
 }
 
-fn new_vector[T] *T -> Vector[T] {
-    0 0 vector
+fn new_vector[T] -> Vector[T] {
+    0 cast_to[*T] 0 0 Vector
 }
 
-fn push[T] *Vector[T] T {
-    swap ..length read swap ..capacity read rot
+fn new[T] -> Vector[T] {
+    new_vector[T] call
+}
+
+fn push[T] let vec: *Vector[T] value: T {
+    vec .length read vec .capacity read
     if == {
-        . std_realloc_vector
+        vec realloc_vector
     }
-    ..pointer read swap ..length read rot + rot write
-    .length . read 1 + write
+    vec .pointer read vec .length read + value write
+    vec .length . read 1 + write
 }
 
-fn index[T] *Vector[T] int -> T {
-    let vec i {
-        0 i <= assert
-        i vec .length read < assert
-        vec .pointer read i + read
-    }
+fn index[T] let vec: *Vector[T] i: int -> T {
+    0 i <= assert
+    i vec .length read < assert
+    vec .pointer read i + read
+}
+
+fn set[T] let vec: *Vector[T] i: int val: T {
+    0 i <= assert
+    i vec .length read < assert
+    vec .pointer read i + val write
 }
 
 fn pop[T] *Vector[T] -> T {
@@ -33,7 +42,7 @@ fn pop[T] *Vector[T] -> T {
     ..length read swap .pointer read + read
 }
 
-fn free_vector[T] Vector[T] {
+fn free[T] Vector[T] {
     if ..capacity 0 > {
         .pointer free
     } else {
@@ -41,12 +50,20 @@ fn free_vector[T] Vector[T] {
     }
 }
 
-fn realloc_vector[T] *Vector[T] {
-    if ..capacity read 0 == {
-        ..capacity 10 write
-        .pointer 10 alloc_arr[T] write
+fn realloc_vector[T] let vec: *Vector[T] {
+    if vec .capacity read 0 == {
+        vec ..capacity 10 write
+        .pointer 10 alloc_arr[T] assert_non_null write
     } else {
-        ..length read 2 * . rot ..capacity rot write
-        ..pointer read rot realloc swap .pointer swap write
+        vec .capacity read 2 *
+        let new_capacity {
+            new_capacity alloc_arr[T] assert_non_null
+            vec .pointer read vec .capacity read copy
+            vec .capacity new_capacity write
+        }
     }
+}
+
+fn length[T] *Vector[T] -> int {
+    .length read
 }

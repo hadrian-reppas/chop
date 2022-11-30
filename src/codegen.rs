@@ -73,7 +73,7 @@ impl Generator {
             }
         }
 
-        self.code.push_str(&self.types.generate_fn_ptr_typedefs());
+        let split_point = self.code.len();
 
         let mut structs = Vec::new();
         let cloned_map = self.types.custom_map.clone();
@@ -152,6 +152,12 @@ impl Generator {
         }
 
         self.generate_main();
+
+        let fn_ptr_typedefs = self.types.generate_fn_ptr_typedefs();
+        let mut new_code = self.code[..split_point].to_string();
+        new_code.push_str(&fn_ptr_typedefs);
+        new_code.push_str(&self.code[split_point..]);
+        self.code = new_code;
     }
 
     fn generate_main(&mut self) {

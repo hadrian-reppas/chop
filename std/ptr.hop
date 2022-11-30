@@ -5,3 +5,11 @@ fn is_null[T] *T -> bool {
 fn non_null[T] *T -> bool {
     0 cast_to[*T] !=
 }
+
+fn assert_non_null[T] *T -> *T {
+    . non_null assert
+}
+
+fn null[T] -> *T {
+    0 cast_to[*T]
+}
