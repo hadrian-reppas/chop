@@ -1,5 +1,0 @@
-import foo
-
-fn main {
-    "hello!" putlns
-}

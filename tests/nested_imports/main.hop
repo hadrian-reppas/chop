@@ -1,7 +1,0 @@
-import foo : a_global
-import foo : bar : b_global
-
-fn main {
-    a 0 == assert
-    b 1 == assert
-}
