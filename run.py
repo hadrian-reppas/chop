@@ -1,6 +1,13 @@
 import os
 import sys
 
-if os.system(f"cargo run -- {sys.argv[1]}") == 0:
-    if os.system("clang out.c -o out") == 0:
-        os.system(f"./out {' '.join(sys.argv[2:])}")
+
+def run(command):
+    code = os.system(command)
+    if code != 0:
+        exit(code)
+
+
+run(f"cargo run -- {sys.argv[1]}")
+run("clang out.c -o out")
+run(f"./out {' '.join(sys.argv[2:])}")

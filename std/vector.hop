@@ -64,6 +64,6 @@ fn realloc_vector[T] let vec: *Vector[T] {
     }
 }
 
-fn length[T] *Vector[T] -> int {
+fn len[T] *Vector[T] -> int {
     .length read
 }

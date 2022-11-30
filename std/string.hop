@@ -1,12 +1,18 @@
 import struct std::vector::{Vector}
-import std::vector::{.length .capacity}
+import std::vector::{new_vector len push pop free .pointer}
 
 struct String {
     bytes: Vector[byte]
 }
 
 fn new_string -> String {
-    abort[String] // TODO
+    new_vector[byte] call
+    @ b'\0' push
+    String
+}
+
+fn new -> String {
+    new_string
 }
 
 fn push *String int {
@@ -22,100 +28,85 @@ fn push *String int {
 }
 
 fn push *String *byte {
-    ~ ~ abort
+    ~ ~ abort // TODO
 }
 
-fn push_one *String byte {
-    let s b {
-        if s .bytes .length * 2 + s .capacity * >= {
-            s grow_string
-        }
-        s .bytes * s .length * + b write
-        s .bytes * s .length * + 1 + 0 to_byte write
-        s .length . * 1 + write
+fn push_one let str: *String b: byte {
+    str .bytes
+    let bytes {
+        bytes pop ~
+        bytes b push
+        bytes b'\0' push
     }
 }
 
-fn push_two *String byte byte {
-    let s b1 b2 {
-        if s .length * 3 + s .capacity * >= {
-            s grow_string
-        }
-        s .bytes * s .length * + b1 write
-        s .bytes * s .length * + 1 + b2 write
-        s .bytes * s .length * + 2 + 0 to_byte write
-        s .length . * 2 + write
+fn push_two let str: *String b1: byte b2: byte {
+    str .bytes
+    let bytes {
+        bytes pop ~
+        bytes b1 push
+        bytes b2 push
+        bytes b'\0' push
     }
 }
 
-fn push_three *String byte byte byte {
-    let s b1 b2 b3 {
-        if s .length * 4 + s .capacity * >= {
-            s grow_string
-        }
-        s .bytes * s .length * + b1 write
-        s .bytes * s .length * + 1 + b2 write
-        s .bytes * s .length * + 2 + b3 write
-        s .bytes * s .length * + 3 + 0 to_byte write
-        s .length . * 3 + write
+fn push_three let str: *String b1: byte b2: byte b3: byte {
+    str .bytes
+    let bytes {
+        bytes pop ~
+        bytes b1 push
+        bytes b2 push
+        bytes b3 push
+        bytes b'\0' push
     }
 }
 
-fn push_four *String byte byte byte byte {
-    let s b1 b2 b3 b4 {
-        if s .length * 5 + s .capacity * >= {
-            s grow_string
-        }
-        s .bytes * s .length * + b1 write
-        s .bytes * s .length * + 1 + b2 write
-        s .bytes * s .length * + 2 + b3 write
-        s .bytes * s .length * + 3 + b4 write
-        s .bytes * s .length * + 4 + 0 to_byte write
-        s .length . * 4 + write
+fn push_four let str: *String b1: byte b2: byte b3: byte b4: byte {
+    str .bytes
+    let bytes {
+        bytes pop ~
+        bytes b1 push
+        bytes b2 push
+        bytes b3 push
+        bytes b4 push
+        bytes b'\0' push
     }
 }
 
-fn two_bytes int -> byte byte {
-    let c {
-        c 6 >> 31 & 192 | to_byte
-        c 63 & 128 | to_byte
-    }
+fn two_bytes let c: int -> byte byte {
+    c 6 >> 31 & 192 | to_byte
+    c 63 & 128 | to_byte
 }
 
-fn three_bytes int -> byte byte byte {
-    let c {
-        c 12 >> 15 & 224 | to_byte
-        c 6 >> 63 & 128 | to_byte
-        c 63 & 128 | to_byte
-    }
+fn three_bytes let c: int -> byte byte byte {
+    c 12 >> 15 & 224 | to_byte
+    c 6 >> 63 & 128 | to_byte
+    c 63 & 128 | to_byte
 }
 
-fn four_bytes int -> byte byte byte byte {
-    let c {
-        c 18 >> 7 & 240 | to_byte
-        c 12 >> 63 & 128 | to_byte
-        c 6 >> 63 & 128 | to_byte
-        c 63 & 128 | to_byte
-    }
+fn four_bytes let c: int -> byte byte byte byte {
+    c 18 >> 7 & 240 | to_byte
+    c 12 >> 63 & 128 | to_byte
+    c 6 >> 63 & 128 | to_byte
+    c 63 & 128 | to_byte
 }
 
-fn grow_string *String {
-    ..capacity *
-    if . 0 == {
-        ~
-        .bytes 10 alloc_arr[byte] write
-    } else {
-        2 *
-        let new_capacity {
-            ..bytes * new_capacity realloc
-            let new_bytes {
-                ..bytes new_bytes write
-            }
-            .capacity new_capacity write
-        }
-    }
+fn put *String {
+    .bytes .pointer read puts
 }
 
-fn free_string String {
+fn putln *String {
+    put ln
+}
+
+fn len *String -> int {
+    .bytes len
+}
+
+fn free String {
     .bytes free
+}
+
+fn pointer *String -> *byte {
+    .bytes .pointer read
 }

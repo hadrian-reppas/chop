@@ -640,6 +640,7 @@ impl Types {
         self.get_or_insert(GType::FnPtr(0, params, returns))
     }
 
+    // TODO: improve this
     pub fn sort_structs(&mut self, structs: &mut [(String, usize, Vec<TypeId>)]) {
         let mut graph = Graph::new();
         let mut map = HashMap::new();
@@ -654,12 +655,40 @@ impl Types {
                 }
             };
         }
-        for (_, id, ftypes) in structs.iter() {
-            let from = get_id!(TypeId(*id));
-            for ftype in ftypes {
-                let depth = self.concrete_depth(*ftype);
-                if depth == 0 {
-                    let to = get_id!(self.deref_n_concrete(*ftype, depth));
+        fn first_part(code: &str) -> &str {
+            let mut seen = false;
+            let mut len = 0;
+            for c in code.chars() {
+                if c == ' ' {
+                    if seen {
+                        len += 1;
+                        return &code[..len];
+                    } else {
+                        seen = true;
+                    }
+                } else {
+                    len += c.len_utf8();
+                }
+            }
+            unreachable!()
+        }
+        fn type_part(line: &str) -> Option<&str> {
+            if line.starts_with("    struct") {
+                let ty = first_part(&line[4..]);
+                if ty.ends_with('*') {
+                    None
+                } else {
+                    Some(ty)
+                }
+            } else {
+                None
+            }
+        }
+        for (code, _, _) in structs.iter() {
+            let from = get_id!(first_part(code));
+            for line in code.lines().skip(1) {
+                if let Some(ty_part) = type_part(line) {
+                    let to = get_id!(ty_part);
                     graph.add_edge(from, to, ());
                 }
             }
@@ -669,9 +698,9 @@ impl Types {
             .iter()
             .rev()
             .enumerate()
-            .map(|(i, id)| (graph[*id], i))
+            .map(|(i, id)| (graph[*id].to_string(), i))
             .collect();
-        structs.sort_by_key(|(_, id, _)| typeid_map[&TypeId(*id)]);
+        structs.sort_by_key(|(code, _, _)| typeid_map[first_part(code)]);
     }
 
     pub fn generic_indices(&self, id: GTypeId) -> HashSet<usize> {

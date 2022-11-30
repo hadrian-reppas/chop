@@ -1,5 +1,7 @@
-import std::string::{push free_string new_string ..bytes}
+import std::string::{push free new_string putln pointer}
 import struct std::string::{String}
+
+global EXPECTED: *byte { "abcങ𢄯Γx𢐎yz" }
 
 fn main {
     new_string
@@ -13,10 +15,7 @@ fn main {
     @ '𢐎' push
     @ 'y' push
     @ 'z' push
-    ..bytes putlnp
-    ..bytes putlns
-    free_string
-
-    "size_of[string]: " puts
-    size_of[string] putln
+    @ putln
+    @ pointer EXPECTED streq assert
+    free
 }
