@@ -1,4 +1,6 @@
 /target
+/docs/book
+/docs/src/*.md
 out
 out.c
 .DS_Store
