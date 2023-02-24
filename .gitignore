@@ -1,6 +1,7 @@
 /target
 /docs/book
 /docs/src/*.md
+!/docs/src/SUMMARY.md
 out
 out.c
 .DS_Store
