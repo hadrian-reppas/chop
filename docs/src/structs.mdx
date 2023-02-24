@@ -1,0 +1,72 @@
+# Structs
+
+Structs can be defined with the `struct` keyword. Here is how you might define
+an array of `float`s:
+
+```hop
+struct FloatArray {
+    ptr: *float
+    len: int
+}
+```
+
+When the Hop compiler encounters this struct definition, it autogenerates some
+functions. First, it creates a constructor. The constructor has the same name as
+the struct. It takes in each of the struct's members as parameters and returns
+an instance of the struct:
+
+```hop
+fn FloatArray *float int -> FloatArray { ... }
+```
+
+The Hop compiler also generates 4 member accessors for each member for the `ptr`
+member in our `FloatArray`, the compiler generates these four functions:
+
+```hop
+fn .ptr FloatArray -> *float { ... }
+fn ..ptr FloatArray -> FloatArray *float { ... }
+fn .ptr *FloatArray -> **float { ... }
+fn ..ptr *FloatArray -> *FloatArray **float { ... }
+```
+
+The single dot functions consume an instance of a `FloatArray` and return the `ptr`
+member. The double dot functions return the `ptr` member but do not consume the
+`FloatArray` from the stack. The compiler also provides overloaded functions that take
+a pointer to the `FloatArray` and return a pointer to the `ptr` member. The compiler
+generates the same 4 functions for the `len` member:
+
+
+```hop
+fn .len FloatArray -> int { ... }
+fn ..len FloatArray -> FloatArray int { ... }
+fn .len *FloatArray -> *int { ... }
+fn ..len *FloatArray -> *FloatArray *int { ... }
+```
+
+Here is a small program that uses the `FloatArray` struct:
+
+```hop
+struct FloatArray {
+    ptr: *float
+    len: int
+}
+
+fn print_last_float FloatArray {
+    ..len          // get the length
+    let len {
+       .ptr        // get a pointer to the first element
+       len + 1 -   // get a pointer to the last element
+       read putln  // print the value
+    }
+}
+
+fn main {
+    5 zalloc_arr[float] // allocate room for 5 floats (stack is [*float])
+    5                   // push the len               (stack is [*float, int])
+    FloatArray          // construct the FloatArray   (Stack is [FloatArray])
+    print_last_float    // print the last float
+}
+```
+
+The `let` keyword is described [here](./let-statements.md) and the `zalloc_arr`
+keyword is described [here](./alloc.md).

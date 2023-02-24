@@ -1,0 +1,11 @@
+[book]
+authors = ["hadrian-reppas"]
+language = "en"
+multilingual = false
+src = "src"
+title = "The Hop Programming Language"
+
+[output.html]
+mathjax-support = true
+
+# [output.pdf]

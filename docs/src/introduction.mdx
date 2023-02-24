@@ -1,0 +1,40 @@
+# Introduction
+
+Hop is a statically typed, compiled programming language. Like [Forth](https://en.wikipedia.org/wiki/Forth_(programming_language)),
+Hop is stack-based. Instead of assigning values to variables, values are pushed
+and popped from an implicit stack. When called, functions pop their arguments off 
+the stack and push their return values back onto it. Let's look at an example.
+
+## Hello World
+
+Here is a hello world program in Hop:
+
+
+```hop
+// hello_world.hop
+
+fn main {
+    "Hello, World!" putlns
+}
+```
+
+When this program is run, the string literal `"Hello, World!"` is pushed onto the
+stack. The `putlns` function then pops the string from the stack and prints it.
+
+## Running Hop Code
+
+The Hop compiler is called `chop`. `chop` transpiles Hop code to C code. It is
+invoked like this:
+
+```shell
+$ chop hello_world.hop
+```
+
+`chop` produces a file called `out.c`. The C file can be compiled by any C compiler
+and run.
+
+```shell
+$ clang -o out out.c
+$ ./out
+Hello, World!
+```

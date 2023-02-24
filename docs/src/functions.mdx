@@ -1,0 +1,147 @@
+# Functions
+
+
+## Built-in Types
+
+Hop has 4 built-in types:
+
+ 1. `int`: a 64 bit, signed integer
+ 2. `float`: a double-precision floating point number
+ 3. `bool`: a boolean
+ 4. `byte`: an 8 bit, unsigned integer
+
+Hop also has pointer types like `*int` and `**byte`. Hop doesn't have a character type.
+Instead, character literal produce integers. Like C, Hop represents strings as null-terminated
+sequences of bytes. A string literal produces a `*byte`:
+
+```hop
+    2      // int
+    1.5    // float
+    'A'    // int
+    true   // bool
+    b'z'   // byte
+    "str"  // *byte
+```
+
+
+## Function Signatures
+
+Functions are defined with the `fn` keyword followed by a name. Then comes the parameter types,
+an arrow, and the return types. The arrow can be skipped if the function doesn't return anything.
+
+```hop
+fn increment int -> int { ... }   // takes an int and returns an int
+fn print int { ... }              // takes an int and returns nothing
+fn print int -> { ... }           // same as above, but with the optional arrow
+fn constants -> byte byte { ... } // takes nothing and returns two bytes
+```
+
+
+## Function Bodies
+
+At the start of the function body, the stack contains the arguments that the function was
+called with. At the end of the function body, the stack should contain the return values.
+Here is a function that takes three `int`s and adds them together:
+
+```hop
+fn add_ints int int int -> int {
+    + +
+}
+```
+
+The `+` function adds 2 `int`s. It's signature is `int int -> int`, so each time it is called,
+it pops two `int`s off the stack and pushes their sum onto the stack. Here is an annotated
+version with what the stack looks like at each point when `add_ints` is called with `1`,
+`2`, and `3` as arguments:
+
+
+```hop
+fn add_ints int int int -> int { // start:   [1, 2, 3]
+    +                            // after +: [1, 5]
+    +                            // after +: [6]
+}
+```
+
+Notice that at the end of the function, the stack contains a single `int` which matches the
+function's declared return type.
+
+
+## Function Overloading
+
+Hop supports function overloading. This means multiple functions can have the same name as long
+as their parameters don't overlap. Each time an overloaded function is called, the compiler
+looks at the stack and determines which version of the function should be called. Here is an example:
+
+```hop
+fn overloaded int {
+    ~
+    "int on top of the stack!" putlns
+}
+
+fn overloaded float {
+    ~
+    "float on top of the stack!" putlns
+}
+
+fn main {
+    1   overloaded // int version
+    1.5 overloaded // float version
+}
+```
+
+When run, this program produces the following output:
+
+```shell
+int on top of the stack!
+float on top of the stack!
+```
+
+Two overloaded functions overlap if there exists a stack where calling them would be ambiguous.
+For example, consider these two overloaded functions:
+
+```hop
+fn overloaded int byte { ... }
+fn overloaded byte { ... }
+
+fn main {
+    1 b'a'     // stack is [int, byte]
+    overloaded // ambiguous! Which version should be called?
+}
+```
+
+If we try to compile this code, `chop` gives us this error message:
+
+```shell
+$ chop bad_overload.hop
+type error: signature conflicts with a previous definition
+ --> bad_overload.hop:2:4
+  |
+2 | fn overloaded byte { ... }
+  |    ^^^^^^^^^^
+
+note: previous definition is here
+ --> bad_overload.hop:1:4
+  |
+1 | fn overloaded int byte { ... }
+  |    ^^^^^^^^^^
+
+note: 'overloaded' has signature [int, byte] -> []
+```
+
+Checking for overlap with primitive types is simple. The compiler just checks
+if one parameter list is a suffix of another. But things get more complicated
+when checking [generic functions](./generics.md).
+
+
+## The `main` Function
+
+Every Hop program must have exactly one `main` function with one of the following
+signatures:
+- `fn main`
+- `fn main -> int`
+- `fn main int **byte`
+- `fn main int **byte -> int`
+
+If `main` returns an `int`, that value is the exit code of the process. If `main` does
+not return an `int`, the exit code is 0. If `main` takes an `int` and `**byte`, those
+values correspond to argc and argv in a C program's `main` function.

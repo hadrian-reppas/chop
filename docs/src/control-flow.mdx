@@ -1,0 +1,168 @@
+# Control Flow
+
+Hop has 3 control flow statements: if, while, and for.
+
+## If/Else Statements
+
+An if statement requires a `bool` on the top of the stack. If the value on
+the top of the stack is true, the if block is executed. Otherwise, the optional
+else block is executed. Here is an example:
+
+```hop
+fn print_age int {
+    if 21 < {
+        "under 21" putlns
+    } else {
+        "21 or over" putlns
+    }
+}
+```
+
+This function takes an `int` and compares it with 21. If it's less than 21, the
+if block is executed and prints "under 21." Otherwise, the else block is executed
+and prints "21 or over." We can rewrite the function to do nothing if the input
+is 21 or over:
+
+```hop
+fn print_age int {
+    if 21 < {
+        "under 21" putlns
+    }
+}
+```
+
+Now consider this code:
+
+```hop
+// bad_if.hop
+fn return_1_if_true bool -> int {
+    if {
+        1
+    } // error here
+}
+```
+
+If we try to compile this, we get the following error message:
+
+```shell
+$ chop bad_if.hop
+type error: stack does not match the stack before if block
+ --> bad_if.hop:4:5
+  |
+4 |     } // error here
+  |     ^
+
+note: before if block, stack is [] (bad_if.hop:2:8)
+note: after if block, stack is [int] (bad_if.hop:4:5)
+```
+
+We cannot compile this code because the stack depends on which path the program
+takes. At the start of the function, the stack contains the `bool` that the function
+was called with. The if statement pops the `bool` off the top of the stack. If it is
+true, the if block executes and pushes 1 onto the stack. So after the if block, the 
+stack is `[int]`. But if the input is false, the if block does not execute and the
+stack stays empty (stack is `[]`). This is not allowed in Hop. The types on the
+stack cannot depend on the path that the program takes. These two examples are okay:
+
+```hop
+fn okay_if bool {
+    if {
+        "Yes!" putlns // *byte is pushed and then popped
+    } // so stack is empty here
+}
+
+fn okay_if_else bool {
+    if {
+        "Yes!"
+    } else {
+        "No."
+    } // *byte is pushed in both cases
+    putlns
+}
+```
+
+## While Statements
+
+A while statement also pops a `bool` from the top of the stack. The block continues
+to execute as long as the `bool` is true. Here is an example that prints the numbers
+from 1 to 5:
+
+```hop
+// count.hop
+fn main {
+    1               // push 1 onto the stack
+    while . 5 <= {  // check if the int is still less than 5
+        . putln     // print the int
+        1 +         // add 1 to the int
+    }
+    ~
+}
+```
+
+Ignore the `.` and `~` functions for now. They are explained in the [built-in functions chapter](./built-in-functions.md). When run, this is the program's
+output:
+
+```shell
+$ chop count.hop
+$ clang -o out out.c
+$ ./out
+1
+2
+3
+4
+5
+```
+
+Again, the stack after the while block must match the stack before the while
+block. So this program is invalid:
+
+```hop
+// bad_while.hop
+fn main {
+    while true {
+        1
+    } // error here
+}
+```
+When compiled, `chop` outputs this error message:
+
+```shell
+$ chop bad_while.hop
+type error: stack does not match the stack before while block
+ --> bad_while.hop:5:5
+  |
+5 |     } // error here
+  |     ^
+
+note: before while block, stack is [] (bad_while.hop:2:16)
+note: after while block, stack is [int] (bad_while.hop:5:5)
+```
+
+## For Statements
+
+For statements iterate from a lower bound to an upper bound. At the start
+of each iteration, the `int` is pushed into the stack. Here is an alternate
+Implementation of our counting program that uses a for loop:
+
+```hop
+// count.hop
+fn main {
+    for 1 to 6 {  // int pushed onto the stack
+        putln     // int printed. stack is empty
+    }
+}
+```
+
+Notice that the upper bounds is 6 because the iteration does not include the
+upper bound. When run, this program outputs the following:
+
+```shell
+$ chop count.hop
+$ clang -o out out.c
+$ ./out
+1
+2
+3
+4
+5
+```

@@ -1,0 +1,27 @@
+# Strings
+
+Here is some sample code that demonstrates the standard library's
+Unicode-capable `String` struct:
+
+```hop
+import std::string::{push free new_string putln pointer}
+
+global EXPECTED: *byte { "abcങ𢄯Γx𢐎yz" }
+
+fn main {
+    new_string
+    @ 'a' push
+    @ 'b' push
+    @ 'c' push
+    @ 'ങ' push
+    @ '𢄯' push
+    @ 'Γ' push
+    @ 'x' push
+    @ '𢐎' push
+    @ 'y' push
+    @ 'z' push
+    @ putln                         // print the string
+    @ pointer EXPECTED streq assert // check that it's equal to the expected string
+    free
+}
+```

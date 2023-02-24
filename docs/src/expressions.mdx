@@ -1,0 +1,35 @@
+# Expressions
+
+Writing everything in [reverse Polish notation](https://en.wikipedia.org/wiki/Reverse_Polish_notation)
+is kind of a pain. When doing complicated math, you can use expressions.
+Expressions are surrounded by parenthesis. Inside expressions, all the normal
+precedence rules apply and functions can be called like C functions. Our
+`quad_form` function now looks like this:
+
+```hop
+fn sqrt float -> float { 0.5 pow }
+
+fn quad_form let a: float b: float c: float -> float {
+    ((-b + sqrt(b*b - 4*a*c))/(2*a))
+}
+```
+
+The compiler basically parses the expression, checks that every function called
+returns a single value and then flattens the expression. So
+
+```hop
+    (3*f(1, 3 + 2))
+```
+
+becomes
+
+```hop
+    3 1 3 2 + f *
+```
+
+Inside expressions, you can return to normal Hop syntax with square brackets.
+This is usually not that useful.
+
+```hop
+    (3*f(1, [3 2 +]))
+```

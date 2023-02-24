@@ -1,0 +1,137 @@
+# Generics
+
+Like most modern languages, Hop supports generic functions and structs. Generic
+parameters are specified in square brackets. 
+
+## Generic Functions
+
+As an example, consider the generic
+function `swap` from `std::prelude`. `swap` has the following signature:
+
+```hop
+fn swap[T U] T U -> U T { ... }
+```
+
+For some type `T` and some type `U`, it takes a value of type `T` and a value
+of type `U` and returns them in the opposite order. Here are some example uses:
+
+```hop
+fn main {
+    true 1       // stack is [bool, int]
+    swap         // T is bool and U is int (stack is now [int, bool])
+    putln putln  // prints true and then 1
+
+    "s" 1.0      // stack is [*byte, float]
+    swap         // T is *byte and U is float (stack is now [float, *byte])
+    putlns putln // prints s and then 1.0
+}
+```
+
+Notice that a single function can be called with different types. Each time `swap`
+is called, the compiler looks at the stack and figures out the type of `T` and `U`.
+Consider this other example:
+
+```hop
+fn swap[T] T T -> T T {
+    let a b { b a }
+}
+```
+
+Ignore the `let` for now, it is explained in the [let statement chapter](./let-statements.md).
+Our new `swap` function looks like the old one but it only has one generic
+parameter (`T`). This new function can only swap values of the same type:
+
+```hop
+fn main {
+    1 2 swap      // okay, T is int
+    putln putln   // prints 2 and then 1
+
+    true 1 swap   // not okay. Should T be int or bool?
+}
+```
+
+When we try to compile this code we get this error message:
+
+```shell
+$ chop generic_swap.hop
+type error: no variant of 'swap' matches the stack
+ --> generic_swap.hop:9:12
+  |
+9 |     true 1 swap   // not okay. Should T be int or bool?
+  |            ^^^^
+
+note: stack is [bool, int]
+note: 'swap' has signature [T0, T0] -> [T0, T0]
+```
+
+Note that `chop` uses `T0` in the signatures instead of `T`. In error messages,
+the compiler uses `T0`, `T1`, `T2`, ... where the index is the position of the
+generic parameter. So this function
+
+```hop
+fn generic[T U V] T V U V { ... }
+```
+
+really has signature `[T0 T2 T1 T2]`.
+
+## Generic Structs
+
+Generic structs work just like generic functions. Here is an example of how you
+might define a dynamic array (or vector) using a generic struct:
+
+```hop
+struct Vector[T] {
+    ptr: *T
+    length: int
+    capacity: int
+}
+```
+
+Now any function that takes or returns a `Vector` must specify the generic
+parameter:
+
+```hop
+// generic push
+fn push[T] *Vector[T] T { ... }
+
+// push an int to a Vector[int] (not generic)
+fn push_int *Vector[int] int { ... }
+```
+
+Generic structs can contain any number of generic parameters:
+
+```hop
+struct Tuple[A B C] {
+    a: A
+    b: B
+    c: C
+}
+
+fn make_int_tuple -> Tuple[int int int] {
+    1 2 3 Tuple
+}
+```
+
+# Special Functions
+
+Normally, generic functions contain all their generic parameters in their
+parameter list. This allows the compiler to infer the generic types based on the
+stack. Here are some examples:
+
+```hop
+fn foo[T] T -> T T { ... }
+fn bar[K V] HashMap[K V] { ... }
+fn baz[T U] T *T U *U { ... }
+```
+
+Functions that do not contain all their generic parameters in their parameter lists
+are called 'special'. Special functions can only be called through function
+pointers, where their generic types are written explicitly. More about function
+pointers can be found in the [function pointers chapter](./function-pointers.md).
+Here are some special signatures:
+
+```hop
+fn nothing[T] { ... }
+fn new_ptr[T] -> *T { ... } // T only appears in return types
+fn new_vector[T] -> Vector[T] { ... }
+```

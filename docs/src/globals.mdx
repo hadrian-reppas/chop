@@ -1,0 +1,51 @@
+# Globals
+
+Globals can be defined with the `global` keyword. Globals must have an explicit
+type and can optionally have an initializer in curly braces. Here are some
+examples:
+
+```hop
+global count: int
+global flag: bool { true }
+global epsilon: float { 1.0 10000.0 / }
+```
+
+Each global declaration autogenerates 3 functions. For the `count` global above
+with type `int`, these three functions are generated:
+
+```hop
+fn count -> int { ... }
+fn write_count int { ... }
+fn count_ptr -> *int { ... }
+```
+
+The `count` function returns the value of the global. The `write_count`
+function takes an `int` and updates the global. The `count_ptr` function returns
+a pointer to the global.
+
+## Example
+
+Here is an example:
+
+```hop
+global count: int { 1 2 + } // count initialized to 3
+
+fn increment_by_value {
+    count       // get the old value
+    1 +         // add 1
+    write_count // write the new value
+}
+
+fn increment_by_ptr {
+    count_ptr   // get a pointer to count
+    . read 1 +  // increment the value (stack is [*int, int])
+    write       // write the new value to the pointer
+}
+
+fn main {
+    increment_by_value // count is now 4
+    increment_by_ptr   // count is now 5
+
+    count putln        // prints 5
+}
+```

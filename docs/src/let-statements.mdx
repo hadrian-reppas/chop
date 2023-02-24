@@ -1,0 +1,74 @@
+# Let Statements
+
+When dealing with more than 2 or 3 values, manipulating them on the stack
+becomes hard. In these cases, let` statements can be helpful. The `let` keyword
+allows you to bind stack variables to names. For example, let's say we want to
+define a function that returns the positive root of a quadratic from its
+coefficients. It should take \\(a\\), \\(b\\) and \\(c\\) and return
+
+\\[\frac{-b + \sqrt{b^2 - 4ac}}{2a}\\]
+
+We might do something like this:
+
+```hop
+import std::prelude::{swap under fourth}
+
+fn sqrt float -> float { 0.5 pow }
+
+fn quad_form float float float -> float {
+    under . *
+    swap fourth * 4 * - sqrt
+    swap neg +
+    swap 2 * /
+}
+```
+
+But notice that many of the functions are just manipulating the stack (`swap`,
+`under`, `.` and `fourth`). If we instead use a let statement, we can bind
+the function's arguments to `a`, `b` and `c` variables which we can refer to
+in our expression:
+
+```hop
+fn quad_form float float float -> float {
+    let a b c {
+        // 3 stack values are bound. stack is now empty
+        // in this block, we can use a, b and c
+
+        b neg
+        b b * 4 a c * * -
+        sqrt +
+        2 a * /
+    }
+}
+```
+
+This looks much nicer.
+
+## `fn let` Syntax
+
+It's quite common to immediately bind a function's arguments with a let
+statement. In these cases, you can use the `fn let` syntax. Here is the
+`quad_form` function using `fn let`:
+
+```hop
+fn quad_form let a: float b: float c: float -> float {
+    b neg
+    b b * 4 a c * * -
+    sqrt +
+    2 a * /
+}
+```
+
+## `let for` Syntax
+
+It's also common to bind a for loop's iterator variable with a let statement.
+In these cases, you can use the `let for` syntax. Here is a countdown function
+using `let for`:
+
+```hop
+fn main {
+    let i for 0 to 10 {
+        10 i - putln
+    }
+}
+```

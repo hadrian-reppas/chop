@@ -1,0 +1,172 @@
+# Imports
+
+Functions and structs can be imported from other files with the `import`
+keyword. Consider this directory layout:
+
+```
+main.hop
+hello.hop
+helpers
+ ├ goodbye.hop
+ └ pairs
+    └ pair_defs.hop
+```
+
+`hello.hop` defines the `say_hello` and `hello_again` functions, `goodbye.hop`
+defines the `say_goodbye` function and `pair_defs.hop` defines the `IntPair` and
+`BytePair` structs:
+
+```hop
+struct IntPair {
+    a: int
+    b: int
+}
+
+struct BytePair {
+    a: byte
+    b: byte
+}
+```
+
+## Importing Functions
+
+Let's say we want to call the `say_hello`, `hello_again` and `say_goodbye`
+functions in `main.hop`. We can bring them into scope like this:
+
+```hop
+import hello::{say_hello hello_again}
+import helpers::goodbye::{say_goodbye}
+
+fn main {
+    say_hello
+    hello_again
+    say_goodbye
+}
+```
+
+When `chop` encounters an import statement, it goes and parses the appropriate
+file. For the first import, `chop` looks for a file called `hello.hop` in the
+same directory as the current file (`main.hop`). It then parses it and bring the
+`say_hello` and `hello_again` functions into scope. When `chop` sees the second
+import, it looks for the file `helpers/goodbye.hop` and brings the `say_goodbye`
+function into scope.
+
+## Importing Overloaded Functions
+
+You can import multiple functions with the same name as long as their parameters
+do not overlap. If two functions with the same name have overlaping signatures,
+`chop` will emit an error message. Here is an example of overlaping imports:
+
+```hop
+import a::{overloaded}
+import b::{overloaded}
+```
+
+`chop` emits this error message:
+
+```shell
+$ chop main.hop
+import error: imported function 'overloaded' overlaps with a previous import
+ --> main.hop:2:12
+  |
+2 | import b::{overloaded}
+  |            ^^^^^^^^^^
+
+note: 'overloaded' is imported here
+ --> main.hop:1:12
+  |
+1 | import a::{overloaded}
+  |            ^^^^^^^^^^
+
+note: previously imported signature is [int] -> [int]
+note: new signature is [int] -> [int]
+```
+
+Imported functions can also conflict with functions defined in the current file.
+For example, this code contains an overlapping import:
+
+```hop
+fn overloaded int -> int {}
+import a::{overloaded}
+```
+
+`chop` emits the following message:
+
+```shell
+$ chop main.hop
+import error: imported function conflicts with a previously defined function
+ --> main.hop:2:12
+  |
+2 | import b::{overloaded}
+  |            ^^^^^^^^^^
+
+note: 'overloaded' is defined here
+ --> main.hop:1:4
+  |
+1 | fn overloaded int -> int {}
+  |    ^^^^^^^^^^
+
+note: definition of 'overloaded' has signature [int] -> [int]
+note: imported function 'overloaded' has signature [int] -> [int]
+```
+
+## Importing Structs
+
+Structs can be imported with the `import` and `struct` keywords. If we want
+to import the `IntPair` and `BytePair` structs, we can do this:
+
+```hop
+import struct helpers::pairs::pair_defs::{IntPair BytePair}
+
+fn consume_int_pair IntPair { ~ }
+
+fn consume_byte_pair BytePair { ~ }
+```
+
+Note that the `import struct` statement only imports the struct name (for use
+in function signatures). The struct constructor and member accessors must be
+imported separately like any other function:
+
+```hop
+import struct helpers::pairs::pair_defs::{IntPair}
+import helper::pairs::pair_defs::{IntPair}
+
+fn consume_pair IntPair { ~ }
+
+fn main {
+    1 2 IntPair
+    consume_pair
+}
+```
+
+## Importing Modules
+
+Sometimes it's easier to import a whole module. You can do this by not including
+curly braces in the import statement. Then you can refer to imported functions
+and types with the `::` qualified syntax:
+
+```hop
+import helpers::pairs::pair_defs
+
+fn consume_pair pair_defs::IntPair { ~ }
+
+fn main {
+    1 2 pair_defs::IntPair
+    consume_pair
+}
+```
+
+Unlike other languages, you cannot qualify a name more than once. For example,
+you cannot do this because the compiler does not understand the doubly qualified
+name `pairs::pair_defs::IntPair`:
+
+```hop
+import helpers::pairs
+
+fn consume_pair pairs::pair_defs::IntPair { ~ }
+```
+
+## Standard Library Imports
+
+Imports that begin with `std::` get looked up in the Hop standard library. More
+about the standard library can be found in [the standard library chapter](./the-standard-library.md).

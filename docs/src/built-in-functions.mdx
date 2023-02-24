@@ -1,0 +1,281 @@
+# Built-in Functions
+
+Here is a list of Hop's built-in functions. Because Hop functions can be
+overloaded, some of them have multiple signatures. Functions
+with brackets after their names are generic. Generic functions are
+described in the [generics chapter](./generics.md).
+
+- `.` - duplicate a value on the stack
+  - `fn .[T] T -> T T`
+
+- `~` - pop a value from the stack
+  - `fn ~[T] T`
+
+- `@` - get a pointer to stack's top value
+  - `fn @[T] T -> T *T`
+
+- `put` - print a primitive value
+  - `fn put int`
+  - `fn put float`
+  - `fn put byte`
+  - `fn put bool`
+
+- `putln` - print a primitive value with a newline
+  - `fn putln int`
+  - `fn putln float`
+  - `fn putln byte`
+  - `fn putln bool`
+
+- `puts` - print a string
+  - `fn puts *byte`
+
+- `putlns` - print a string with a newline
+  - `fn putlns *byte`
+
+- `putc` - print a character
+  - `fn putc int`
+
+- `putlnc` - print a character with a newline
+  - `fn putlnc int`
+
+- `putp` - print a pointer
+  - `fn putp[T] *T`
+
+- `putlnp` - print a pointer with a newline
+  - `fn putlnp[T] *T`
+
+- `ln` - print a newline
+  - `fn ln`
+
+- `read` - read a pointer
+  - `fn read[T] *T -> T`
+
+- `write` - write to a pointer
+  - `fn write[T] *T T`
+
+- `exit` - exit the program with the given exit code
+  - `fn exit int`
+
+- `realloc` - reallocate an allocated pointer
+  - `fn realloc[T] *T int -> *T`
+
+- `free` - free an allocated pointer
+  - `fn free[T] *T`
+
+- `copy` - copy values from one pointer to another
+  - `fn copy[T] let dst: *T src: *T n: int`
+
+- `pow` - raise one `float` to the power of another
+  - `fn pow float float -> float`
+
+- `random` - generate a random `float` in [0, 1)
+  - `fn random -> float`
+
+- `time` - get the current time in seconds
+  - `fn time -> float`
+
+- `stdin` - read a line from stdin into a heap-allocated string (or return
+  null on failure)
+  - `fn -> *byte`
+
+- `to_byte` - convert a number to a `byte`
+  - `fn to_byte int -> byte`
+  - `fn to_byte float -> byte`
+
+- `to_int` - convert a number to an `int`
+  - `fn to_int byte -> int`
+  - `fn to_int float -> int`
+  - `fn to_int[T] *T -> int`
+
+- `to_float` - convert a number to a `float`
+  - `fn to_float byte -> float`
+  - `fn to_float int -> float`
+
+- `+` - add two numbers
+  - `fn + byte byte -> byte`
+  - `fn + byte int -> int`
+  - `fn + byte float -> float`
+  - `fn + int byte -> int`
+  - `fn + int int -> int`
+  - `fn + int float -> float`
+  - `fn + float byte -> float`
+  - `fn + float int -> float`
+  - `fn + float float -> float`
+  - `fn +[T] *T int -> *T`
+  - `fn +[T] int *T -> *T`
+
+- `-` - subtract two numbers
+  - `fn - byte byte -> byte`
+  - `fn - byte int -> int`
+  - `fn - byte float -> float`
+  - `fn - int byte -> int`
+  - `fn - int int -> int`
+  - `fn - int float -> float`
+  - `fn - float byte -> float`
+  - `fn - float int -> float`
+  - `fn - float float -> float`
+  - `fn -[T] *T int -> *T`
+  - `fn -[T] *T *T -> int`
+
+- `*` - multiply two numbers
+  - `fn * byte byte -> byte`
+  - `fn * byte int -> int`
+  - `fn * byte float -> float`
+  - `fn * int byte -> int`
+  - `fn * int int -> int`
+  - `fn * int float -> float`
+  - `fn * float byte -> float`
+  - `fn * float int -> float`
+  - `fn * float float -> float`
+
+- `/` - divide two numbers
+  - `fn / byte byte -> byte`
+  - `fn / byte int -> int`
+  - `fn / byte float -> float`
+  - `fn / int byte -> int`
+  - `fn / int int -> int`
+  - `fn / int float -> float`
+  - `fn / float byte -> float`
+  - `fn / float int -> float`
+  - `fn / float float -> float`
+
+- `%` - calculate the modulus of two numbers
+  - `fn % byte byte -> byte`
+  - `fn % byte int -> int`
+  - `fn % byte float -> float`
+  - `fn % int byte -> int`
+  - `fn % int int -> int`
+  - `fn % int float -> float`
+  - `fn % float byte -> float`
+  - `fn % float int -> float`
+  - `fn % float float -> float`
+
+- `&` - logical and
+  - `fn & byte byte -> byte`
+  - `fn & int int -> int`
+  - `fn & bool bool -> bool`
+
+- `^` - logical xor
+  - `fn ^ byte byte -> byte`
+  - `fn ^ int int -> int`
+  - `fn ^ bool bool -> bool`
+
+- `|` - logical or
+  - `fn | byte byte -> byte`
+  - `fn | int int -> int`
+  - `fn | bool bool -> bool`
+
+- `<<` - bit shift left
+  - `fn << byte byte -> byte`
+  - `fn << byte int -> byte`
+  - `fn << int byte -> int`
+  - `fn << int int -> int`
+
+- `>>` - bit shift right
+  - `fn >> byte byte -> byte`
+  - `fn >> byte int -> byte`
+  - `fn >> int byte -> int`
+  - `fn >> int int -> int`
+
+- `==` - check if two numbers are equal
+  - `fn == byte byte -> bool`
+  - `fn == byte int -> bool`
+  - `fn == byte float -> bool`
+  - `fn == int byte -> bool`
+  - `fn == int int -> bool`
+  - `fn == int float -> bool`
+  - `fn == float byte -> bool`
+  - `fn == float int -> bool`
+  - `fn == float float -> bool`
+  - `fn ==[T] *T *T -> bool`
+
+- `!=` - check if two numbers are not equal
+  - `fn != byte byte -> bool`
+  - `fn != byte int -> bool`
+  - `fn != byte float -> bool`
+  - `fn != int byte -> bool`
+  - `fn != int int -> bool`
+  - `fn != int float -> bool`
+  - `fn != float byte -> bool`
+  - `fn != float int -> bool`
+  - `fn != float float -> bool`
+  - `fn !=[T] *T *T -> bool`
+
+- `<` - compare two numbers
+  - `fn < byte byte -> bool`
+  - `fn < byte int -> bool`
+  - `fn < byte float -> bool`
+  - `fn < int byte -> bool`
+  - `fn < int int -> bool`
+  - `fn < int float -> bool`
+  - `fn < float byte -> bool`
+  - `fn < float int -> bool`
+  - `fn < float float -> bool`
+  - `fn <[T] *T *T -> bool`
+
+- `<=` - compare two numbers
+  - `fn <= byte byte -> bool`
+  - `fn <= byte int -> bool`
+  - `fn <= byte float -> bool`
+  - `fn <= int byte -> bool`
+  - `fn <= int int -> bool`
+  - `fn <= int float -> bool`
+  - `fn <= float byte -> bool`
+  - `fn <= float int -> bool`
+  - `fn <= float float -> bool`
+  - `fn <=[T] *T *T -> bool`
+
+- `>` - compare two numbers
+  - `fn > byte byte -> bool`
+  - `fn > byte int -> bool`
+  - `fn > byte float -> bool`
+  - `fn > int byte -> bool`
+  - `fn > int int -> bool`
+  - `fn > int float -> bool`
+  - `fn > float byte -> bool`
+  - `fn > float int -> bool`
+  - `fn > float float -> bool`
+  - `fn >[T] *T *T -> bool`
+
+- `>=` - compare two numbers
+  - `fn >= byte byte -> bool`
+  - `fn >= byte int -> bool`
+  - `fn >= byte float -> bool`
+  - `fn >= int byte -> bool`
+  - `fn >= int int -> bool`
+  - `fn >= int float -> bool`
+  - `fn >= float byte -> bool`
+  - `fn >= float int -> bool`
+  - `fn >= float float -> bool`
+  - `fn >=[T] *T *T -> bool`
+
+- `!` - logical not
+  - `fn ! bool -> bool`
+  - `fn ! byte -> byte`
+  - `fn ! int -> int`
+
+- `neg` - negate a number
+  - `fn neg int -> int`
+  - `fn neg float -> float`
+
+- `strcmp` - compare 2 strings
+  - `fn strcmp *byte *byte -> int`
+
+- `streq` - check if 2 strings are equal
+  - `fn streq *byte *byte -> bool`
+
+- `strcpy` - copy a string from one allocation to another
+  - `fn strcpy let dst: *byte src: *byte`
+
+- `strlen` - find a string's length
+  - `fn strlen *byte -> int`
+
+- `read_file` - read a file into a heap-allocated string (or return
+  null on failure)
+  - `fn read_file *byte -> *byte`
+
+- `write_to_file` - write a string to a file (and return true on success)
+  - `fn write_to_file let text: *byte file_path: *byte -> bool`
+
+- `append_to_file` - append a string to a file (and return true on success)
+  - `fn append_to_file let text: *byte file_path: *byte -> bool`

@@ -1,0 +1,69 @@
+# Sorting
+
+Here is a Hop program that pushes 20 random `float`s onto a vector, sorts
+the vector and prints the sorted `float`s:
+
+```hop
+import struct std::vector::{Vector}
+import std::vector::{new_vector free push pop len set get}
+import std::prelude::{swap rot}
+
+fn sort_vector let vector: *Vector[float] {
+    vector len
+    let len {
+        for 0 to len {
+            let i for 0 to len swap - 1 - {
+                if (get(vector, i) > get(vector, i + 1)) {
+                    vector i i 1 + swap_values
+                }
+            }
+        }
+    }
+}
+
+fn swap_values let vector: *Vector[float] i: int j: int {
+    vector i get
+    vector i vector j get set
+    vector j rot set
+}
+
+fn main {
+    new_vector[float] call
+    let _ for 0 to 20 {
+        @ random push
+    }
+    @ sort_vector
+    let _ for 0 to 20 {
+        @ pop putln
+    }
+    free
+}
+```
+
+When I ran this code, I got the following output:
+
+```shell
+$ chop sorting.hop
+$ clang -o out out.c
+$ ./out
+0.984995500650257
+0.975773698184639
+0.922811361029744
+0.865170631557703
+0.828553025610745
+0.819387137424201
+0.779078703373671
+0.690552048850805
+0.686372652184218
+0.490707924123853
+0.439625101163983
+0.418656431138515
+0.358641421422362
+0.328084589913487
+0.29020162159577
+0.273296257480979
+0.272030772641301
+0.117705243639648
+0.0211979113519192
+0.0145168676972389
+```
