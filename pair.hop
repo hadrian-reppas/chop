@@ -1,8 +1,0 @@
-struct Pair[T] {
-    fst: T
-    snd: T
-}
-
-fn square_pair int -> Pair[int] {
-    . . * Pair
-}

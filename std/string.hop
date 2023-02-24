@@ -1,5 +1,6 @@
 import struct std::vector::{Vector}
 import std::vector::{new_vector len push pop free .pointer}
+import std::prelude::{carve}
 
 struct String {
     bytes: Vector[byte]
@@ -13,6 +14,14 @@ fn new_string -> String {
 
 fn new -> String {
     new_string
+}
+
+fn string_from_pointer *byte -> String {
+    ~ abort[String] // TODO
+}
+
+fn from_pointer *byte -> String {
+    string_from_pointer
 }
 
 fn push *String int {
@@ -100,7 +109,11 @@ fn putln *String {
 }
 
 fn len *String -> int {
-    .bytes len
+    .bytes len 1 - carve
+}
+
+fn is_empty *String -> bool {
+    .bytes len 1 == carve
 }
 
 fn free String {

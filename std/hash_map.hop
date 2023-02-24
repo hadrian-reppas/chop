@@ -1,0 +1,49 @@
+import struct std::list::{List}
+import struct std::array::{Array}
+import std::array::{zeroed_array len}
+import std::prelude::{carve}
+
+struct HashMap[K V] {
+    buckets: Array[List[Pair[K V]]]
+    length: int
+    hash: fn(*K -> int)
+    eq: fn(*K *K -> bool)
+}
+
+struct Pair[K V] {
+    key: K
+    value: V
+}
+
+fn new_hash_map[K V] let
+    hash: fn(*K -> int)
+    eq: fn(*K *K -> bool)
+-> HashMap[K V] {
+    16 zeroed_array[List[Pair[K V]]] call 0 hash eq HashMap
+}
+
+fn new[K V] fn(*K -> int) fn(*K *K -> bool) -> HashMap[K V] {
+    new_hash_map[K V] call
+}
+
+fn get[K V] *HashMap[K V] *K -> *V {
+    ~ ~ abort[*V]
+}
+
+fn insert[K V] *HashMap[K V] K V {
+    ~ ~ ~ abort
+}
+
+fn free[K V] let map: HashMap[K V] {
+    map @ .buckets len
+    let len {
+        ~ ~
+        let i for 0 to 0 ~ {
+            
+        }
+    }
+}
+
+fn free_with[K V] HashMap[K V] fn(K) fn(V) {
+    ~ ~ ~ abort
+}

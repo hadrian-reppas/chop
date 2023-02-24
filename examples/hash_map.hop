@@ -1,0 +1,34 @@
+import std::ptr::{assert_non_null}
+import std::prelude::{swap ++}
+import std::chars::{chars next has_next}
+import struct std::hash_map::{HashMap}
+import std::hash_map::{new_hash_map get insert free}
+
+fn main {
+    int_hash[] int_eq[] new_hash_map[int int] call @
+    let map {
+        "Enter a string: " puts
+        stdin assert_non_null chars
+        while @ has_next {
+            @ next putc
+        }
+        ~
+    }
+    free
+}
+
+fn increment[K V] *HashMap[K V] int {
+    ~ ~ abort
+}
+
+fn is_continue_char byte -> bool {
+    to_int . 0 != swap b'\n' != &
+}
+
+fn int_hash *int -> int {
+    read
+}
+
+fn int_eq *int *int -> bool {
+    read swap read ==
+}

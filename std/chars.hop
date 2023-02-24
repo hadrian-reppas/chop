@@ -1,0 +1,33 @@
+import struct std::string::{String}
+import std::string::{pointer}
+import std::prelude::{swap ++}
+
+struct Chars {
+    pointer: *byte
+}
+
+fn chars *byte -> Chars {
+    Chars
+}
+
+fn chars *String -> Chars {
+    pointer Chars
+}
+
+fn has_next *Chars -> bool {
+    .pointer read read 0 !=
+}
+
+fn next *Chars -> int {
+    . has_next assert
+    ..pointer read read
+    if . b'\x80' < {
+        swap inc to_int 
+    } else {
+        ~ ~ abort[int]
+    }
+}
+
+fn inc *Chars {
+    .pointer . read ++ write
+}

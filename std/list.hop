@@ -2,41 +2,69 @@ import std::ptr::{is_null}
 import std::prelude::{swap rotr}
 
 struct List[T] {
+    head: *Node[T]
+    length: int
+}
+
+struct Node[T] {
     value: T
-    next: *List[T]
+    next: *Node[T]
 }
 
-fn singleton_list[T] let value: T -> *List[T] {
-    alloc[List[T]]
-    ..next 0 cast_to[*List[T]] write
+fn singleton_list[T] let value: T -> List[T] {
+    alloc[Node[T]]
+    ..next 0 cast_to[*Node[T]] write
     ..value value write
+    1 List
 }
 
-fn push[T] let list: **List[T] value: T {
-    alloc[List[T]]
-    ..next list read write
+fn empty_list[T] -> List[T] {
+    0 cast_to[*Node[T]] 0 List
+}
+
+fn push[T] let list: *List[T] value: T {
+    alloc[Node[T]]
+    ..next list .head read write
     ..value value write
-    list swap write
+    list .head swap write
+    list .length . read 1 + write
 }
 
-fn pop[T] let list: **List[T] -> T {
-    list read
-    let old_list {
-        old_list read .next
-        old_list read .value
+fn pop[T] let list: *List[T] -> T {
+    list .head read
+    let old_head {
+        old_head .next read
+        old_head .value read
         let next value {
-            list next write
-            old_list free
+            list .head next write
+            old_head free
             value
         }
     }
+    list .length . read 1 - write
 }
 
-fn free_list[T] *List[T] {
+fn len[T] *List[T] -> int {
+    .length read
+}
+
+fn is_empty[T] *List[T] -> bool {
+    .length read 0 ==
+}
+
+fn free[T] List[T] {
+    .head free_node
+}
+
+fn free_with[T] List[T] fn(T) {
+    ~ ~ abort
+}
+
+fn free_node[T] *Node[T] {
     if . is_null {
         ~
     } else {
-        ..next DEBUG_STACK read free_list
+        ..next read free_node
         free
     }
 }

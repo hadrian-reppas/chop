@@ -33,3 +33,19 @@ fn pump[T U] T U -> T T U {
         t t u
     }
 }
+
+fn ++ int -> int {
+    1 +
+}
+
+fn -- int -> int {
+    1 -
+}
+
+fn ++[T] *T -> *T {
+    1 +
+}
+
+fn --[T] *T -> *T {
+    1 -
+}

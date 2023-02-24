@@ -354,7 +354,7 @@ impl Generator {
                 ));
             }
             ProgramOp::Abort(span) => {
-                let msg = format!("panicked at {}", span.location());
+                let msg = format!("aborted at {}", span.location());
                 self.code.push_str(&format!(
                     "printf(\"%s\\n\", {}); exit(1);\n",
                     escape_string(&msg)

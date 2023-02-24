@@ -1,0 +1,45 @@
+import std::ptr::{non_null}
+
+struct Array[T] {
+    pointer: *T
+    length: int
+}
+
+fn new_array[T] let len: int -> Array[T] {
+    0 len < assert
+    len alloc_arr[T] . non_null assert
+    len Array
+}
+
+fn new[T] int -> Array[T] {
+    new_array[T] call
+}
+
+fn zeroed_array[T] let len: int -> Array[T] {
+    len zalloc_arr[T] . non_null assert
+    len Array
+}
+
+fn get[T] let arr: *Array[T] i: int -> *T {
+    i 0 >= assert
+    i arr .length read < assert
+    arr .pointer read i +
+}
+
+fn set[T] let arr: *Array[T] i: int val: T {
+    i 0 >= assert
+    i arr .length read < assert
+    arr .pointer read i + val write
+}
+
+fn len[T] *Array[T] -> int {
+    .length read
+}
+
+fn free[T] Array[T] {
+    .pointer free
+}
+
+fn free_with[T] Array[T] fn(T) {
+    ~ ~ abort
+}

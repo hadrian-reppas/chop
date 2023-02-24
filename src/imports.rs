@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use crate::ast::{Item, Name};
@@ -11,6 +11,9 @@ const PRELUDE: &str = include_str!("../std/prelude.hop");
 const VECTOR: &str = include_str!("../std/vector.hop");
 const LIST: &str = include_str!("../std/list.hop");
 const PTR: &str = include_str!("../std/ptr.hop");
+const CHARS: &str = include_str!("../std/chars.hop");
+const HASH_MAP: &str = include_str!("../std/hash_map.hop");
+const ARRAY: &str = include_str!("../std/array.hop");
 
 fn get_std_unit(path: &[&'static str], err_span: Span) -> Result<Vec<Item>, Error> {
     match path {
@@ -19,6 +22,9 @@ fn get_std_unit(path: &[&'static str], err_span: Span) -> Result<Vec<Item>, Erro
         ["std", "vector"] => parse(Tokens::from_str(VECTOR, "std/vector.hop")?),
         ["std", "list"] => parse(Tokens::from_str(LIST, "std/list.hop")?),
         ["std", "ptr"] => parse(Tokens::from_str(PTR, "std/ptr.hop")?),
+        ["std", "chars"] => parse(Tokens::from_str(CHARS, "std/chars.hop")?),
+        ["std", "hash_map"] => parse(Tokens::from_str(HASH_MAP, "std/hash_map.hop")?),
+        ["std", "array"] => parse(Tokens::from_str(ARRAY, "std/array.hop")?),
         _ => Err(Error::Import(
             Some(err_span),
             format!("cannot find '{}' in the standard library", path.join("::")),
@@ -31,8 +37,8 @@ fn get_std_unit(path: &[&'static str], err_span: Span) -> Result<Vec<Item>, Erro
 pub fn collect(
     main_unit: Vec<Item>,
     file_prefix: PathBuf,
-) -> Result<(HashMap<Vec<&'static str>, Vec<Item>>, Vec<&'static str>), Error> {
-    let mut map = HashMap::new();
+) -> Result<(BTreeMap<Vec<&'static str>, Vec<Item>>, Vec<&'static str>), Error> {
+    let mut map = BTreeMap::new();
     let file_name = leak(
         file_prefix
             .file_name()
@@ -66,7 +72,7 @@ fn handle_file(
     mut unit: Vec<Item>,
     path: Vec<&'static str>,
     file_path: PathBuf,
-    map: &mut HashMap<Vec<&'static str>, Vec<Item>>,
+    map: &mut BTreeMap<Vec<&'static str>, Vec<Item>>,
 ) -> Result<(), Error> {
     map.insert(path.clone(), Vec::new());
     for names in unit.iter().filter_map(get_path) {
@@ -110,7 +116,7 @@ fn handle_file(
 
 fn handle_std(
     path: Vec<&'static str>,
-    map: &mut HashMap<Vec<&'static str>, Vec<Item>>,
+    map: &mut BTreeMap<Vec<&'static str>, Vec<Item>>,
     err_span: Span,
 ) -> Result<(), Error> {
     map.insert(path.clone(), Vec::new());

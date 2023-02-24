@@ -1,5 +1,5 @@
-import struct std::list::{List}
-import std::list::{singleton_list push ..value .next free_list pop}
+import struct std::list::{List Node}
+import std::list::{singleton_list push free pop len .head ..value .next}
 import std::ptr::{is_null}
 
 fn main {
@@ -9,7 +9,8 @@ fn main {
     @ 7 push
     @ 11 push
 
-    . print_int_list
+    "len: " puts @ len putln
+    "list: " puts @ print_int_list
 
     ln ln
 
@@ -19,19 +20,24 @@ fn main {
 
     ln
 
-    . print_int_list ln
+    "len: " puts @ len putln
+    "list: " puts @ print_int_list ln
 
-    free_list
+    free
 }
 
 fn print_int_list *List[int] {
+    .head read print_int_node
+}
+
+fn print_int_node *Node[int] {
     if . is_null {
         ~ "NULL" puts
     } else {
         "List(" puts
         ..value read put
         ", " puts
-        .next read print_int_list
-        ')' putc
+        .next read print_int_node
+       ')' putc
     }
 }

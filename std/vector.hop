@@ -24,7 +24,7 @@ fn push[T] let vec: *Vector[T] value: T {
     vec .length . read 1 + write
 }
 
-fn index[T] let vec: *Vector[T] i: int -> T {
+fn get[T] let vec: *Vector[T] i: int -> T {
     0 i <= assert
     i vec .length read < assert
     vec .pointer read i + read
@@ -50,6 +50,10 @@ fn free[T] Vector[T] {
     }
 }
 
+fn free_with[T] Vector[T] fn(T) {
+    ~ ~ abort
+}
+
 fn realloc_vector[T] let vec: *Vector[T] {
     if vec .capacity read 0 == {
         vec ..capacity 10 write
@@ -57,8 +61,9 @@ fn realloc_vector[T] let vec: *Vector[T] {
     } else {
         vec .capacity read 2 *
         let new_capacity {
-            new_capacity alloc_arr[T] assert_non_null
-            vec .pointer read vec .capacity read copy
+            vec .pointer read new_capacity realloc
+            assert_non_null
+            vec .pointer swap write
             vec .capacity new_capacity write
         }
     }
@@ -66,4 +71,8 @@ fn realloc_vector[T] let vec: *Vector[T] {
 
 fn len[T] *Vector[T] -> int {
     .length read
+}
+
+fn is_empty[T] *Vector[T] -> bool {
+    .length read 0 ==
 }

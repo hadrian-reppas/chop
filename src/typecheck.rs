@@ -1,5 +1,5 @@
 use std::collections::hash_map::Entry;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::mem;
 
 use petgraph::algo::toposort;
@@ -19,7 +19,7 @@ use crate::{color, reset};
 // TODO: consider reintroducing program_context.free() to reuse variables
 
 pub fn check(
-    units: &HashMap<Vec<&'static str>, Vec<Item>>,
+    units: &BTreeMap<Vec<&'static str>, Vec<Item>>,
     main_unit_prefix: &[&'static str],
 ) -> Result<ProgramInfo, Error> {
     let mut context = Context::new(&BUILTINS);
@@ -101,7 +101,7 @@ impl Context {
 
     fn check_units(
         &mut self,
-        units: &HashMap<Vec<&'static str>, Vec<Item>>,
+        units: &BTreeMap<Vec<&'static str>, Vec<Item>>,
         main_unit_prefix: &[&'static str],
     ) -> Result<(), Error> {
         self.init_structs(units)?;
@@ -339,7 +339,7 @@ impl Context {
                                                     notes.push(Note::new(
                                                         None,
                                                         format!(
-                                                            "new siganture is {}{}{}",
+                                                            "new signature is {}{}{}",
                                                             color!(Blue),
                                                             self.types.format_signature(
                                                                 new_sig,
@@ -471,7 +471,7 @@ impl Context {
 
     fn check_for_recursive_structs(
         &mut self,
-        units: &HashMap<Vec<&str>, Vec<Item>>,
+        units: &BTreeMap<Vec<&str>, Vec<Item>>,
     ) -> Result<(), Error> {
         let mut graph = Graph::new();
         let mut map = HashMap::new();
@@ -519,7 +519,7 @@ impl Context {
 
     fn make_recursive_struct_error(
         &self,
-        units: &HashMap<Vec<&str>, Vec<Item>>,
+        units: &BTreeMap<Vec<&str>, Vec<Item>>,
         structs: &[&Vec<&str>],
     ) -> Error {
         let struct_set: HashSet<_> = structs.iter().copied().collect();
@@ -565,7 +565,10 @@ impl Context {
         Error::Type(span, msg, vec![])
     }
 
-    fn init_structs(&mut self, units: &HashMap<Vec<&'static str>, Vec<Item>>) -> Result<(), Error> {
+    fn init_structs(
+        &mut self,
+        units: &BTreeMap<Vec<&'static str>, Vec<Item>>,
+    ) -> Result<(), Error> {
         for (prefix, unit) in units {
             let mut struct_spans = HashMap::new();
             for item in unit {
