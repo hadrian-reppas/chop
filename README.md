@@ -7,5 +7,5 @@ Hop is transpiled to C.
 
 ## Documentation
 
-The rendered docs are hosted [here](hadrian-reppas.github.io/hop).
+The rendered docs are hosted [here](https://hadrian-reppas.github.io/hop).
 They are about 80% complete.
