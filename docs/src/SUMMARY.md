@@ -18,4 +18,4 @@
   1. [Guessing Game](./guessing-game.md)
   2. [Sorting](./sorting.md)
   3. [Strings](./strings.md)
-- [A Note on Transpilation](./a-node.md)
+- [A Note on Transpilation](./a-note.md)

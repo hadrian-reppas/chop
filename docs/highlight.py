@@ -189,6 +189,7 @@ def translate(lines):
 for _, _, file_names in os.walk("./src/"):
     for file_name in file_names:
         if file_name.endswith(".mdx"):
+            print(f"highlighting ./src/{file_name}")
             lines = open(f"./src/{file_name}").read().split("\n")
             out = translate(lines)
             new_file_name = file_name[:-1]

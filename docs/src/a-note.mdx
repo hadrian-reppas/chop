@@ -1,3 +1,64 @@
 # A Note on Transpilation
 
+Unlike Porth, the stack exists only at compile time. When the compiler emits
+C code, all values are stored in variables. (Ironically, these values still live
+on a stack. But the C code uses a *call* stack.) To see how this works, consider
+the following program:
 
+```hop
+fn func {
+    true    // stack is [bool]
+    1       // stack is [bool, int]
+    false   // stack is [bool, int, bool]
+    putln   // stack is [bool, int]
+    put     // stack is [bool]
+    true    // stack is [bool, bool]
+    ~ ~     // stack is []
+}
+```
+
+The compiler keeps track of the *maximum* number of values of each type on the
+stack at any time. In this case, we have a maximum of 2 `bool`s and 1 `int`. So
+the C code looks like this:
+
+```C
+void func() {
+    bool bool1, bool2;
+    int int1;
+
+    bool1 = true;
+    int1 = 1;
+    bool2 = false;
+    putln(bool2);
+    put(int2);
+    bool2 = true;
+}
+```
+
+As you can see, the compiler allocates enough variables to hold all the stack
+values. Each time we push a value onto the stack, the compiler stores it in one
+of the variables. We we push `true` in the first like of the function `func`,
+it gets stored in the variable `bool1`. When we push `1`, it gets stored in
+the variable `int1`. When we push `false`, the variable `bool1` is already in use,
+so the values get stored in the variable `bool2`.
+
+When generating C code, the compiler keeps track of a *variable* stack instead
+of a *type* stack. The variable stack looks like this:
+
+```hop
+fn func {
+    true    // stack is [bool1]
+    1       // stack is [bool1, int1]
+    false   // stack is [bool1, int1, bool2]
+    putln   // stack is [bool1, int1]
+    put     // stack is [bool1]
+    true    // stack is [bool1, bool2]
+    ~ ~     // stack is []
+}
+```
+
+When a function is called (let's use `putln` as an example), the compiler looks
+at the stack and determines which variable to pass into the function. Before
+the `putln` call, the variable stack is `[bool1, int1, bool2]`. The compiler
+looks at the top of the stack and passes the variable `bool2` into the function
+`putln`.
